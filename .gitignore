@@ -1,0 +1,18 @@
+# Боевые настройки: только config.sample.php в репозитории
+config.php
+
+# Dev-зависимости (PHPUnit, PHPStan, PHP-CS-Fixer) — на сервер не попадают
+/vendor/
+composer.lock
+.phpunit.result.cache
+.php-cs-fixer.cache
+
+# Загрузки пользователей и журналы
+/public/uploads/*
+!/public/uploads/.gitkeep
+/storage/*.log
+
+# Служебное
+node_modules/
+.DS_Store
+Thumbs.db
