@@ -83,6 +83,14 @@ Tailwind собирается локально Node'ом, в репозитор�
 13. **`composer.lock` в репозитории.** Спецификация о нём молчит. Lock держит версии PHPUnit, PHPStan и CS-Fixer
     одинаковыми на всех 21 задаче: без него тихо поднимется минор фиксера, и зелёные ворота задачи N падут на коде
     задачи N+1, зависимости не трогавшей. На сервере lock ничего не меняет — в `require` только `php`.
+14. **Одно предупреждение PHP-CS-Fixer в воротах разрешено.** Ограничение «вывод без предупреждений» (пункт
+    Global Constraints) остаётся в силе для всего, что касается нашего кода, но убрать этот текст нечем: фиксер
+    печатает его безусловно, когда `PHP_MAJOR.MINOR` выше минимума из `composer.json` (образ — 8.3, минимум — 8.1),
+    и не смотрит ни на `PHP_CS_FIXER_IGNORE_ENV` (флаг к тому же устарел и добавляет строку о своём устаревании),
+    ни на `setUnsupportedPhpVersionAllowed()`. Понижать `config.platform.php` до 8.1 нельзя: PHPUnit 11 требует
+    PHP >= 8.2, и разрешение зависимостей сломается. Реплика идёт в stderr и не влияет на код выхода, поэтому
+    «зелёные ворота» означают: `php -l`, PHPStan, стиль и PHPUnit — без собственных замечаний. Все прочие строки
+    предупреждений — находка, как и было.
 
 ## Global Constraints
 
@@ -117,7 +125,8 @@ Tailwind собирается локально Node'ом, в репозитор�
   нужно выполнить с секретом, он извлекается в переменную внутри команды и не печатается.
 - Адаптивность 360…1440 обязательна для каждого экрана (`scripts/responsive-check.mjs`, задача 21).
 - Ворота перед каждым коммитом: `bash scripts/gate.sh` — `php -l` по всем файлам, PHPStan уровень 6, PHP-CS-Fixer
-  `--dry-run --diff`, PHPUnit полностью зелёный, вывод без предупреждений.
+  `--dry-run --diff`, PHPUnit полностью зелёный, вывод без предупреждений. Единственная разрешённая реплика —
+  подсказка PHP-CS-Fixer о том, что образ PHP новее минимума проекта (отступление 14); всё остальное — находка.
 - Коммит — от «Алексей <zanzibaradevil@gmail.com>» через переменные окружения `GIT_AUTHOR_*`/`GIT_COMMITTER_*`;
   `git config` не менять, `--amend` без просьбы человека не использовать.
 - Все команды выполняются в каталоге `cms/`. Боевая база `english-portal` не трогается: ни дампов, ни миграций, ни
@@ -767,8 +776,8 @@ Expected: `200`.
 - [ ] **Шаг 10: Коммит**
 
 ```bash
-git add docker-compose.dev.yml docker/ composer.json phpunit.xml phpstan.neon .php-cs-fixer.dist.php \
-        config.sample.php core/ public/ scripts/ tests/
+git add docker-compose.dev.yml docker/ composer.json composer.lock phpunit.xml phpstan.neon \
+        .php-cs-fixer.dist.php .gitattributes config.sample.php core/ public/ scripts/ tests/
 GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \
 GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.com' \
   git commit -m "Окружение разработки CMS: контейнеры PHP, MySQL и mailpit, ворота качества"
