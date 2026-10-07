@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
-header('X-Content-Type-Options: nosniff');
-header('Content-Type: text/html; charset=utf-8');
-echo 'Ядро CMS собирается. Задача 5 подключит маршрутизатор.';
+require dirname(__DIR__) . '/core/bootstrap.php';
+
+securityHeaders();
+
+// Маршрутизатор подключит задача 5; до неё точка входа показывает заглушку темы.
+echo 'Ядро загружено. Маршрутизатор появится в задаче 5.';
