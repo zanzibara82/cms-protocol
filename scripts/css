@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Сборка стилей. Node нужен только разработчику: на сервер уходит готовый public/assets/app.css.
+set -euo pipefail
+npm install --no-audit --no-fund
+npm run build
+echo 'Стили собраны в public/assets/app.css — файл лежит в репозитории.'

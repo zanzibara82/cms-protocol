@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-paper: #fdf6ec;
+  --color-cream: #fff9ef;
+  --color-ink: #2b2118;
+  --color-accent: #d97706;
+  --color-good: #16a34a;
+  --color-bad: #dc2626;
+}
+
+/* Дальше — правила из english-portal/src/app/globals.css без изменений: шрифты, фокус,
+   типографика лонгрида, стили таблиц админки. */
+
+/* Якоря не должны прятаться под залипающей шапкой */
+section[id] {
+  scroll-margin-top: 5.5rem;
+}
+html {
+  scroll-behavior: smooth;
+}
+
+/* Кот-талисман: в покое дышит, при наведении машет лапой */
+@keyframes cat-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-6%) rotate(-2deg); }
+}
+@keyframes cat-wave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(7deg) translateY(-3%); }
+  60% { transform: rotate(-6deg); }
+  85% { transform: rotate(3deg); }
+}
+.cat-idle {
+  animation: cat-bob 4.5s ease-in-out infinite;
+}
+a:hover .cat-idle,
+a:focus-visible .cat-idle {
+  animation: cat-wave 0.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cat-idle {
+    animation: none;
+  }
+}
+
+/* Базовый слой: фон и текст взяты из токенов темы — в globals.css это было
+   `body { @apply bg-background text-foreground }` на токенах shadcn. Свой веб-шрифт
+   портал подгружал через next/font, у PHP-ядра такой сборки нет — системный стек. */
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Видимый фокус для клавиатуры: перенос `outline-ring/50` из базового слоя globals.css. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

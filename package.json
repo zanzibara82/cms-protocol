@@ -1,0 +1,13 @@
+{
+  "name": "cms-css",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tailwindcss -i ./src-css/app.css -o ./public/assets/app.css --minify",
+    "watch": "tailwindcss -i ./src-css/app.css -o ./public/assets/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0"
+  }
+}
