@@ -22,7 +22,7 @@ declare(strict_types=1);
         <meta name="robots" content="noindex, nofollow">
     <?php endif; ?>
     <link rel="stylesheet" href="/assets/app.css">
-    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/assets/favicon.png" type="image/png">
     <?= $head /* @safe html */ ?>
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
