@@ -69,6 +69,20 @@ Tailwind собирается локально Node'ом, в репозитор�
    записанным, а повторный запуск продолжает со второго. Чтобы повтор был безопасным, файлы SQL приложений пишутся
    через `CREATE TABLE IF NOT EXISTS`; страж задачи 11 это проверяет. Версия в `tbl_app_installation` поднимается
    один раз, после последнего файла.
+10. **PHPStan 2.x вместо 1.12.** Спецификация фиксирует уровень 6, а не минор анализатора. У 1.12 на каждом прогоне
+    ворот печатается баннер «это старая версия», и подавить его нечем (в `analyse --help` такого флага нет), а
+    «вывод ворот без предупреждений» — общее ограничение. Код задач 2–21 на момент решения ещё не написан, поэтому
+    на существующем коде апгрейд падений не даёт.
+11. **`.gitattributes` с `* text=auto eol=lf`.** В спецификации его нет, но без него клон на машине с
+    `core.autocrlf=true` выкладывает в рабочее дерево CRLF: у `scripts/gate.sh` и `scripts/db-reset` ломается shebang,
+    а `public/.htaccess` и файлы `docker/` уходят на хостинг с лишними `\r`.
+12. **Обе базы dev-контейнера создаются с явным `utf8mb4_unicode_ci`.** `MYSQL_DATABASE` отдаёт базу на серверный
+    default, а это `utf8mb4_0900_ai_ci` — его не знает MySQL 5.7, который может достаться на хостинге. Поэтому базы
+    создаёт `docker/mysql-init.sql`, а `command:` сервиса задаёт серверное сопоставление. Правило для задач 2+:
+    каждый `CREATE TABLE` в `sql/` — с явным `DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`.
+13. **`composer.lock` в репозитории.** Спецификация о нём молчит. Lock держит версии PHPUnit, PHPStan и CS-Fixer
+    одинаковыми на всех 21 задаче: без него тихо поднимется минор фиксера, и зелёные ворота задачи N падут на коде
+    задачи N+1, зависимости не трогавшей. На сервере lock ничего не меняет — в `require` только `php`.
 
 ## Global Constraints
 
@@ -122,9 +136,10 @@ cms/
   phpstan.neon                   уровень 6, пути core/ admin/ theme/ apps/ public/ tests/
   .php-cs-fixer.dist.php         PSR-12 + declare_strict_types
   .gitignore                     config.php, vendor/, кэш инструментов, содержимое каталога загрузок
+  .gitattributes                 переносы строк LF: без них клон под core.autocrlf даёт CRLF в shebang
   docker-compose.dev.yml         php (8080), db (3307), mailpit (8025/1025)
   docker/php-dev.Dockerfile      php:8.3-cli + pdo_mysql, mbstring, gd, openssl, fileinfo, procps + composer
-  docker/mysql-init.sql          создаёт cms_test рядом с cms_dev
+  docker/mysql-init.sql          создаёт cms_dev и cms_test с utf8mb4_unicode_ci
   config.sample.php              образец; боевой config.php вне репозитория
   public/
     index.php                    единственная точка входа
@@ -235,8 +250,10 @@ cms/
 - Create: `docker-compose.dev.yml`, `docker/php-dev.Dockerfile`, `docker/mysql-init.sql`
 - Create: `composer.json`, `phpunit.xml`, `phpstan.neon`, `.php-cs-fixer.dist.php`
 - Create: `config.sample.php`, `public/index.php`, `public/.htaccess`, `public/uploads/.gitkeep`,
-  `core/storage/.gitkeep`, `.gitignore`, `scripts/gate.sh`, `scripts/db-reset`
+  `core/storage/.gitkeep`, `.gitignore`, `.gitattributes`, `scripts/gate.sh`, `scripts/db-reset`
 - Create: `tests/bootstrap.php`, `tests/unit/SmokeTest.php`
+- Commit: `composer.lock` (его фиксирует `composer install` на шаге 8) — lock держит версии
+  инструментов одинаковыми на всех задачах; в `.gitignore` его нет, поэтому коммитить надо явно.
 - Test: `tests/unit/SmokeTest.php`
 
 **Interfaces:**
@@ -297,6 +314,8 @@ services:
       CMS_SMTP_HOST: mailpit
       CMS_SMTP_PORT: '1025'
       CMS_MAILPIT_URL: http://mailpit:8025
+      # Каталог дополнительных приложений: пустая строка — значит «дополнений нет».
+      CMS_EXTRA_APPS_DIR: ''
     command: php -S 0.0.0.0:8080 -t public public/index.php
     depends_on:
       db:
@@ -307,7 +326,10 @@ services:
     container_name: cms-db-1
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-      MYSQL_DATABASE: cms_dev
+    # Сопоставление сервера задаётся явно: базы без `COLLATE` (и дамп с хостинга) иначе получают
+    # utf8mb4_0900_ai_ci от 8.0, которого MySQL 5.7 на боевом хостинге не знает.
+    # cms_dev и cms_test с нужным COLLATE создаёт docker/mysql-init.sql.
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
       - '3307:3306'
     volumes:
@@ -332,6 +354,14 @@ volumes:
 `docker/mysql-init.sql`:
 
 ```sql
+-- Сопоставление баз задаётся явно: спецификация требует utf8mb4 / utf8mb4_unicode_ci,
+-- а MySQL 5.7 на боевом хостинге про utf8mb4_0900_ai_ci (default сервера 8.0) ничего не знает.
+-- cms_dev раньше создавалась переменной MYSQL_DATABASE и доставала серверный default — отсюда
+-- явный CREATE здесь, а не в compose.
+
+-- Рабочая база разработчика.
+CREATE DATABASE IF NOT EXISTS cms_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- Вторая база нужна тестам: их сбрасывает scripts/db-reset, а cms_dev остаётся разработчику.
 CREATE DATABASE IF NOT EXISTS cms_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
@@ -358,7 +388,7 @@ CREATE DATABASE IF NOT EXISTS cms_test CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
   },
   "require-dev": {
     "phpunit/phpunit": "^11.4",
-    "phpstan/phpstan": "^1.12",
+    "phpstan/phpstan": "^2.0",
     "friendsofphp/php-cs-fixer": "^3.64"
   },
   "autoload": {
@@ -573,6 +603,20 @@ echo 'Ядро CMS собирается. Задача 5 подключит ма�
 задача 18, и без исключения git его не покажет — на боевом сервере PHP в каталоге картинок остался бы
 исполняемым.
 
+`.gitattributes` закрепляет перенос строк LF:
+
+```
+# Перенос строк принудительно LF во всём репозитории.
+# На машине разработчика включён core.autocrlf=true, и без этого правила git
+# выложил бы в рабочее дерево CRLF: у scripts/gate.sh и scripts/db-reset сломался бы
+# shebang, а public/.htaccess и файлы docker/ ушли бы на хостинг с лишними \r.
+# Код CMS отдаётся через PHP и Apache, разностей по линиям в diff это не создаёт.
+* text=auto eol=lf
+```
+
+Без этого файла клон на Windows-машине отдал бы скрипты с `\r` в конце строки, и первый же
+`bash scripts/gate.sh` споткнулся бы о shebang, а не о код задачи.
+
 Пустые каталоги, которые должны попасть в репозиторий, создаём сразу (git не хранит пустой каталог):
 
 ```bash
@@ -601,13 +645,18 @@ echo '— синтаксис'
 # а не `|| true`), и каталогов `admin`, `theme`, `apps` на этой задаче ещё нет — `find` по их списку
 # падал бы с «No such file or directory». Ищем от корня, вырезая чужое.
 run bash -c 'find . -type d \( -name vendor -o -name node_modules -o -name .git \) -prune -o -name "*.php" -print0 \
-  > /tmp/php-list.txt 2>&1; xargs -0 -n1 php -l < /tmp/php-list.txt > /tmp/php-l.txt 2>&1; status=$?; \
+  > /tmp/php-list.txt; xargs -0 -r -n1 php -l < /tmp/php-list.txt > /tmp/php-l.txt 2>&1; status=$?; \
   grep -v "No syntax errors detected" /tmp/php-l.txt || true; exit $status'
 
 echo '— phpstan'
 run vendor/bin/phpstan analyse --no-progress
 
 echo '— стиль'
+# Единственный разрешённый шум в воротах: фиксер предупреждает, что образ PHP 8.3 новее
+# минимума проекта из composer.json (8.1). Снять предупреждение нечем: оно печатается
+# безусловно, а флаг `PHP_CS_FIXER_IGNORE_ENV` устарел и лишь добавляет строку о своём
+# устаревании. Понижать `config.platform.php` до 8.1 нельзя — PHPUnit 11 требует PHP >= 8.2,
+# и разрешение зависимостей сломается. На код ворот это не влияет: предупреждение идёт в stderr.
 run vendor/bin/php-cs-fixer fix --dry-run --diff
 
 echo '— тесты'

@@ -18,12 +18,12 @@ echo '— phpstan'
 run vendor/bin/phpstan analyse --no-progress
 
 echo '— стиль'
-# Окружение передаётся контейнеру запуска, а не берётся из config.platform.php:
-# фиксер смотрит на реальный PHP_VERSION образа (8.3) и предупреждает, что он новее
-# поддерживаемого. Понижать platform до 8.1 нельзя — PHPUnit 11 требует PHP >= 8.2,
-# и разрешение зависимостей сломается.
-docker compose -f docker-compose.dev.yml run --rm -T -e PHP_CS_FIXER_IGNORE_ENV=1 php \
-  vendor/bin/php-cs-fixer fix --dry-run --diff
+# Единственный разрешённый шум в воротах: фиксер предупреждает, что образ PHP 8.3 новее
+# минимума проекта из composer.json (8.1). Снять предупреждение нечем: оно печатается
+# безусловно, а флаг `PHP_CS_FIXER_IGNORE_ENV` устарел и лишь добавляет строку о своём
+# устаревании. Понижать `config.platform.php` до 8.1 нельзя — PHPUnit 11 требует PHP >= 8.2,
+# и разрешение зависимостей сломается. На код ворот это не влияет: предупреждение идёт в stderr.
+run vendor/bin/php-cs-fixer fix --dry-run --diff
 
 echo '— тесты'
 run vendor/bin/phpunit "$@"

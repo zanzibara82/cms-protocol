@@ -21,7 +21,6 @@ services:
       CMS_SMTP_PORT: '1025'
       CMS_MAILPIT_URL: http://mailpit:8025
       # Каталог дополнительных приложений: пустая строка — значит «дополнений нет».
-      # Ключ объявлен здесь, потому что блок Interfaces задачи обещает эту переменную.
       CMS_EXTRA_APPS_DIR: ''
     command: php -S 0.0.0.0:8080 -t public public/index.php
     depends_on:
