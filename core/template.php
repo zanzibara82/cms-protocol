@@ -71,7 +71,10 @@ function render(string $template, array $data = [], array $page = []): void
 
     ob_start();
     doAction('page_head');
-    $head = (string) ob_get_clean();
+    // Порядок: сначала вывод хука page_head, затем значение $page['head'] — читающий каскад видит их в этом порядке.
+    // $page['head'] — сырой HTML по тому же правилу, что и вывод хука: его передаёт только первичный код
+    // (ядро и приложения), никогда пользовательский ввод.
+    $head = (string) ob_get_clean() . (string) ($page['head'] ?? '');
 
     ob_start();
     doAction('page_footer');

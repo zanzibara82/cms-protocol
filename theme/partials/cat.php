@@ -7,4 +7,4 @@ declare(strict_types=1);
 $file = ($mood ?? 'happy') === 'sad' ? 'cat-sad.png' : 'cat-happy.png';
 $size = (int) ($size ?? 40);
 ?>
-<img src="/assets/<?= e($file) ?>" width="<?= e((string) $size) ?>" height="<?= e((string) $size) ?>" alt="Кот-талисман школы" loading="lazy">
+<img src="/assets/<?= e($file) ?>" width="<?= e((string) $size) ?>" height="<?= e((string) $size) ?>" alt="Кот-талисман школы">
