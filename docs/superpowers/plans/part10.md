@@ -990,7 +990,7 @@ curl -sS https://домен/sitemap.xml | head -20
 | 6 | редактор видит сводку со счётчиками и «закреплено N из M» | экран `/news/admin`; `tests/http/NewsAdminTest.php` |
 | 7 | черновик без текста проходит, на печать без текста — отказ и в форме, и кнопкой | экран; `tests/db/NewsItemsTest.php` |
 | 8 | занятый адрес — отказ с возвратом набранного | экран правки; `tests/unit/NewsFormRulesTest.php` |
-| 9 | публикация → материал в ленте, в рубрике, в карте сайтов | экран + `curl /sitemap.xml`; `tests/db/NewsSitemapTest.php` |
+| 9 | публикация → материал в ленте, в рубрике, на странице тега и в карте сайтов | экран + `curl /sitemap.xml`; `tests/db/NewsSitemapTest.php` |
 | 10 | снятие с публикации убирает материал, срок сохраняет | экран; `tests/db/NewsItemsTest.php` |
 | 11 | закреплённый — первым в ленте и в рубрике | экран; `tests/db/FeedReadTest.php` |
 | 12 | смена адреса → 301 со старого, старый помнится, лимит 10 | экран + `curl -I`; `tests/db/NewsItemsTest.php` |
