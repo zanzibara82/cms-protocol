@@ -1,0 +1,6 @@
+# Перенос строк принудительно LF во всём репозитории.
+# На машине разработчика включён core.autocrlf=true, и без этого правила git
+# выложил бы в рабочее дерево CRLF: у scripts/gate.sh и scripts/db-reset сломался бы
+# shebang, а public/.htaccess и файлы docker/ ушли бы на хостинг с лишними \r.
+# Код CMS отдаётся через PHP и Apache, разностей по линиям в diff это не создаёт.
+* text=auto eol=lf

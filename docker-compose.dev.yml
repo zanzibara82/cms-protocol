@@ -20,6 +20,9 @@ services:
       CMS_SMTP_HOST: mailpit
       CMS_SMTP_PORT: '1025'
       CMS_MAILPIT_URL: http://mailpit:8025
+      # Каталог дополнительных приложений: пустая строка — значит «дополнений нет».
+      # Ключ объявлен здесь, потому что блок Interfaces задачи обещает эту переменную.
+      CMS_EXTRA_APPS_DIR: ''
     command: php -S 0.0.0.0:8080 -t public public/index.php
     depends_on:
       db:
@@ -30,7 +33,10 @@ services:
     container_name: cms-db-1
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-      MYSQL_DATABASE: cms_dev
+    # Сопоставление сервера задаётся явно: базы без `COLLATE` (и дамп с хостинга) иначе получают
+    # utf8mb4_0900_ai_ci от 8.0, которого MySQL 5.7 на боевом хостинге не знает.
+    # cms_dev и cms_test с нужным COLLATE создаёт docker/mysql-init.sql.
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
       - '3307:3306'
     volumes:
