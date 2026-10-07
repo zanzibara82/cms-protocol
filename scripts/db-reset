@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Пересоздаёт ТОЛЬКО cms_test. cms_dev и любая боевая база не трогаются.
+set -euo pipefail
+
+if [[ "${1:-}" == "--prod" || "${1:-}" == "--dev" ]]; then
+  echo 'Отказ: скрипт сбрасывает только cms_test.' >&2
+  exit 1
+fi
+
+docker compose -f docker-compose.dev.yml exec -T db \
+  mysql -uroot -e "DROP DATABASE IF EXISTS cms_test; CREATE DATABASE cms_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+echo 'cms_test пересоздана.'

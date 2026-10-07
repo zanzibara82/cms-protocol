@@ -1,0 +1,13 @@
+parameters:
+  level: 6
+  paths:
+    - core
+    - admin
+    - theme
+    - apps
+    - public
+    - tests
+  excludePaths:
+    analyse:
+      - public/assets/*
+  treatPhpDocTypesAsCertain: false

@@ -1,0 +1,52 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/php-dev.Dockerfile
+    container_name: cms-php-1
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - '8080:8080'
+    environment:
+      CMS_DB_HOST: db
+      CMS_DB_PORT: '3306'
+      CMS_DB_NAME: cms_dev
+      CMS_DB_USER: root
+      CMS_DB_PASS: ''
+      CMS_SITE_URL: http://localhost:8080
+      CMS_TABLE_PREFIX: tbl_
+      CMS_SMTP_HOST: mailpit
+      CMS_SMTP_PORT: '1025'
+      CMS_MAILPIT_URL: http://mailpit:8025
+    command: php -S 0.0.0.0:8080 -t public public/index.php
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    container_name: cms-db-1
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+      MYSQL_DATABASE: cms_dev
+    ports:
+      - '3307:3306'
+    volumes:
+      - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - cms-db-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: cms-mailpit-1
+    ports:
+      - '8025:8025'
+
+volumes:
+  cms-db-data:

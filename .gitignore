@@ -1,18 +1,21 @@
-# Боевые настройки: только config.sample.php в репозитории
-config.php
+# Боевой конфиг с паролями в репозиторий не попадает — только образец.
+/config.php
 
-# Dev-зависимости (PHPUnit, PHPStan, PHP-CS-Fixer) — на сервер не попадают
 /vendor/
-composer.lock
-.phpunit.result.cache
-.php-cs-fixer.cache
+/node_modules/
+/.php-cs-fixer.cache
+/.phpunit.result.cache
 
-# Загрузки пользователей и журналы
+# Замок установщика и временные файлы сборки.
+/public/install.lock
+/backup/
+
+# Журнал ошибок: в нём тексты исключений и адреса — наружу в git он не идёт.
+/core/storage/*.log
+
+# Каталог загрузок пустой в репозитории: картинки кладут люди на сервере.
+# Повторное включение обязано идти по одному имени — `git` не заходит в каталог,
+# который уже исключён маской `*`.
 /public/uploads/*
 !/public/uploads/.gitkeep
-/storage/*.log
-
-# Служебное
-node_modules/
-.DS_Store
-Thumbs.db
+!/public/uploads/.htaccess
