@@ -29,6 +29,9 @@ require_once __DIR__ . '/apps.php';
 require_once __DIR__ . '/migrations.php';
 // Настройки сайта читают установщик и экраны админки, поэтому подключаются до них.
 require_once __DIR__ . '/options.php';
+// Seo-слой читает настройки сайта (absoluteUrl строит адреса из SITE_URL), поэтому подключается
+// после options.php и раньше потребителей: его функции зовут маршруты /sitemap.xml и /robots.txt.
+require_once __DIR__ . '/seo.php';
 // Каркас админки подключается последним: его функции зовут appManifests(), isAppActive() и getOption(),
 // а сами экраны админки их только вызывают. В установщике этот каркас не нужен, но лишний require
 // безопасен — public/setup.php ничего из него не печатает.

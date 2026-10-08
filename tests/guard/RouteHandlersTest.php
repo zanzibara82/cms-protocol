@@ -10,8 +10,9 @@ use PHPUnit\Framework\TestCase;
 // строкой, поэтому опечатка в routes.php всплывает только на запросе человека — страж ловит её
 // до коммита. База не нужна: addRoute() и require routes.php в неё не ходят.
 //
-// Проверка «каждый приватный маршрут закрыт в robots.txt» появляется в задаче 9 вместе с самим
-// robotsDisallowed(): здесь её держать нельзя, иначе ворота краснеют между задачами.
+// Проверка «каждый приватный маршрут закрыт в robots.txt» живёт здесь с задачи 9: таблица
+// маршрутов — единственный источник меток «private», а закрытые префиксы перечисляет
+// robotsDisallowed() из core/seo.php.
 final class RouteHandlersTest extends TestCase
 {
     public static function setUpBeforeClass(): void
@@ -125,6 +126,29 @@ final class RouteHandlersTest extends TestCase
                 is_callable($route['handler']),
                 'Обработчик маршрута ' . (string) $route['method'] . ' ' . (string) $route['pattern'] . ' не определён после сброса'
             );
+        }
+    }
+
+    public function testКаждыйПриватныйМаршрутЗакрытВRobots(): void
+    {
+        // Приватный маршрут без приватного пути в манифесте — расхождение, которое иначе не видно:
+        // гейт закрывает доступ, но поисковик продолжает видеть адрес в robots.txt открытым.
+        $closed = robotsDisallowed();
+
+        foreach (routeTable() as $route) {
+            if (($route['meta']['private'] ?? false) !== true) {
+                continue;
+            }
+
+            $covered = false;
+            foreach ($closed as $prefix) {
+                if (str_starts_with($route['pattern'], (string) $prefix)) {
+                    $covered = true;
+                    break;
+                }
+            }
+
+            self::assertTrue($covered, 'Приватный маршрут ' . $route['pattern'] . ' не закрыт в robots.txt');
         }
     }
 }

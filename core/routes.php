@@ -12,6 +12,8 @@ function registerCoreRoutes(): void
     addRoute('GET', '/admin', 'coreAdminSummary', ['private' => true, 'permission' => 'login']);
     addRoute('GET', '/admin/apps', 'coreAdminApps', ['private' => true, 'permission' => 'manage']);
     addRoute('POST', '/admin/apps', 'coreAdminAppsAction', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/sitemap.xml', 'coreSitemap');
+    addRoute('GET', '/robots.txt', 'coreRobots');
 }
 
 /** @param array<string, string> $params */
@@ -68,6 +70,25 @@ function coreLogout(array $params = []): void
     csrfCheck();
     logoutUser();
     redirectWithNotice('/', 'signed-out');
+}
+
+/** @param array<string, string> $params */
+function coreSitemap(array $params = []): void
+{
+    respond(200, sitemapXml(), [
+        'Content-Type' => 'application/xml; charset=utf-8',
+        // Карта сайта меняется редко, а пересчёт на каждый запрос бьёт по базе.
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+}
+
+/** @param array<string, string> $params */
+function coreRobots(array $params = []): void
+{
+    respond(200, robotsTxt(), [
+        'Content-Type' => 'text/plain; charset=utf-8',
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
 }
 
 /** @param array<string, string> $params */
