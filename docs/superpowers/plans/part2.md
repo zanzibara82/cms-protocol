@@ -712,7 +712,12 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
 - Create: `core/hooks.php`, `core/template.php`, `theme/layout.php`, `theme/home.php`, `theme/404.php`,
   `theme/partials/header.php`, `theme/partials/footer.php`, `theme/partials/cat.php`
 - Create: `tailwind.config.js`, `postcss.config.js`, `package.json`, `src-css/app.css`, `scripts/css`,
-  `public/assets/app.css`
+  `public/assets/app.css` (`package-lock.json` появляется из `npm install` и тоже коммитится)
+- Copy (побайтово, без перемасштабирования и без пересохранения): `public/assets/cat-happy.png` и
+  `public/assets/cat-sad.png` — из `../english-portal/public/cats/`; `public/assets/favicon.png` —
+  из `../english-portal/public/brand/`. Векторных версий талисмана в `english-portal` нет (файлов
+  `cat-happy.svg` и `cat-sad.svg` не существует), поэтому переносятся растровые PNG, а шаблон кота
+  и `<link rel="icon">` ссылаются на `.png`.
 - Create: `tests/unit/HooksTest.php`, `tests/unit/TemplateTest.php`, `tests/guard/OutputEscapingTest.php`
 - Modify: `core/bootstrap.php` (подключение `core/hooks.php` и `core/template.php` — шаг 4)
 
@@ -727,6 +732,8 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
     `partial(string $template, array $data = []): string`, `resolveTemplate(string $template): string`,
     `richText(string $text): string`;
   - `$page` — `array{title?: string, description?: string, noindex?: bool, head?: string}`;
+    `head` — сырой HTML для `<head>`, его передаёт только первичный код (ядро и приложения);
+    в `$head` он оказывается после вывода хука `page_head`;
   - тема отдаёт `theme/layout.php` с переменными `$title`, `$description`, `$content`, `$head`, `$noindex`.
 
 - [ ] **Шаг 1: Пишем падающие тесты хуков**
@@ -923,6 +930,12 @@ require_once dirname(__DIR__, 2) . '/core/template.php';
 
 final class TemplateTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        // Хук page_head общий для всего прогона: без сброса подписка этого теста утекла бы в другие.
+        hooksReset();
+    }
+
     public function testИерархияШаблоновБерётФайлПриложенияПервым(): void
     {
         // Цепочка из спецификации §5.6: приложение → тема → ядро → 404.
@@ -965,6 +978,29 @@ final class TemplateTest extends TestCase
     public function testПереносыСтрокСтановятсяАбзацами(): void
     {
         self::assertSame('первая<br>вторая', richText("первая\nвторая"));
+    }
+
+    public function testHeadСтраницыДополняетВыводХукаВРазметкеШапки(): void
+    {
+        // Разметка из хука page_head и значение $page['head'] обязаны попасть в <head> сырьём;
+        // порядок фиксирован: сначала хук, затем значение страницы (каскад читает их в этом порядке).
+        addAction('page_head', static function (): void {
+            echo '<meta name="generator" content="cms">';
+        });
+
+        ob_start();
+        render('home', [], [
+            'title' => 'Проверка',
+            'head' => '<meta property="og:type" content="website">',
+        ]);
+        $html = (string) ob_get_clean();
+
+        $hook = strpos($html, '<meta name="generator" content="cms">');
+        $page = strpos($html, '<meta property="og:type" content="website">');
+
+        self::assertNotFalse($page, 'Значение $page[head] обязано появиться в разметке');
+        self::assertNotFalse($hook, 'Вывод хука page_head обязан появиться в разметке');
+        self::assertLessThan((int) $page, (int) $hook, 'Хук обязан идти раньше значения $page[head]');
     }
 }
 ```
@@ -1079,7 +1115,10 @@ function render(string $template, array $data = [], array $page = []): void
 
     ob_start();
     doAction('page_head');
-    $head = (string) ob_get_clean();
+    // Порядок: сначала вывод хука page_head, затем значение $page['head'] — читающий каскад видит их в этом порядке.
+    // $page['head'] — сырой HTML по тому же правилу, что и вывод хука: его передаёт только первичный код
+    // (ядро и приложения), никогда пользовательский ввод.
+    $head = (string) ob_get_clean() . (string) ($page['head'] ?? '');
 
     ob_start();
     doAction('page_footer');
@@ -1126,6 +1165,20 @@ require_once __DIR__ . '/template.php';
 
 - [ ] **Шаг 5: Тема — layout, шапка, футер, кот, 404, главная**
 
+Сначала — побайтовый перенос картинок. Копировать нужно на хосте: контейнер `php` видит только каталог
+`cms/`, путь `../english-portal` из него недоступен. Проверка совпадения — по хешу, а не по размеру:
+
+```bash
+cp ../english-portal/public/cats/cat-happy.png ../english-portal/public/cats/cat-sad.png public/assets/
+cp ../english-portal/public/brand/favicon.png public/assets/
+md5sum ../english-portal/public/cats/cat-happy.png public/assets/cat-happy.png
+md5sum ../english-portal/public/cats/cat-sad.png public/assets/cat-sad.png
+md5sum ../english-portal/public/brand/favicon.png public/assets/favicon.png
+```
+
+Expected: в каждой паре хеши совпали. Из `english-portal` берётся только то, что лежит в открытом `public/`;
+боевая база, `.env` и `config.php` не читаются и не копируются.
+
 `theme/layout.php`:
 
 ```php
@@ -1153,7 +1206,7 @@ declare(strict_types=1);
         <meta name="robots" content="noindex, nofollow">
     <?php endif; ?>
     <link rel="stylesheet" href="/assets/app.css">
-    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="/assets/favicon.png" type="image/png">
     <?= $head /* @safe html */ ?>
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
@@ -1168,7 +1221,8 @@ declare(strict_types=1);
 </html>
 ```
 
-`theme/partials/header.php`:
+`theme/partials/header.php` — ссылки навигации и логотип обязаны иметь зону нажатия не меньше 44 px
+(глобальное требование адаптивности 360…1440), поэтому каждая ссылка — `inline-flex min-h-[44px] items-center`:
 
 ```php
 <?php
@@ -1179,16 +1233,16 @@ $user = function_exists('currentUser') ? currentUser() : null;
 ?>
 <header class="border-b border-ink/10 bg-cream">
     <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
-        <a class="flex items-center gap-2 text-lg font-bold" href="/">
+        <a class="flex min-h-[44px] items-center gap-2 text-lg font-bold" href="/">
             <?= partial('partials/cat', ['mood' => 'happy', 'size' => 32]) /* @safe html */ ?>
             <span><?= e((string) configValue('SITE_NAME', 'Школа')) ?></span>
         </a>
         <nav class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <a class="hover:underline" href="/news">Новости</a>
+            <a class="inline-flex min-h-[44px] items-center hover:underline" href="/news">Новости</a>
             <?php if ($user !== null): ?>
-                <a class="hover:underline" href="/admin">Админка</a>
+                <a class="inline-flex min-h-[44px] items-center hover:underline" href="/admin">Админка</a>
             <?php else: ?>
-                <a class="hover:underline" href="/login">Вход</a>
+                <a class="inline-flex min-h-[44px] items-center hover:underline" href="/login">Вход</a>
             <?php endif; ?>
         </nav>
     </div>
@@ -1214,8 +1268,10 @@ declare(strict_types=1);
 </footer>
 ```
 
-`theme/partials/cat.php` — талисман; переносится из `english-portal/public` (файл `cat-happy.svg` и `cat-sad.svg`
-копируются в `public/assets/`), поэтому шаблон только выбирает картинку:
+`theme/partials/cat.php` — талисман; PNG копируются побайтово из `english-portal` (файлы
+`cat-happy.png` и `cat-sad.png` лежат в `../english-portal/public/cats/`). Векторных версий нет, поэтому
+файлы растровые. Атрибута `loading="lazy"` на `<img>` нет: талисман стоит в шапке над основным содержимым
+и попадает в LCP, а ленивая загрузка откладывает именно его. Шаблон только выбирает картинку:
 
 ```php
 <?php
@@ -1224,10 +1280,10 @@ declare(strict_types=1);
 
 /** @var string $mood */
 /** @var int $size */
-$file = ($mood ?? 'happy') === 'sad' ? 'cat-sad.svg' : 'cat-happy.svg';
+$file = ($mood ?? 'happy') === 'sad' ? 'cat-sad.png' : 'cat-happy.png';
 $size = (int) ($size ?? 40);
 ?>
-<img src="/assets/<?= e($file) ?>" width="<?= e((string) $size) ?>" height="<?= e((string) $size) ?>" alt="Кот-талисман школы" loading="lazy">
+<img src="/assets/<?= e($file) ?>" width="<?= e((string) $size) ?>" height="<?= e((string) $size) ?>" alt="Кот-талисман школы">
 ```
 
 `theme/404.php`:
@@ -1242,8 +1298,8 @@ declare(strict_types=1);
     <h1 class="mt-6 text-3xl font-bold">Страницы нет</h1>
     <p class="mt-3 text-ink/70">Адрес мог измениться или в нём опечатка. Загляните в ленту новостей — возможно, материал переехал.</p>
     <p class="mt-6 flex flex-wrap justify-center gap-3">
-        <a class="rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/">На главную</a>
-        <a class="rounded-lg border border-ink/20 px-4 py-2 hover:bg-cream" href="/news">К новостям</a>
+        <a class="rounded-lg bg-ink px-4 py-3 text-cream hover:opacity-90" href="/">На главную</a>
+        <a class="rounded-lg border border-ink/20 px-4 py-3 hover:bg-cream" href="/news">К новостям</a>
     </p>
 </section>
 ```
@@ -1342,11 +1398,12 @@ final class OutputEscapingTest extends TestCase
         foreach ($this->templates() as $file) {
             $code = $this->withoutSafeBlocks((string) file_get_contents($file));
 
-            // `\s*+` — притяжательный квантификатор, и это не украшение. Обычный `\s*` отдаёт пробел
-            // по одному символу, отрицательный lookahead срабатывает на позиции пробела, и законное
-            // `<?= e($title) ?>` попадало в находки: страж краснел на правильно написанных шаблонах
-            // и оставался зелёным только на сломанных. У второго условия той же ошибки нет — там
-            // группа начинается с `\$`, поэтому откат на пробел не приводит к ложному совпадению.
+            /* `\s*+` — притяжательный квантификатор, и это не украшение. Обычный `\s*` отдаёт пробел
+            по одному символу, отрицательный lookahead срабатывает на позиции пробела, и законное
+            `<?= e($title) ?>` попадало в находки: страж краснел на правильно написанных шаблонах
+            и оставался зелёным только на сломанных. У второго условия той же ошибки нет — там
+            группа начинается с `\$`, поэтому откат на пробел не приводит к ложному совпадению.
+            Комментарий многострочный: `?>` внутри однострочного комментария закрыл бы PHP-блок. */
             if (preg_match_all('/<\?=\s*+(?!e\(|partial\(|richText\()([^;]*?);?\s*+\?>/s', $code, $matches) > 0) {
                 foreach ($matches[1] as $expression) {
                     $violations[] = $this->relative($file) . ': <?= ' . trim($expression) . ' ?>';
@@ -1448,7 +1505,8 @@ Expected: всё зелёное; PHPStan не ругается на `extract()` 
 `/** @var array<string, mixed> $data */`).
 
 ```bash
-git add core/ theme/ apps/ tests/ tailwind.config.js postcss.config.js package.json src-css/ scripts/css public/assets/
+git add core/ theme/ apps/ tests/ tailwind.config.js postcss.config.js package.json package-lock.json \
+        src-css/ scripts/css public/assets/
 GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \
 GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.com' \
   git commit -m "Хуки, иерархия шаблонов и тема: layout, 404, кот и страж экранирования вывода"
