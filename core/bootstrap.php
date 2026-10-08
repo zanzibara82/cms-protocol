@@ -12,6 +12,9 @@ require_once __DIR__ . '/text.php';
 require_once __DIR__ . '/id.php';
 require_once __DIR__ . '/hooks.php';
 require_once __DIR__ . '/template.php';
+require_once __DIR__ . '/request.php';
+require_once __DIR__ . '/response.php';
+require_once __DIR__ . '/router.php';
 
 // Классы ядра (Mailer, SmtpSocket, MigrationPlan) подгружаются по имени.
 spl_autoload_register(static function (string $class): void {
