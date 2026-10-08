@@ -44,7 +44,7 @@ function coreLoginSubmit(array $params = []): void
     }
 
     $next = queryString('next', '');
-    redirect(is_string($next) && str_starts_with($next, '/') && !str_starts_with($next, '//') ? $next : '/admin');
+    redirect(is_string($next) && isInternalNextPath($next) ? $next : '/admin');
 }
 
 /** @param array<string, string> $params */
@@ -52,4 +52,21 @@ function coreLogout(array $params = []): void
 {
     logoutUser();
     redirectWithNotice('/', 'signed-out');
+}
+
+// Куда пускаем после входа: только внутренний путь, который начинается с одного «/» и дальше не
+// содержит ни «/», ни обратного слэша — браузер сводит «//host» и «/\host» к адресу чужого сайта.
+// «://» внутри строки — прямая ссылка наружу, её тоже отклоняем целиком.
+function isInternalNextPath(string $next): bool
+{
+    if ($next === '' || !str_starts_with($next, '/')) {
+        return false;
+    }
+
+    $second = substr($next, 1, 1);
+    if ($second === '/' || $second === '\\') {
+        return false;
+    }
+
+    return !str_contains($next, '://');
 }

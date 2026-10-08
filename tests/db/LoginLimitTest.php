@@ -83,9 +83,13 @@ final class LoginLimitTest extends TestCase
     {
         TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
 
-        $result = attemptLogin('RED AKTOR@school.dev ', 'верный-пароль');
+        // Адрес отличается от сидового только регистром и пробелами по краям: перед сверкой с
+        // базой он нормализуется, и вход обязан выпустить того же редактора.
+        $result = attemptLogin('  Redaktor@School.Dev  ', 'верный-пароль');
         $clean = attemptLogin('redaktor@school.dev', 'верный-пароль');
 
+        self::assertTrue($result['ok'], 'Регистр и краевые пробелы не мешают входу');
+        self::assertSame('redaktor@school.dev', $result['user']['email']);
         self::assertFalse($clean['ok'] === false);
         self::assertSame('redaktor@school.dev', $clean['user']['email']);
     }
