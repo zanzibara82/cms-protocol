@@ -3,8 +3,8 @@
 **Files:**
 - Create: `core/session.php`, `core/auth.php`, `core/routes.php`, `theme/login.php`
 - Modify: `core/bootstrap.php` (подключение `session.php`, `auth.php`, `routes.php`)
-- Create: `tests/unit/PasswordTest.php`, `tests/db/LoginLimitTest.php`, `tests/http/LoginTest.php`,
-  `tests/guard/ClientIpTest.php`
+- Create: `tests/unit/PasswordTest.php`, `tests/db/LoginLimitTest.php`, `tests/db/SessionRevocationTest.php`,
+  `tests/http/LoginTest.php`, `tests/guard/ClientIpTest.php`
 
 **Interfaces:**
 - Consumes: `db()`, `insert()`, `one()`, `run()`, `value()`, `all()` из задачи 3; `nowUtc()`/`utcStamp()`,
@@ -21,6 +21,8 @@
     `roleGrantsManage(?array $account): bool`, `getEditorAccess(): array` —
     `['kind' => 'granted', 'editor' => ['id' => string, 'email' => string]]` или `['kind' => 'denied']`;
   - `registerCoreRoutes(): void` — маршруты `/login` (GET, POST) и `/logout` (POST);
+  - `isInternalNextPath(string $next): bool` — куда пускаем после входа: одиночный «/» в начале, второй
+    символ не «/» и не «\», внутри нет «://» (иначе `?next=/\evil.com` сводится браузером к чужому хосту);
   - константы `LOGIN_LIMIT_PER_EMAIL = 5`, `LOGIN_WINDOW_EMAIL = 15`, `LOGIN_LIMIT_PER_IP = 20`,
     `LOGIN_WINDOW_IP = 60`, `ROLES = ['admin' => 'admin', 'editor' => 'editor']`.
 
@@ -428,9 +430,13 @@ final class LoginLimitTest extends TestCase
     {
         TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
 
-        $result = attemptLogin('RED AKTOR@school.dev ', 'верный-пароль');
+        // Адрес отличается от сидового только регистром и пробелами по краям: перед сверкой с
+        // базой он нормализуется, и вход обязан выпустить того же редактора.
+        $result = attemptLogin('  Redaktor@School.Dev  ', 'верный-пароль');
         $clean = attemptLogin('redaktor@school.dev', 'верный-пароль');
 
+        self::assertTrue($result['ok'], 'Регистр и краевые пробелы не мешают входу');
+        self::assertSame('redaktor@school.dev', $result['user']['email']);
         self::assertFalse($clean['ok'] === false);
         self::assertSame('redaktor@school.dev', $clean['user']['email']);
     }
@@ -451,6 +457,81 @@ final class LoginLimitTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db`
 Expected: PASS. Тест «Неверный пароль…» ожидает 2 строки: `attemptLogin()` с пустым адресом не пишет попытку,
 а две неудачи — пишут.
+
+Тем же набором проверяется и ветка отзыва сессий. Пока `session_version` везде ноль, сравнение версий в
+`currentUser()` не выполняется ни в одном прогоне, а это security-ветка: её надо закрыть здесь, а не ждать
+задачи 8, которая подключит вызов `revokeSessions()`.
+
+`tests/db/SessionRevocationTest.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace Cms\Tests\db;
+
+use Cms\Tests\TestDb;
+use PHPUnit\Framework\TestCase;
+
+// Отзыв сессий. currentUser() сверяет номер версии из сессии с номером в базе и разлогинивает,
+// если они разошлись. Пока версия везде нулевая, ветка не выполнялась ни в одном прогоне,
+// поэтому этот тест закрывает именно её: живая кука после revokeSessions() не даёт доступа.
+final class SessionRevocationTest extends TestCase
+{
+    public static function setUpBeforeClass(): void
+    {
+        TestDb::reset();
+    }
+
+    protected function setUp(): void
+    {
+        TestDb::clearTable('login_attempt');
+        TestDb::clearTable('user');
+        $_SESSION = [];
+    }
+
+    public function testОтзывСессийВыкидываетВошедшегоРанее(): void
+    {
+        $id = TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
+
+        // Раскладываем сессию ровно так, как это делает loginUser(): id вошедшего и его версия.
+        startSession();
+        $_SESSION['user_id'] = $id;
+        $_SESSION['session_version'] = 0;
+
+        self::assertSame(0, sessionVersion(), 'В сессии лежит нулевая версия аккаунта');
+        self::assertNotNull(currentUser(), 'До отзыва вошедший редактор виден');
+
+        revokeSessions($id);
+
+        self::assertSame(
+            1,
+            (int) value('SELECT session_version FROM ' . t('user') . ' WHERE id = ?', [$id]),
+            'Отзыв поднимает номер версии в базе'
+        );
+        self::assertNull(currentUser(), 'Кука со старой версией разлогинена');
+        self::assertNull(sessionUserId(), 'Разлогинивание очищает сессию');
+    }
+
+    public function testСовпавшаяВерсияВсёЕщёВпускаетРедактора(): void
+    {
+        $id = TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
+        revokeSessions($id);
+
+        // Тот же самый шаг, но версия в сессии актуальна: ветка отзыва срабатывает по числам,
+        // а не выкидывает всякого вошедшего.
+        startSession();
+        $_SESSION['user_id'] = $id;
+        $_SESSION['session_version'] = 1;
+
+        self::assertNotNull(currentUser(), 'Актуальная версия пускает редактора');
+        self::assertSame('granted', getEditorAccess()['kind'], 'Гейт правки после совпавшей версии открыт');
+    }
+}
+```
+
+Второй тест — контрольный: он обязателен, иначе первый можно было бы пройти «разлогиниваем всех подряд».
 
 - [ ] **Шаг 4: Форма входа и маршруты**
 
@@ -500,13 +581,30 @@ function coreLoginSubmit(array $params = []): void
     }
 
     $next = queryString('next', '');
-    redirect(is_string($next) && str_starts_with($next, '/') && !str_starts_with($next, '//') ? $next : '/admin');
+    redirect(is_string($next) && isInternalNextPath($next) ? $next : '/admin');
 }
 
 function coreLogout(array $params = []): void
 {
     logoutUser();
     redirectWithNotice('/', 'signed-out');
+}
+
+// Куда пускаем после входа: только внутренний путь, который начинается с одного «/» и дальше не
+// содержит ни «/», ни обратного слэша — браузер сводит «//host» и «/\host» к адресу чужого сайта.
+// «://» внутри строки — прямая ссылка наружу, её тоже отклоняем целиком.
+function isInternalNextPath(string $next): bool
+{
+    if ($next === '' || !str_starts_with($next, '/')) {
+        return false;
+    }
+
+    $second = substr($next, 1, 1);
+    if ($second === '/' || $second === '\\') {
+        return false;
+    }
+
+    return !str_contains($next, '://');
 }
 ```
 
@@ -535,23 +633,29 @@ declare(strict_types=1);
     <form class="mt-6 space-y-4" method="post" action="/login">
         <label class="block text-sm">
             <span class="font-medium">Почта</span>
-            <input class="mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="email" name="email"
+            <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="email" name="email"
                    value="<?= e($email) ?>" autocomplete="username" required maxlength="190">
         </label>
         <label class="block text-sm">
             <span class="font-medium">Пароль</span>
-            <input class="mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password" name="password"
+            <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password" name="password"
                    autocomplete="current-password" required>
         </label>
-        <button class="w-full rounded-lg bg-ink px-4 py-2 font-medium text-cream hover:opacity-90" type="submit">Войти</button>
+        <button class="min-h-[44px] w-full rounded-lg bg-ink px-4 py-2 font-medium text-cream hover:opacity-90" type="submit">Войти</button>
     </form>
 </section>
 ```
 
+Зоны нажатия: класс `min-h-[44px]` на обоих полях и на кнопке — требование глобального ограничения
+(≥44 px) и сложившаяся конвенция темы (`theme/partials/header.php`). Utility уже скомпилирован в
+`public/assets/app.css` со задачи 4, поэтому пересборки CSS эта задача не требует; http-тест шага 5
+проверяет класс в отдаваемой разметке.
+
 `public/index.php` в этой задаче дорабатывается: к строкам задачи 5 (`securityHeaders()`, `addRoute('GET', '/')`,
 `dispatch()`) добавляются `startSession()` и `registerCoreRoutes()` — перед `dispatch()`, иначе обработчик `/login`
 не увидит сессию. Готовый блок на этот момент приведён в задаче 5 («К концу задачи 6»): здесь он просто вставляется
-целиком. `registerAppRoutes()` появится в задаче 8.
+целиком. Временная строка `addRoute('GET', '/', …)` из задачи 5 удаляется: домашний маршрут объявляет
+`registerCoreRoutes()`, иначе дубль перекрывал бы `coreHome()`. `registerAppRoutes()` появится в задаче 8.
 
 `core/bootstrap.php` дополняется подключениями (после `core/id.php`) — только теми файлами, которые существуют
 к концу этой задачи:
@@ -584,7 +688,6 @@ declare(strict_types=1);
 
 namespace Cms\Tests\http;
 
-use Cms\Tests\http\Kernel;
 use Cms\Tests\TestDb;
 use PHPUnit\Framework\TestCase;
 
@@ -593,9 +696,6 @@ final class LoginTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         TestDb::reset();
-        TestDb::clearTable('user');
-        TestDb::clearTable('login_attempt');
-        TestDb::seedUser('admin@school.dev', 'верный-пароль', 'admin');
         Kernel::start();
     }
 
@@ -607,14 +707,26 @@ final class LoginTest extends TestCase
     protected function setUp(): void
     {
         Kernel::freshCookies();
+
+        // Каждый тест начинается сам: журнал попыток очищается, аккаунт сидируется заново.
+        // Без этого тесты зависели бы друг от друга — например, «подставной заголовок» проходил
+        // только потому, что до него пять неудач записал предыдущий тест.
+        TestDb::clearTable('login_attempt');
+        TestDb::clearTable('user');
+        TestDb::seedUser('admin@school.dev', 'верный-пароль', 'admin');
     }
 
     private function token(): string
     {
-        $page = Kernel::get('/login');
-        preg_match('/name="_token" value="([^"]+)"/', $page['body'], $m);
+        return $this->tokenFrom(Kernel::get('/login')['body']);
+    }
 
-        return $m[1] ?? '';
+    /** Пять неудач своими запросами: лимит по адресу исчерпан независимо от порядка тестов. */
+    private function exhaustLoginLimit(): void
+    {
+        for ($i = 0; $i < LOGIN_LIMIT_PER_EMAIL; $i++) {
+            Kernel::post('/login', ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'мимо']);
+        }
     }
 
     public function testСтраницаВходаОткрытаАнониму(): void
@@ -625,6 +737,9 @@ final class LoginTest extends TestCase
         self::assertStringContainsString('Вход для редактора', $page['body']);
         self::assertStringContainsString('method="post"', $page['body'], 'Форма с паролем обязана быть POST');
         self::assertStringContainsString('noindex, nofollow', $page['body']);
+        // Минимум проекта — зона нажатия 44 px: каждый контрол экрана обязан нести этот класс.
+        self::assertStringContainsString('min-h-[44px] w-full rounded-lg border border-ink/20', $page['body'], 'Поля входа не меньше 44 px');
+        self::assertStringContainsString('min-h-[44px] w-full rounded-lg bg-ink', $page['body'], 'Кнопка входа не меньше 44 px');
     }
 
     public function testВерныйПарольПереноситВАдминку(): void
@@ -647,18 +762,44 @@ final class LoginTest extends TestCase
 
     public function testПослеПятиНеудачВходЗакрывается(): void
     {
-        for ($i = 0; $i < LOGIN_LIMIT_PER_EMAIL; $i++) {
-            Kernel::post('/login', ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'мимо']);
-        }
+        $this->exhaustLoginLimit();
 
         $response = Kernel::post('/login', ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль']);
 
         self::assertStringContainsString('Слишком много попыток входа', $response['body']);
     }
 
+    public function testВраждебныйNextНеУводитНаЧужойДомен(): void
+    {
+        // Обратный слэш сразу после одиночного «/» браузер сводит к «//evil.com», то есть к чужому
+        // хосту. После входа в Location обязан остаться внутренний путь, а не адрес из ссылки.
+        $response = Kernel::post(
+            '/login?next=/\\evil.com',
+            ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль']
+        );
+
+        self::assertSame(302, $response['status']);
+        self::assertSame('/admin', $response['headers']['location'], 'Открытый редирект закрыт: пускаем только внутренний путь');
+        self::assertStringNotContainsString('evil.com', $response['headers']['location']);
+    }
+
+    public function testВнутреннийNextПослеВходаСохраняется(): void
+    {
+        // Фильтр не должен выкидывать и законную глубинную ссылку на свой сайт.
+        $response = Kernel::post(
+            '/login?next=/news',
+            ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль']
+        );
+
+        self::assertSame(302, $response['status']);
+        self::assertSame('/news', $response['headers']['location']);
+    }
+
     public function testПодставнойЗаголовокАдресаНеСнимаетЛимит(): void
     {
-        // Даже с «другим» x-forwarded-for сервер считает REMOTE_ADDR: лимит остаётся.
+        $this->exhaustLoginLimit();
+
+        // Даже с «другим» заголовком переадресации сервер считает адрес из серверного массива: лимит остаётся.
         $response = Kernel::post(
             '/login',
             ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль'],
@@ -682,11 +823,16 @@ Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit -
 Expected: PASS. Красным этот набор был до шага 4: маршрутов `/login` и `/logout` в реестре ещё нет, страница входа
 не собрана.
 
-Здесь пять тестов, и все они работают без `/admin` (задача 8) и без CSRF (задача 7):
+Здесь семь тестов, и все они работают без `/admin` (задача 8) и без CSRF (задача 7):
 - тест «Выход гасит сессию» добавляется шагом 13 задачи 8 — он читает токен со страницы админки;
 - `token()` до задачи 7 возвращает пустую строку, потому что поля `_token` в форме ещё нет. Пока `coreLoginSubmit()`
   не вызывает `csrfCheck()`, лишний ключ в POST безвреден, а после шага 5 задачи 7 токен становится настоящим —
-  тесты править не нужно, они продолжают проверять ровно то же.
+  тесты править не нужно, они продолжают проверять ровно то же;
+- каждый тест пересоздаёт своё состояние в `setUp()`: порядок выполнения (в том числе `--order=random`) не влияет
+  на результат, а лимит по общему IP не накапливается через класс — на одном тесте максимум пять попыток;
+- два теста на `next` существуют потому, что формулировка guards из первоначального текста плана
+  (`str_starts_with($next, '/') && !str_starts_with($next, '//')`) пропускала `/\evil.com`: после входа такой
+  адрес оказывался в `Location:` и уводил пользователя на чужой домен.
 
 - [ ] **Шаг 6: Страж чтения адреса клиента**
 

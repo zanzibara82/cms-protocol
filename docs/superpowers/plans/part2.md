@@ -2044,6 +2044,11 @@ final class Kernel
     private const HOST = '127.0.0.1';
     private const PORT = 8123;
 
+    // Сколько раз и с каким шагом пробуем порт, прежде чем признать его чужим: освобождение после
+    // stop() прошлого класса наступает не в тот же миг, а 10 проб по 0,1 с закрывают эту паузу.
+    private const PORT_FREE_PROBES = 10;
+    private const PORT_FREE_RETRY_MICROSECONDS = 100000;
+
     private static ?string $cookieJar = null;
 
     /** @var resource|null ресурс php -S, который подняли именно мы: им гасит stop() */
@@ -2059,7 +2064,11 @@ final class Kernel
     {
         // Порт обязан быть свободен до запуска. Иначе wait() подключится к зависшему серверу прошлого
         // прогона (возможно, с другим окружением), а наш процесс упадёт с «Address already in use» в
-        // /dev/null — и проверки молча пойдут не в тот сервер. Падаем громко и называем виновника.
+        // /dev/null — и проверки молча пойдут не в тот сервер. Освобождение после stop() приходит с
+        // задержкой, поэтому порт сначала опрашивается до ~1 секунды, а уже потом падаем громко и
+        // называем виновника: чужой слушатель, который не уходит, обязан остаться находкой.
+        self::waitUntilPortFree();
+
         if (self::portBusy()) {
             throw new \RuntimeException(sprintf(
                 'Порт %d занят чужим процессом (%s:%d): остановите висящий php -S перед запуском http-набора.',
@@ -2204,6 +2213,18 @@ final class Kernel
         }
 
         return false;
+    }
+
+    /**
+     * Ждём освобождения порта (до ~1 секунды): между stop() одного http-класса и start() другого
+     * слушающий процесс исчезает асинхронно, и одиночная проба ловила собственную гонку.
+     * Чужой процесс, который не уходит, цикл не маскирует — порог проб всё равно кончается падением.
+     */
+    private static function waitUntilPortFree(): void
+    {
+        for ($attempt = 0; $attempt < self::PORT_FREE_PROBES && self::portBusy(); $attempt++) {
+            usleep(self::PORT_FREE_RETRY_MICROSECONDS);
+        }
     }
 }
 ```
