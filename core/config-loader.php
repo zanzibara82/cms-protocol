@@ -17,6 +17,14 @@ function configPath(): string
     return is_string($override) && $override !== '' ? $override : dirname(__DIR__) . '/config.php';
 }
 
+// Значение считается заданным только если оно непустое: пустая строка в CMS_SITE_URL иначе
+// отдала бы карту сайта с относительными адресами вместо отказа на старте.
+/** @param array<string, mixed> $config */
+function configHasKey(array $config, string $key): bool
+{
+    return array_key_exists($key, $config) && (string) $config[$key] !== '';
+}
+
 /** @return array<string, mixed> */
 function config(): array
 {
@@ -33,7 +41,7 @@ function config(): array
     }
 
     foreach (CONFIG_REQUIRED_KEYS as $key) {
-        if (!array_key_exists($key, $config) || $config[$key] === '') {
+        if (!configHasKey($config, $key)) {
             $fromEnv = getenv(CONFIG_ENV_PREFIX . $key);
             if ($fromEnv === false || $fromEnv === '') {
                 fail('В настройках нет обязательного ключа ' . $key . '.');
@@ -43,9 +51,10 @@ function config(): array
     }
 
     // Окружение перекрывает файл: так тесты подставляют cms_test, не трогая config.php.
+    // Пустая строка в окружении — не перекрытие: она обязана оставить боевое значение из файла.
     foreach (array_keys($config) as $key) {
         $fromEnv = getenv(CONFIG_ENV_PREFIX . $key);
-        if ($fromEnv !== false) {
+        if ($fromEnv !== false && $fromEnv !== '') {
             $config[$key] = $fromEnv;
         }
     }

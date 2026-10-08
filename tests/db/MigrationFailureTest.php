@@ -19,8 +19,6 @@ final class MigrationFailureTest extends TestCase
 
     private string $brokenFilePath = '';
 
-    private string $brokenFileOriginal = '';
-
     public static function setUpBeforeClass(): void
     {
         TestDb::reset();
@@ -30,7 +28,6 @@ final class MigrationFailureTest extends TestCase
     {
         $this->brokenFilePath = dirname(__DIR__, 2) . '/tests/fixtures/apps/broken/sql/' . self::BROKEN_FILE;
         self::assertFileExists($this->brokenFilePath);
-        $this->brokenFileOriginal = (string) file_get_contents($this->brokenFilePath);
 
         TestDb::clearTable('app_installation');
         TestDb::clearTable('app_migration');
@@ -39,9 +36,8 @@ final class MigrationFailureTest extends TestCase
 
     protected function tearDown(): void
     {
-        // Фикстура возвращается в исходное состояние вместе со своими таблицами и строками
-        // журнала: последующие наборы не должны наследовать следы сбоя.
-        file_put_contents($this->brokenFilePath, $this->brokenFileOriginal);
+        // Таблицы фикстуры и её строки журнала убираются целиком: последующие наборы не должны
+        // наследовать следы сбоя, а сам файл фикстуры тест не переписывает — он остаётся битым.
         run('DELETE FROM ' . t('app_migration') . ' WHERE app = ?', [self::APP]);
         run('DELETE FROM ' . t('app_installation') . ' WHERE id = ?', [self::APP]);
         $this->dropBrokenTables();
@@ -50,7 +46,7 @@ final class MigrationFailureTest extends TestCase
     private function dropBrokenTables(): void
     {
         run('SET FOREIGN_KEY_CHECKS = 0');
-        foreach (['broken_note', 'broken_part'] as $table) {
+        foreach (['broken_note', 'broken_part', 'broken_ghost'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
         run('SET FOREIGN_KEY_CHECKS = 1');
@@ -138,8 +134,9 @@ final class MigrationFailureTest extends TestCase
         $this->seedInstallation('0.0.0');
         self::assertFalse(applyApp(planApp(self::APP))['ok'], 'Битый файл обязан уронить применение');
 
-        // Сбойный файл заменён валидным: второе предложение больше не ссылается на несуществующую таблицу.
-        file_put_contents($this->brokenFilePath, $this->fixedFileSql());
+        // Чинится окружение, а не фикстура: файл остаётся битым как есть, но созданная таблица
+        // tbl_broken_ghost делает его второе предложение валидным.
+        run('CREATE TABLE IF NOT EXISTS ' . t('broken_ghost') . ' (id VARCHAR(26) NOT NULL, PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
 
         $result = updateApp(self::APP);
 
@@ -152,15 +149,5 @@ final class MigrationFailureTest extends TestCase
         );
         self::assertTrue(isAppInstalled(self::APP));
         self::assertSame('ready', appState(self::APP)['state'], 'После починки раздел установлен');
-    }
-
-    private function fixedFileSql(): string
-    {
-        return "-- Починенная версия сбойной фикстуры: оба предложения валидны.\n"
-            . "CREATE TABLE IF NOT EXISTS tbl_broken_part (\n"
-            . "  id VARCHAR(26) NOT NULL,\n"
-            . "  PRIMARY KEY (id)\n"
-            . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;\n"
-            . "INSERT INTO tbl_broken_part (id) VALUES ('p-000000000000000000000001');\n";
     }
 }
