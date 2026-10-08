@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 /** @var string $error */
 /** @var string $email */
+/** @var string $next */
 ?>
 <section class="mx-auto max-w-md py-10">
     <h1 class="text-2xl font-bold">Вход для редактора</h1>
@@ -14,6 +15,10 @@ declare(strict_types=1);
     <?php endif; ?>
 
     <form class="mt-6 space-y-4" method="post" action="/login">
+        <?= csrfField() /* @safe html */ ?>
+        <?php if ($next !== ''): ?>
+            <input type="hidden" name="next" value="<?= e($next) ?>">
+        <?php endif; ?>
         <label class="block text-sm">
             <span class="font-medium">Почта</span>
             <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="email" name="email"

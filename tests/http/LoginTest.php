@@ -125,6 +125,22 @@ final class LoginTest extends TestCase
         self::assertStringContainsString('Слишком много попыток входа', $response['body']);
     }
 
+    public function testГлубиннаяСсылкаПереживаетПостФормы(): void
+    {
+        // Гейт редиректит на /login?next=/…; форма отправляет на /login без адреса в строке,
+        // поэтому next обязан доехать до обработчика скрытым полем, а не потеряться в редиректе.
+        $page = Kernel::get('/login?next=/news');
+        self::assertStringContainsString('name="next" value="/news"', $page['body'], 'Страница входа прячет глубинную ссылку в форме');
+
+        $response = Kernel::post(
+            '/login',
+            ['_token' => $this->tokenFrom($page['body']), 'email' => 'admin@school.dev', 'password' => 'верный-пароль', 'next' => '/news']
+        );
+
+        self::assertSame(302, $response['status']);
+        self::assertSame('/news', $response['headers']['location'], 'Скрытое поле next доживает до редиректа');
+    }
+
     // Задачей 8 этот помощник пригодится тесту выхода: там токен берётся со страницы админки.
     private function tokenFrom(string $body): string
     {

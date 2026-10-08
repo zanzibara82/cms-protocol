@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+// Константа обязана появиться до подключения ядра: иначе первый же respond() в тестах успеет выйти.
+define('PHPUNIT_RUNNING', true);
+
 putenv('CMS_DB_NAME=cms_test');
 $_ENV['CMS_DB_NAME'] = 'cms_test';
 putenv('CMS_CONFIG_FILE=' . dirname(__DIR__) . '/config.sample.php');

@@ -13,6 +13,12 @@ function respond(int $status, string $body, array $headers = []): never
     }
 
     echo $body;
+
+    // Под php -S и в вебе запрос завершается здесь; в PHPUnit процесс нужен живым.
+    if (defined('PHPUNIT_RUNNING')) {
+        throw new \Cms\Core\ResponseFinished((string) $status);
+    }
+
     exit;
 }
 
