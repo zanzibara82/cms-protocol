@@ -825,6 +825,8 @@ Expected: PASS. Красным этот набор был до шага 4: ма�
 
 Здесь семь тестов, и все они работают без `/admin` (задача 8) и без CSRF (задача 7):
 - тест «Выход гасит сессию» добавляется шагом 13 задачи 8 — он читает токен со страницы админки;
+- тест «Глубинная ссылка переживает POST формы» добавляется шагом 5 задачи 7 — до него скрытого поля `next`
+  в форме нет, и восьмым тестом набор становится вместе с токеном;
 - `token()` до задачи 7 возвращает пустую строку, потому что поля `_token` в форме ещё нет. Пока `coreLoginSubmit()`
   не вызывает `csrfCheck()`, лишний ключ в POST безвреден, а после шага 5 задачи 7 токен становится настоящим —
   тесты править не нужно, они продолжают проверять ровно то же;
@@ -910,16 +912,20 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
 ### Задача 7: CSRF, уведомления и помощники форм
 
 **Files:**
-- Create: `core/csrf.php`, `core/notice.php`, `core/form.php`
+- Create: `core/csrf.php`, `core/notice.php`, `core/form.php`, `core/ResponseFinished.php`
 - Create: `tests/unit/FormValuesTest.php`, `tests/db/CsrfTest.php`, `tests/guard/CsrfCoverageTest.php`
-- Modify: `core/bootstrap.php` (подключение трёх файлов), `core/routes.php` (`csrfCheck()` во вход и выход),
-  `theme/login.php` (скрытое поле токена)
+- Modify: `core/bootstrap.php` (подключение трёх файлов), `core/routes.php` (`csrfCheck()` во вход и выход,
+  глубинная ссылка через скрытое поле), `theme/login.php` (скрытые поля токена и `next`),
+  `core/response.php` и `tests/bootstrap.php` (сигнал вместо `exit` под PHPUnit),
+  `tests/http/LoginTest.php` (тест, что `?next=` переживает POST формы)
 
 **Interfaces:**
-- Consumes: `startSession()`, `postString()`, `respond()`, `logWarn()`, `redirectWithNotice()`, обработчики
-  `coreLoginSubmit()` и `coreLogout()` из задачи 6.
+- Consumes: `startSession()`, `postString()`, `respond()`, `logWarn()`, `redirectWithNotice()`,
+  `isInternalNextPath()` из задачи 6, обработчики `coreLoginSubmit()` и `coreLogout()` из задачи 6.
 - Produces:
   - `csrfToken(): string`, `csrfField(): string`, `csrfCheck(): void`;
+  - `Cms\Core\ResponseFinished extends \RuntimeException` — сигнал завершённого ответа для тестов,
+    константа `PHPUNIT_RUNNING` определена только в `tests/bootstrap.php`;
   - `noticeText(string $key, array $dictionary): ?string`, `noticeOfRequest(array $dictionary): ?string`,
     `NOTICE_UNKNOWN_KEY` — не ключ, а правило: неизвестный ключ отдаёт `null`;
   - `formValues(array $raw, array $fields): array`, `isOn(mixed $value): bool`,
@@ -1292,7 +1298,29 @@ function coreLoginSubmit(array $params = []): void
     csrfCheck();
 
     $email = postString('email');
+    $result = attemptLogin($email, postString('password'));
+
+    // Скрытое поле формы — основной путь для глубинной ссылки, строка адреса остаётся запасным;
+    // фильтр тот же, что и на странице входа: чужой домен не проходит ни одним способом.
+    $queryNext = queryString('next', '');
+    $rawNext = postString('next') !== '' ? postString('next') : (is_string($queryNext) ? $queryNext : '');
+    $next = isInternalNextPath($rawNext) ? $rawNext : '';
+
+    if ($result['ok'] === false) {
+        // Введённый адрес возвращается в форму, текст ошибки — общий: он не выдаёт, есть ли аккаунт.
+        render('login', ['error' => (string) $result['error'], 'email' => $email, 'next' => $next], ['title' => 'Вход', 'noindex' => true]);
+
+        return;
+    }
+
+    redirect($next !== '' ? $next : '/admin');
+}
 ```
+
+Здесь же закрывается дыра, которую задача 6 оставила открытой: `?next=` приходил только в строке адреса,
+а форма отправляет на `/login` без строки — значит при отказе входа (и вообще на POST) глубинная ссылка
+терялась. Заодно гейт из задачи 8 сможет дослать `/admin?next=` до самого конца пути. Поэтому в
+`coreLoginPage()` путь тоже фильтруется и уезжает в шаблон отдельной переменной, а не остаётся в URL.
 
 ```php
 function coreLogout(array $params = []): void
@@ -1303,12 +1331,37 @@ function coreLogout(array $params = []): void
 }
 ```
 
-`theme/login.php` — скрытое поле токена первой строкой формы:
+`theme/login.php` — скрытое поле токена первой строкой формы, следом глубинная ссылка (она попадает в
+вид переменной `$next`, шаблон обязан объявить `/** @var string $next */`):
 
 ```php
     <form class="mt-6 space-y-4" method="post" action="/login">
         <?= csrfField() /* @safe html */ ?>
+        <?php if ($next !== ''): ?>
+            <input type="hidden" name="next" value="<?= e($next) ?>">
+        <?php endif; ?>
         <label class="block text-sm">
+```
+
+В `tests/http/LoginTest.php` — тест, что скрытое поле действительно везёт ссылку до редиректа
+(он же страхует от молчаливого возврата к «только строка адреса»):
+
+```php
+    public function testГлубиннаяСсылкаПереживаетПостФормы(): void
+    {
+        // Гейт редиректит на /login?next=/…; форма отправляет на /login без адреса в строке,
+        // поэтому next обязан доехать до обработчика скрытым полем, а не потеряться в редиректе.
+        $page = Kernel::get('/login?next=/news');
+        self::assertStringContainsString('name="next" value="/news"', $page['body'], 'Страница входа прячет глубинную ссылку в форме');
+
+        $response = Kernel::post(
+            '/login',
+            ['_token' => $this->tokenFrom($page['body']), 'email' => 'admin@school.dev', 'password' => 'верный-пароль', 'next' => '/news']
+        );
+
+        self::assertSame(302, $response['status']);
+        self::assertSame('/news', $response['headers']['location'], 'Скрытое поле next доживает до редиректа');
+    }
 ```
 
 Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter LoginTest`
