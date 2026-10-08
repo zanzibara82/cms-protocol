@@ -41,24 +41,17 @@ final class AdminAppsTest extends TestCase
     {
         $page = Kernel::get('/login');
         Kernel::post('/login', [
-            '_token' => $this->token($page['body']),
+            '_token' => Kernel::tokenFrom($page['body']),
             'email' => $email,
             'password' => 'длинный-тестовый-пароль',
         ]);
-    }
-
-    private function token(string $body): string
-    {
-        preg_match('/name="_token" value="([^"]+)"/', $body, $m);
-
-        return $m[1] ?? '';
     }
 
     /** @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>} */
     private function press(string $op, string $app = ''): array
     {
         $page = Kernel::get('/admin/apps');
-        $fields = ['_token' => $this->token($page['body']), 'op' => $op];
+        $fields = ['_token' => Kernel::tokenFrom($page['body']), 'op' => $op];
         if ($app !== '') {
             $fields['app'] = $app;
         }
@@ -89,6 +82,21 @@ final class AdminAppsTest extends TestCase
         self::assertStringContainsString('noindex, nofollow', $page['body']);
         self::assertStringContainsString('Приложения', $page['body'], 'Вкладки админки обязаны быть на каждом экране');
         self::assertStringContainsString('Выйти', $page['body']);
+    }
+
+    // F4: заголовок отказа — не повод показывать его зелёной плашкой об успехе. На «Сводке», как и на
+    // «Приложениях», ключ migration-failed гасится; обычные ключи печатаются по-прежнему.
+    public function testОтказНаСводкеНеПодсвечиваетсяЗелёным(): void
+    {
+        $this->enter('admin@school.dev');
+
+        $failure = Kernel::get('/admin?notice=migration-failed');
+        self::assertStringNotContainsString('Не удалось завершить действие с разделом', $failure['body'], 'Отказ не печатается зелёной плашкой');
+        self::assertStringNotContainsString('role="status"', $failure['body'], 'На отказе плашка успеха отсутствует');
+
+        $success = Kernel::get('/admin?notice=signed-out');
+        self::assertStringContainsString('role="status"', $success['body'], 'Обычный ключ по-прежнему печатается плашкой');
+        self::assertStringContainsString('Вы вышли из аккаунта', $success['body']);
     }
 
     public function testСписокПоказываетНеустановленныйРазделБезКнопкиОбновить(): void
@@ -171,7 +179,7 @@ final class AdminAppsTest extends TestCase
         // а сценарий сбоя именно такой — админ не заглянул на экран между действиями.
         $summary = Kernel::get('/admin');
         $response = Kernel::post('/admin/apps', [
-            '_token' => $this->token($summary['body']),
+            '_token' => Kernel::tokenFrom($summary['body']),
             'op' => 'disable',
             'app' => 'demo',
         ]);
@@ -247,7 +255,7 @@ final class AdminAppsTest extends TestCase
         self::assertSame(403, Kernel::get('/admin/apps')['status']);
 
         $page = Kernel::get('/admin');
-        $response = Kernel::post('/admin/apps', ['_token' => $this->token($page['body']), 'op' => 'install', 'app' => 'demo']);
+        $response = Kernel::post('/admin/apps', ['_token' => Kernel::tokenFrom($page['body']), 'op' => 'install', 'app' => 'demo']);
 
         self::assertSame(403, $response['status']);
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('app_installation') . ' WHERE id = ?', ['demo']));

@@ -47,13 +47,6 @@ final class SetupTest extends TestCase
         }
     }
 
-    private function token(string $body): string
-    {
-        preg_match('/name="_token" value="([^"]+)"/', $body, $m);
-
-        return $m[1] ?? '';
-    }
-
     public function testФормаУстановкиОткрывается(): void
     {
         $page = Kernel::get('/setup.php');
@@ -68,7 +61,7 @@ final class SetupTest extends TestCase
     {
         $page = Kernel::get('/setup.php');
         $response = Kernel::post('/setup.php', [
-            '_token' => $this->token($page['body']),
+            '_token' => Kernel::tokenFrom($page['body']),
             'site_name' => 'Школа английского',
             'admin_email' => 'admin@school.dev',
             'admin_name' => 'Алексей',
@@ -86,7 +79,7 @@ final class SetupTest extends TestCase
     {
         $page = Kernel::get('/setup.php');
         $response = Kernel::post('/setup.php', [
-            '_token' => $this->token($page['body']),
+            '_token' => Kernel::tokenFrom($page['body']),
             'site_name' => 'Школа английского',
             'admin_email' => 'admin@school.dev',
             'admin_name' => 'Алексей',
@@ -117,7 +110,7 @@ final class SetupTest extends TestCase
     {
         $page = Kernel::get('/setup.php');
         $response = Kernel::post('/setup.php', [
-            '_token' => $this->token($page['body']),
+            '_token' => Kernel::tokenFrom($page['body']),
             'site_name' => 'Школа английского',
             'admin_email' => 'admin@school.dev',
             'admin_name' => 'Алексей',
@@ -163,7 +156,7 @@ final class SetupTest extends TestCase
     {
         $page = Kernel::get('/login');
         $response = Kernel::post('/login', [
-            '_token' => $this->token($page['body']),
+            '_token' => Kernel::tokenFrom($page['body']),
             'email' => 'admin@school.dev',
             'password' => 'длинный-тестовый-пароль',
         ]);

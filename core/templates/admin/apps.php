@@ -2,15 +2,8 @@
 
 declare(strict_types=1);
 
-// Метки состояний объявлены выше описания переменных экрана: PHPStan применяет блок «@var» только
-// к следующему оператору, а следующим за ним обязано идти присваивание, а не объявление константы.
-const APP_STATE_LABELS = [
-    'missing' => 'Не установлен',
-    'incompatible' => 'Нужно более новое ядро',
-    'outdated' => 'Требует обновления',
-    'disabled' => 'Выключен',
-    'ready' => 'Установлен',
-];
+// Метки состояний берутся из ядра (appStateLabels()): const в подключаемом шаблоне при
+// повторном подключении падает как «уже объявленный», а словарь состояний принадлежит ядру.
 
 /** @var string $notice */
 /** @var string $alertTitle */
@@ -48,11 +41,12 @@ $appButtons = static function (array $app): string {
     return $out === [] ? '<span class="text-sm text-ink/50">Действий нет</span>' : implode(' ', $out);
 };
 
+$labels = appStateLabels();
 $rows = '';
 foreach ($apps as $app) {
     $rows .= '<tr class="border-b border-ink/10">'
         . '<th class="py-3 pr-3 pl-4 text-left font-medium">' . e($app['title']) . '</th>'
-        . '<td class="py-3 pr-3 text-sm text-ink/70">' . e(APP_STATE_LABELS[$app['state']] ?? $app['state']) . '</td>'
+        . '<td class="py-3 pr-3 text-sm text-ink/70">' . e($labels[$app['state']] ?? $app['state']) . '</td>'
         . '<td class="py-3 pr-3 text-sm text-ink/70">' . e($app['dbVersion'] === '' ? '—' : $app['dbVersion'])
         . ' / ' . e($app['manifestVersion']) . '</td>'
         . '<td class="py-3 pr-3 text-sm text-ink/60">' . e($app['reason']) . '</td>'
@@ -91,4 +85,6 @@ $alert = ($alertTitle === '' && $alertReason === '')
         . ($alertReason !== '' ? '<p class="mt-1 text-sm text-bad">' . e($alertReason) . '</p>' : '')
         . '</div>';
 
-/* @safe html */ echo $alert . adminShell('Приложения', $core . $table, $notice);
+// Строка помечена как разметка: $alert, $core и $table собраны этим же файлом из литералов
+// и e(), а наружу уходят единственным вызовом adminShell — голой конкатенации с данными нет.
+/* @safe html */ echo adminShell('Приложения', $alert . $core . $table, $notice);

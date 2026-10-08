@@ -177,7 +177,37 @@ function appState(string $id): array
         ];
     }
 
+    // F9: база новее сборки — отдельное состояние, а не «готово»: отката схемы ядро не умеет,
+    // и зелёный свет такому разделу вводил бы в заблуждение.
+    if (version_compare($dbVersion, $manifestVersion, '>')) {
+        return [
+            'state' => 'ahead',
+            'dbVersion' => $dbVersion,
+            'manifestVersion' => $manifestVersion,
+            'reason' => 'В базе версия ' . $dbVersion . ', в сборке — ' . $manifestVersion . '.',
+        ];
+    }
+
     return ['state' => 'ready', 'dbVersion' => $dbVersion, 'manifestVersion' => $manifestVersion, 'reason' => ''];
+}
+
+/**
+ * Русские метки состояний экрана «Приложения». Словарь живёт в ядре, а не в подключаемом
+ * шаблоне: const внутри шаблона при повторном подключении падает с «const уже объявлен»,
+ * а каждое состояние из appState() обязано иметь здесь метку — латиница в интерфейсе запрещена.
+ *
+ * @return array<string, string>
+ */
+function appStateLabels(): array
+{
+    return [
+        'missing' => 'Не установлен',
+        'incompatible' => 'Нужно более новое ядро',
+        'outdated' => 'Требует обновления',
+        'disabled' => 'Выключен',
+        'ready' => 'Установлен',
+        'ahead' => 'Версия в базе новее сборки',
+    ];
 }
 
 // Приватные префиксы нужны не только гейту: задача 9 закрывает их в robots.txt,
@@ -203,9 +233,10 @@ function appPrivatePaths(): array
 /**
  * Снимок маршрутов разделов: какие файлы уже исполнены и что каждый из них добавил в таблицу.
  * Нужен потому, что routes.php исполняется в процессе один раз (require_once), а таблицы маршрутов
- * между наборами тестов сбрасываются.
+ * между наборами тестов сбрасываются. Снимок хранит обработчик как есть (string|Closure) — приведение
+ * к строке убило бы замыкание-обработчик при повторной регистрации.
  *
- * @return array{files: list<string>, routes: list<array<string, mixed>>}
+ * @return array{files: list<string>, routes: list<array{method: string, pattern: string, handler: string|Closure, meta: array<string, mixed>, static: bool}>}
  */
 function &appRoutesSnapshot(): array
 {
@@ -220,15 +251,10 @@ function registerAppRoutes(): void
 {
     $snapshot = &appRoutesSnapshot();
 
-    // Файлы уже исполнены — функции контроллеров определены, а таблицу заполняем снимком.
+    // Файлы уже исполнены — функции контроллеров определены, а таблицу маршрутов заполняем снимком.
     if ($snapshot['files'] !== []) {
         foreach ($snapshot['routes'] as $route) {
-            addRoute(
-                (string) $route['method'],
-                (string) $route['pattern'],
-                (string) $route['handler'],
-                (array) ($route['meta'] ?? [])
-            );
+            addRoute($route['method'], $route['pattern'], $route['handler'], $route['meta']);
         }
 
         return;

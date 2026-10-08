@@ -65,6 +65,97 @@ final class SqlSafetyTest extends TestCase
         }
     }
 
+    // F1: подстановка префикса (splitSql → sqlWithTablePrefix) видит только литерал «tbl_». Если файл
+    // напишет имя таблицы с другим префиксом, установщик создаст именно его, а запросы пойдут в
+    // настроенные таблицы — расхождение всплывает только на живом сайте. Страж ловит это до коммита.
+    public function testSqlФайлыПишутИменаТаблицЧерезЛитералTbl(): void
+    {
+        $violations = [];
+
+        foreach ($this->schemaSqlFiles() as $file) {
+            $code = (string) file_get_contents($file);
+            if (preg_match_all('/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-zA-Z0-9_]+)/i', $code, $matches) > 0) {
+                foreach ($matches[1] as $tableName) {
+                    if (!str_starts_with((string) $tableName, 'tbl_')) {
+                        $violations[] = $this->relative($file) . ': CREATE TABLE ' . $tableName . ' — имя не начинается с «tbl_»';
+                    }
+                }
+            }
+        }
+
+        self::assertSame([], $violations, 'Имена таблиц в SQL-файлах обязаны писаться литералом «tbl_» — иначе подстановка их не увидит');
+    }
+
+    /** @return list<string> */
+    private function schemaSqlFiles(): array
+    {
+        $root = dirname(__DIR__, 2);
+        $out = glob($root . '/sql/*.sql') ?: [];
+        foreach (glob($root . '/tests/fixtures/apps/*/sql/*.sql') ?: [] as $file) {
+            $out[] = $file;
+        }
+        sort($out);
+
+        return $out;
+    }
+
+    // F8: имя таблицы в запросе ядро обязано брать через t(); литеральное «tbl_…» внутри PHP-строки
+    // означает, что подстановка префикса в запрос не попадёт. Маркер «tbl_» обязателен: он и есть
+    // признак литерального имени. Проверка покрывает SELECT/INSERT/UPDATE/DELETE.
+    private const TABLE_NAME_PATTERNS = [
+        '/\bFROM\s+tbl_[a-zA-Z0-9_]+/i' => 'FROM tbl_…',
+        '/\bJOIN\s+tbl_[a-zA-Z0-9_]+/i' => 'JOIN tbl_…',
+        '/\bINTO\s+tbl_[a-zA-Z0-9_]+/i' => 'INTO tbl_…',
+        '/\bUPDATE\s+tbl_[a-zA-Z0-9_]+/i' => 'UPDATE tbl_…',
+        '/\bDELETE\s+FROM\s+tbl_[a-zA-Z0-9_]+/i' => 'DELETE FROM tbl_…',
+    ];
+
+    public function testКодНеПишетЛитеральныеИменаТаблиц(): void
+    {
+        $violations = [];
+        foreach ($this->phpFiles() as $file) {
+            $code = $this->withoutComments((string) file_get_contents($file));
+            foreach (self::TABLE_NAME_PATTERNS as $pattern => $reason) {
+                if (preg_match($pattern, $code) === 1) {
+                    $violations[] = $this->relative($file) . ': ' . $reason;
+                }
+            }
+        }
+
+        self::assertSame([], $violations, 'Имя таблицы в запросе обязано приходить из t(), а не литералом');
+    }
+
+    // Паттерны обязаны ловить каждую модифицирующую команду, а не только SELECT: запросы
+    // задач 10–21 пишутся именно так. Проверка на синтетических строках —страховка от
+    // опечатки в регулярке, которую прогон по реальным файлам не заметит.
+    public function testСтражЛовитЛитеральныеИменаВоВсехКомандах(): void
+    {
+        $samples = [
+            "query('SELECT id FROM tbl_user');",
+            "query('SELECT 1 FROM tbl_a JOIN tbl_b');",
+            "query('INSERT INTO tbl_option VALUES (1)');",
+            "query('UPDATE tbl_option SET value = 1');",
+            "query('DELETE FROM tbl_user WHERE id = 1');",
+        ];
+
+        foreach ($samples as $sample) {
+            $matched = false;
+            foreach (array_keys(self::TABLE_NAME_PATTERNS) as $pattern) {
+                if (preg_match($pattern, $sample) === 1) {
+                    $matched = true;
+                    break;
+                }
+            }
+            self::assertTrue($matched, 'Паттерны не поймали литеральное имя в: ' . $sample);
+        }
+
+        // Законное обращение через t() не должно попадать ни в один паттерн.
+        $legit = "query('SELECT id FROM ' . t('user') . ' WHERE 1');";
+        foreach (array_keys(self::TABLE_NAME_PATTERNS) as $pattern) {
+            self::assertSame(0, preg_match($pattern, $legit), 'Паттерн ловит запрос, собранный через t()');
+        }
+    }
+
     /** @return list<string> */
     private function phpFiles(): array
     {

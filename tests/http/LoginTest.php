@@ -32,9 +32,15 @@ final class LoginTest extends TestCase
         TestDb::seedUser('admin@school.dev', 'верный-пароль', 'admin');
     }
 
+    // Токен разбирается одним помощником на весь набор — Kernel::tokenFrom(). Непустота проверяется
+    // здесь: пустой токен csrfCheck() отвергает, и тест падал бы на «свой текст ошибки», а не на том,
+    // что разбор формы сломался.
     private function token(): string
     {
-        return $this->tokenFrom(Kernel::get('/login')['body']);
+        $token = Kernel::tokenFrom(Kernel::get('/login')['body']);
+        self::assertNotSame('', $token, 'Форма входа не отдала CSRF-токен');
+
+        return $token;
     }
 
     /** Пять неудач своими запросами: лимит по адресу исчерпан независимо от порядка тестов. */
@@ -79,7 +85,12 @@ final class LoginTest extends TestCase
         Kernel::post('/login', ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль']);
 
         $page = Kernel::get('/admin');
-        $logout = Kernel::post('/logout', ['_token' => $this->tokenFrom($page['body'])]);
+        // Токен со страницы админки: он обязан быть непустым, иначе отказ 403 выглядел бы как
+        // погашенная сессия.
+        $token = Kernel::tokenFrom($page['body']);
+        self::assertNotSame('', $token, 'Экран админки не отдал CSRF-токен');
+
+        $logout = Kernel::post('/logout', ['_token' => $token]);
 
         self::assertSame(302, $logout['status']);
         self::assertStringContainsString('notice=signed-out', $logout['headers']['location']);
@@ -154,18 +165,10 @@ final class LoginTest extends TestCase
 
         $response = Kernel::post(
             '/login',
-            ['_token' => $this->tokenFrom($page['body']), 'email' => 'admin@school.dev', 'password' => 'верный-пароль', 'next' => '/news']
+            ['_token' => Kernel::tokenFrom($page['body']), 'email' => 'admin@school.dev', 'password' => 'верный-пароль', 'next' => '/news']
         );
 
         self::assertSame(302, $response['status']);
         self::assertSame('/news', $response['headers']['location'], 'Скрытое поле next доживает до редиректа');
-    }
-
-    // Помощник теста выхода: токен берётся со страницы админки, а не со формы входа.
-    private function tokenFrom(string $body): string
-    {
-        preg_match('/name="_token" value="([^"]+)"/', $body, $m);
-
-        return $m[1] ?? '';
     }
 }

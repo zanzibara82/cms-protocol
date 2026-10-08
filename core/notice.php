@@ -19,7 +19,6 @@ const CORE_NOTICE_TEXT = [
     'migration-failed' => 'Не удалось завершить действие с разделом. Подробности ниже и в журнале ошибок.',
     'enabled' => 'Приложение включено.',
     'disabled' => 'Приложение выключено.',
-    'settings-saved' => 'Настройки сохранены.',
 ];
 
 /** @param array<string, string> $dictionary */
@@ -41,4 +40,26 @@ function noticeOfRequest(array $dictionary): ?string
     $key = queryString('notice');
 
     return is_string($key) && $key !== '' ? noticeText($key, $dictionary) : null;
+}
+
+// Ключи отказа: их показывать зелёной плашкой об успехе нельзя — они несут сообщение о сбое.
+// Список живёт в одном месте, чтобы ни один экран админки не заводил своё перечисление.
+const CORE_FAILURE_NOTICE_KEYS = ['migration-failed'];
+
+function requestNoticeIsFailure(): bool
+{
+    $key = queryString('notice', '');
+
+    return is_string($key) && $key !== '' && in_array($key, CORE_FAILURE_NOTICE_KEYS, true);
+}
+
+// Плашка для экрана админки: заголовок отказа гасится, остальные ключи читаются из словаря как обычно.
+/** @param array<string, string> $dictionary */
+function noticeForAdminScreen(array $dictionary): string
+{
+    if (requestNoticeIsFailure()) {
+        return '';
+    }
+
+    return (string) (noticeOfRequest($dictionary) ?? '');
 }

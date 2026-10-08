@@ -2,9 +2,15 @@
 
 declare(strict_types=1);
 
-// Журнал лежит вне документ-корня: core/storage/errors.log. Наржу не отдаётся ничего.
+// Журнал лежит вне документ-корня: core/storage/errors.log. Наружу не отдаётся ничего.
+// Тест может переопределить путь переменной CMS_LOG_PATH, чтобы не трогать настоящий каталог ядра.
 function logPath(): string
 {
+    $override = getenv('CMS_LOG_PATH');
+    if (is_string($override) && $override !== '') {
+        return $override;
+    }
+
     return dirname(__DIR__) . '/core/storage/errors.log';
 }
 
@@ -21,12 +27,21 @@ function logWrite(string $level, string $event, array $context = []): void
         JSON_UNESCAPED_UNICODE
     );
 
-    $dir = dirname(logPath());
-    if (!is_dir($dir)) {
-        mkdir($dir, 0775, true);
+    // Журнал — второстепенная операция: сбой записи не должен обрывать запрос. bootstrap.php
+    // превращает любой E_WARNING в исключение, поэтому каталог проверяем до записи, а сами вызовы
+    // гасим через «@» — не через глобальный error_reporting, чтобы не глушить чужие предупреждения.
+    $path = logPath();
+    $dir = dirname($path);
+
+    if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+        return;
     }
 
-    file_put_contents(logPath(), $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+    if (!is_writable($dir) || (is_file($path) && !is_writable($path))) {
+        return;
+    }
+
+    @file_put_contents($path, $line . PHP_EOL, FILE_APPEND | LOCK_EX);
 }
 
 /** @param array<string, mixed> $context */

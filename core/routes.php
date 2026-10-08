@@ -115,7 +115,7 @@ function coreAdminSummary(array $params = []): void
     }
 
     render('admin/summary', [
-        'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
         'siteName' => getOption('site_name', (string) configValue('SITE_NAME', '')),
         'adminEmail' => getOption('admin_email'),
         'users' => (int) value('SELECT COUNT(*) FROM ' . t('user')),
@@ -147,13 +147,12 @@ function coreAdminApps(array $params = []): void
     $alertReason = is_string($flashed) ? $flashed : '';
 
     // Заголовок отказа — из словаря по ключу migration-failed: свободный текст из адреса не печатается.
-    // Зелёной плашкой этот ключ показывать нельзя, поэтому noticeOfRequest для него гасим.
-    $noticeKey = queryString('notice', '');
-    $failureRequested = is_string($noticeKey) && $noticeKey === 'migration-failed';
+    // Зелёной плашкой этот ключ показывать нельзя — за это отвечает общий хелпер noticeForAdminScreen().
+    $failureRequested = requestNoticeIsFailure();
     $alertTitle = ($alertReason !== '' || $failureRequested)
         ? (string) (noticeText('migration-failed', CORE_NOTICE_TEXT) ?? '')
         : '';
-    $notice = $failureRequested ? '' : (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? '');
+    $notice = noticeForAdminScreen(CORE_NOTICE_TEXT);
 
     render('admin/apps', [
         'notice' => $notice,

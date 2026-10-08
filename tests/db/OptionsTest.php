@@ -75,13 +75,25 @@ final class OptionsTest extends TestCase
         self::assertSame('Школа', getOption('site_name', 'запас'));
     }
 
-    public function testКешЧитаетсяОднимЗапросом(): void
+    // Раньше проверка была «две выборки равны между собой»: такое проходит и когда кеша нет
+    // вовсе, и когда запись живёт только в памяти процесса. Теперь фиксируется поведение:
+    // набор обязан содержать записанное значение, повторное чтение обязано совпадать с первым,
+    // а после сброса кеша значение обязано вернуться из базы — иначе запись молча теряется.
+    public function testЗаписанноеЗначениеПереживаетСбросКеша(): void
     {
         setOption('site_name', 'Школа');
         $first = optionsAll();
         $second = optionsAll();
 
-        self::assertSame($first, $second);
-        self::assertArrayHasKey('site_name', $first);
+        self::assertSame(['site_name' => 'Школа'], $first, 'optionsAll() обязан отдать записанное значение, а не пустой набор');
+        self::assertSame($first, $second, 'Повторное чтение настроек разошлось с первым');
+
+        optionsReset();
+        self::assertSame(
+            'Школа',
+            getOption('site_name', 'запас'),
+            'Значение пропало после сброса кеша: запись не легла в базу'
+        );
+        self::assertSame('Школа', (string) value('SELECT option_value FROM ' . t('option') . ' WHERE option_name = ?', ['site_name']), 'В таблице настройки лежит другое значение');
     }
 }

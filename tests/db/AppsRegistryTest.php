@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cms\Tests\db;
 
+use Closure;
 use Cms\Tests\TestDb;
 use PHPUnit\Framework\TestCase;
 
@@ -82,6 +83,57 @@ final class AppsRegistryTest extends TestCase
         self::assertTrue(isAppActive('demo'));
     }
 
+    // F9: база новее сборки — это не «готово»: откатывать схему ядро не умеет, и человек
+    // обязан видеть отдельное состояние, а не зелёный свет обновлению.
+    public function testВерсияВБазеНовееСборкиДаётСостояниеОпережение(): void
+    {
+        insert('app_installation', ['id' => 'demo', 'enabled' => 1, 'installed_at' => utcStamp(nowUtc()), 'version' => '9.9.9']);
+
+        $state = appState('demo');
+
+        self::assertSame('ahead', $state['state']);
+        self::assertSame('9.9.9', $state['dbVersion']);
+        self::assertSame('1.1.0', $state['manifestVersion']);
+    }
+
+    // Minor №10: словарь меток живёт в ядре (appStateLabels()), а не в подключаемом шаблоне,
+    // и латиница в интерфейсе запрещена — каждое состояние, которое возвращает appState(),
+    // обязано иметь русскую метку.
+    public function testКаждоеСостояниеРазделаИмеетРусскуюМетку(): void
+    {
+        $states = [appState('нету')['state'], appState('future')['state']];
+
+        $scenarios = [
+            ['enabled' => 0, 'version' => '1.1.0'],
+            ['enabled' => 1, 'version' => '1.1.0'],
+            ['enabled' => 1, 'version' => '1.0.0'],
+            ['enabled' => 1, 'version' => '9.9.9'],
+        ];
+
+        foreach ($scenarios as $row) {
+            TestDb::clearTable('app_installation');
+            insert('app_installation', [
+                'id' => 'demo',
+                'enabled' => $row['enabled'],
+                'installed_at' => utcStamp(nowUtc()),
+                'version' => $row['version'],
+            ]);
+            $states[] = appState('demo')['state'];
+        }
+
+        sort($states);
+        self::assertSame(['ahead', 'disabled', 'incompatible', 'missing', 'outdated', 'ready'], $states);
+
+        $labels = appStateLabels();
+
+        foreach ($states as $state) {
+            self::assertArrayHasKey($state, $labels, 'Состояние ' . $state . ' осталось без метки');
+            // Метка пишется кириллицей с заглавной буквы: строчная первая буква в классе
+            // [а-яё] отвергала бы любую грамотную метку и тест краснел бы изначально.
+            self::assertMatchesRegularExpression('/^[А-ЯЁ][а-яё ]*$/u', $labels[$state], 'Метка состояния обязана быть по-русски');
+        }
+    }
+
     public function testНесовместимоеЯдроДаётЧеловеческийТекст(): void
     {
         $state = appState('future');
@@ -103,5 +155,32 @@ final class AppsRegistryTest extends TestCase
         self::assertNotNull($match);
         self::assertSame('demoFeed', $match['handler']);
         self::assertSame('demo', $match['meta']['app']);
+    }
+
+    // F5: повторная регистрация без routesReset() идёт по снимку маршрутов. Кастинг обработчика к
+    // строке убивал замыкание («Object of class Closure could not be converted to string»), поэтому
+    // снимок обязан хранить обработчик как есть и диспатчить замыкание без фатала.
+    public function testСнимокСохраняетОбработчикЗамыкание(): void
+    {
+        routesReset();
+        registerAppRoutes();
+        registerAppRoutes();
+
+        $match = matchRoute('GET', '/demo/closure');
+
+        self::assertNotNull($match, 'Маршрут-замыкание пропал после повторной регистрации');
+        self::assertTrue(is_callable($match['handler']), 'Обработчик-замыкание не пережил снимок');
+
+        $finished = false;
+        ob_start();
+        try {
+            ($match['handler'])([]);
+        } catch (\Cms\Core\ResponseFinished) {
+            $finished = true;
+        }
+        $body = (string) ob_get_clean();
+
+        self::assertTrue($finished, 'Замыкание отработало и завершило ответ');
+        self::assertStringContainsString('Лента из замыкания', $body, 'Замыкание-обработчик отдал свой ответ');
     }
 }

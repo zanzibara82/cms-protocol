@@ -53,8 +53,14 @@ final class Kernel
             $prefix .= ' ' . $name . '=' . escapeshellarg($value);
         }
 
+        // Изоляция окружения подпроцесса (F6): bootstrap.php выставляет CMS_EXTRA_APPS_DIR/
+        // CMS_EXTRA_THEME_DIR для процессов PHPUnit, и без явного снятия proc_open передал бы их
+        // в php -S по наследованию — тогда фикстурные «demo»/«future» жили бы во ВСЕХ http-классах,
+        // а не только там, где их просят. «env -u» снимает унаследованные ключи; классы, которым
+        // нужны фикстуры (AdminApps, Robots), передают их через $env — присваивание идёт после -u,
+        // поэтому для них ключ возвращается.
         $command = sprintf(
-            '%s php -S %s:%d -t %s/public %s/public/index.php',
+            'env -u CMS_EXTRA_APPS_DIR -u CMS_EXTRA_THEME_DIR %s php -S %s:%d -t %s/public %s/public/index.php',
             $prefix,
             self::HOST,
             self::PORT,
@@ -95,6 +101,15 @@ final class Kernel
         if (self::$cookieJar !== null && is_file(self::$cookieJar)) {
             file_put_contents(self::$cookieJar, '');
         }
+    }
+
+    /**
+     * CSRF-токен из печатаемой формы. Разбор один на весь набор: три частные копии regex
+     * однажды разошлись бы опечаткой — и проверка токена стала бы бутафорской.
+     */
+    public static function tokenFrom(string $body): string
+    {
+        return preg_match('/name="_token" value="([^"]+)"/', $body, $matches) === 1 ? $matches[1] : '';
     }
 
     /**

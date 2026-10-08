@@ -1,0 +1,60 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Cms\Tests\http;
+
+use Cms\Tests\TestDb;
+use PHPUnit\Framework\TestCase;
+
+// F3: на неустановленной схеме человек открывает первую попавшуюся страницу и обязан получить
+// понятный русский экран со ссылкой на установщик, а не пустой ответ из-за падения на отсутствующей таблице.
+final class SiteNotInstalledTest extends TestCase
+{
+    public static function setUpBeforeClass(): void
+    {
+        TestDb::reset();
+        self::dropCoreTables();
+        Kernel::start();
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        Kernel::stop();
+    }
+
+    // Сбрасываем схему до состояния «установщик ещё не запускался»: таблиц ядра нет вовсе.
+    private static function dropCoreTables(): void
+    {
+        run('SET FOREIGN_KEY_CHECKS = 0');
+        foreach (CORE_BASELINE_TABLES as $name) {
+            run('DROP TABLE IF EXISTS ' . t($name));
+        }
+        run('SET FOREIGN_KEY_CHECKS = 1');
+    }
+
+    public function testГлавнаяНаНеустановленнойСхемеДаётПодсказку(): void
+    {
+        $page = Kernel::get('/');
+
+        self::assertSame(503, $page['status']);
+        self::assertStringContainsString('Сайт не установлен', $page['body']);
+        self::assertStringContainsString('/setup.php', $page['body']);
+    }
+
+    public function testВходНаНеустановленнойСхемеДаётПодсказку(): void
+    {
+        $page = Kernel::get('/login');
+
+        self::assertSame(503, $page['status']);
+        self::assertStringContainsString('Сайт не установлен', $page['body']);
+    }
+
+    public function testУстановщикОтдаётФормуПокаСхемаНеУстановлена(): void
+    {
+        $page = Kernel::get('/setup.php');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Установка сайта', $page['body']);
+    }
+}

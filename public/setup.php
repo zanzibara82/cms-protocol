@@ -15,9 +15,47 @@ const SETUP_PASSWORD_MIN = 10;
 
 securityHeaders();
 
+// Функция нечистая: каждый вызов читает файловую систему (is_file(SETUP_LOCK)), а замок мог
+// появиться между вызовами — его как раз занял другой запрос. PHPStan по умолчанию запоминает
+// возврат функции между вызовами, и на этой памяти второй вызов setupLocked() казался всегда
+// false. Тег ниже запрещает этот вывод: окно между верхней проверкой и проверкой после занятия
+// замка — ровно то, ради которого вводился атомарный замок.
+/** @phpstan-impure */
+/**
+ * Состояние замка читается с диска, поэтому функция нечистая: между проверкой в начале экрана и
+ * попыткой захвата файл реально может появиться чужим запросом. Память о первом ответе здесь
+ * запрещена — именно окно между этими двумя вызовами и закрывает атомарный захват.
+ *
+ * @phpstan-impure
+ */
 function setupLocked(): bool
 {
     return is_file(SETUP_LOCK);
+}
+
+// F9: замок занимается атомарно. Проверка is_file() и создание файла двумя шагами оставляют
+// окно, во втором запросе которого человек дошёл бы до setupCreateAdmin() и перезаписал
+// пароль администратора. Режим 'xb' создаёт файл исключительно когда его нет: из двух
+// параллельных POST установку продолжит только победитель.
+function setupAcquireLock(): bool
+{
+    $handle = @fopen(SETUP_LOCK, 'xb');
+    if ($handle === false) {
+        return false;
+    }
+
+    fwrite($handle, utcStamp(nowUtc()) . "\n");
+    fclose($handle);
+
+    return true;
+}
+
+// Отказ проверки не оставляет замок: повторный POST обязан проходить.
+function setupReleaseLock(): void
+{
+    if (is_file(SETUP_LOCK)) {
+        unlink(SETUP_LOCK);
+    }
 }
 
 /** @return list<string> */
@@ -37,6 +75,13 @@ function setupProblems(): array
 
     if (!is_writable(__DIR__)) {
         $problems[] = 'Каталог public/ недоступен для записи — не получится создать install.lock.';
+    }
+
+    // Журнал пишется вне документ-корня; недоступный каталог журнала означал бы, что штатные
+    // logWarn()/logError() молча теряются, а сбой миграции стало бы невозможно разобрать.
+    $logDir = dirname(logPath());
+    if (!is_dir($logDir) || !is_writable($logDir)) {
+        $problems[] = 'Каталог журнала недоступен для записи — ошибки установки не запишутся.';
     }
 
     return $problems;
@@ -140,7 +185,7 @@ function setupCreateAdmin(array $values): void
 
 function setupFinish(): void
 {
-    file_put_contents(SETUP_LOCK, utcStamp(nowUtc()) . "\n");
+    // Замок занят в начале POST-ветки и остаётся на месте — здесь только журнал.
     logInfo('setup.finished', ['php' => PHP_VERSION]);
 }
 
@@ -163,6 +208,13 @@ $values = [
 if (isPost()) {
     csrfCheck();
 
+    // Замок — до любой записи и атомарно (F9): между верхней проверкой setupLocked() и этим
+    // местом успевает пройти ровно один победитель, остальные получают «уже установлен».
+    $lockHeld = setupAcquireLock();
+    if (!$lockHeld && setupLocked()) {
+        notFound('Сайт уже установлен.');
+    }
+
     $values = [
         'site_name' => postString('site_name'),
         'admin_email' => postString('admin_email'),
@@ -173,21 +225,46 @@ if (isPost()) {
     $errors = setupValidate($values);
 
     if ($errors === [] && $problems === []) {
-        setupApplyBaseline();
-        setOption('site_name', trim($values['site_name']));
-        setOption('admin_email', mb_strtolower(trim($values['admin_email'])));
-        setOption('installed_at', utcStamp(nowUtc()));
-        setupCreateAdmin($values);
-        setupFinish();
+        try {
+            setupApplyBaseline();
+            setOption('site_name', trim($values['site_name']));
+            setOption('admin_email', mb_strtolower(trim($values['admin_email'])));
+            setOption('installed_at', utcStamp(nowUtc()));
+            setupCreateAdmin($values);
+            setupFinish();
+        } catch (Throwable $error) {
+            // Срыв установки — не отказ проверки: снимаем занятый замок, чтобы человек
+            // повторил попытку (шаг идемпотентен, см. комментарий над setupApplyBaseline).
+            if ($lockHeld) {
+                setupReleaseLock();
+            }
+
+            throw $error;
+        }
 
         // Установщик не входит сам: человек вводит пароль ещё раз на /login, как обычно.
         // Ключ 'site-installed' уже есть в CORE_NOTICE_TEXT (задача 7); 'installed' занят
         // под установку приложения и читается на странице «Приложения».
         redirectWithNotice('/login', 'site-installed');
     }
+
+    // Отказ проверки: замок не должен помнить неудачную попытку — повторный POST проходит.
+    if ($lockHeld) {
+        setupReleaseLock();
+    }
 }
 
-render('setup', ['problems' => $problems, 'errors' => $errors, 'values' => $values], [
+// В шаблон уходит белый список полей (F9): пароли — не значение формы, они не возвращаются
+// в разметку и не покидают этот скрипт.
+render('setup', [
+    'problems' => $problems,
+    'errors' => $errors,
+    'values' => [
+        'site_name' => $values['site_name'],
+        'admin_email' => $values['admin_email'],
+        'admin_name' => $values['admin_name'],
+    ],
+], [
     'title' => 'Установка сайта',
     'noindex' => true,
 ]);

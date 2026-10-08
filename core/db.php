@@ -136,13 +136,89 @@ function inPlaceholders(int $count): string
     return $count <= 0 ? '' : implode(', ', array_fill(0, $count, '?'));
 }
 
+// Единственный список таблиц базовой схемы ядра. Его читают и признака «сайт установлен»,
+// и установщик, поэтому второй перечень условий в коде запрещён.
+const CORE_BASELINE_TABLES = ['user', 'login_attempt', 'option', 'app_installation', 'app_migration'];
+
+// Признак «схема ядра на месте»: таблицы проверяются через information_schema, чтобы запрос к
+// отсутствующей таблице не превращался в 500 — сам этот запрос обязан работать на пустой базе.
+function isSiteInstalled(): bool
+{
+    /** @var list<string> $names */
+    $names = array_map(static fn (string $table): string => t($table), CORE_BASELINE_TABLES);
+    $sql = 'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (' . inPlaceholders(count($names)) . ')';
+
+    return (int) value($sql, $names) === count($names);
+}
+
 // Файл миграции — набор самостоятельных предложений, разделённых «;» в конце строки.
 // Процедуры и триггеры пилот не использует, поэтому более хитрый разбор не нужен.
+// Подстановка префикса таблиц — здесь, в единственном канале «файл → утверждения»: оба
+// потребителя (applyApp() и setupApplyBaseline()) читают SQL-файлы только через splitSql().
 /** @return list<string> */
 function splitSql(string $sql): array
 {
     $clean = (string) preg_replace('/^\s*--.*$/m', '', $sql);
     $parts = preg_split('/;\s*$/m', $clean) ?: [];
+    $prefix = (string) configValue('TABLE_PREFIX', 'tbl_');
 
-    return array_values(array_filter(array_map('trim', $parts), static fn (string $part): bool => $part !== ''));
+    $statements = array_values(array_filter(array_map('trim', $parts), static fn (string $part): bool => $part !== ''));
+
+    return array_map(static fn (string $statement): string => sqlWithTablePrefix($statement, $prefix), $statements);
+}
+
+// Литерал «tbl_» в SQL-файлах — единственный способ задать имя таблицы: подстановка обязана его увидеть.
+// Заменяем «tbl_» на настроенный префикс только вне одинарных строковых литералов. При префиксе «tbl_»
+// это точный no-op. Строковый литерал узнаётся по одинарным кавычкам с учётом «»-экранирования;
+// «»-кавычки и бэктики в этом канале идентификаторами не являются (пилот их не использует).
+function sqlWithTablePrefix(string $statement, string $prefix): string
+{
+    if ($prefix === 'tbl_') {
+        return $statement;
+    }
+
+    $marker = 'tbl_';
+    $length = strlen($statement);
+    $out = '';
+    $i = 0;
+
+    while ($i < $length) {
+        $char = $statement[$i];
+
+        // Одинарный кавычный литерал переносим целиком, не трогая «tbl_» внутри него.
+        if ($char === "'") {
+            $out .= $char;
+            $i++;
+            while ($i < $length) {
+                if ($statement[$i] === "'") {
+                    $out .= "'";
+                    $i++;
+                    if ($i < $length && $statement[$i] === "'") {
+                        $out .= "'";
+                        $i++;
+
+                        continue;
+                    }
+
+                    break;
+                }
+                $out .= $statement[$i];
+                $i++;
+            }
+
+            continue;
+        }
+
+        if (substr($statement, $i, strlen($marker)) === $marker) {
+            $out .= $prefix;
+            $i += strlen($marker);
+
+            continue;
+        }
+
+        $out .= $char;
+        $i++;
+    }
+
+    return $out;
 }
