@@ -2677,10 +2677,24 @@ final class SitemapTest extends TestCase
         ]), 10);
 
         $urls = sitemapUrls();
-        hooksReset();
 
         self::assertSame('2026-10-06T10:00:00+03:00', $urls[1]['lastmod']);
         self::assertStringContainsString('<lastmod>2026-10-06T10:00:00+03:00</lastmod>', sitemapXml());
+    }
+
+    public function testКартаНеПереиспользуетСписокПрошлогоРасчёта(): void
+    {
+        // Карта сайта обязана считаться на каждый вызов: рабочий процесс PHP (FPM, mod_php,
+        // php -S) живёт между запросами, и статический кеш показал бы поисковику устаревший
+        // список до перезапуска воркера.
+        addFilter('sitemap_urls', static fn (array $urls): array => array_merge($urls, [
+            ['loc' => '/s-kesch', 'lastmod' => '2026-10-06T10:00:00+03:00'],
+        ]), 10);
+        self::assertStringContainsString('/s-kesch', sitemapXml());
+
+        hooksReset();
+
+        self::assertStringNotContainsString('/s-kesch', sitemapXml());
     }
 }
 ```
