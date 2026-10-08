@@ -1531,7 +1531,7 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
   - `respond(int $status, string $body, array $headers = []): never`, `redirect(string $to, int $status = 302): never`,
     `notFound(string $message = ''): never`, `forbidden(string $message = ''): never`,
     `redirectWithNotice(string $to, string $notice): never`;
-  - `addRoute(string $method, string $pattern, string $handler, array $meta = []): void`,
+  - `addRoute(string $method, string $pattern, string|Closure $handler, array $meta = []): void`,
     `matchRoute(string $method, string $path): ?array`, `routeTable(): array`, `routesReset(): void`,
     `dispatch(): void`;
   - `$meta` — `array{app?: string, private?: bool, permission?: string}`;
@@ -1636,6 +1636,16 @@ final class RouterTest extends TestCase
 
         self::assertSame('newsFeed', matchRoute('GET', '/news?page=2')['handler']);
     }
+
+    public function testНекорректныйШаблонПадаетПриРегистрации(): void
+    {
+        // «#» — наш разделитель регулярки: в шаблоне он рвёт паттерн, и без проверки preg_match
+        // молча вернул бы false — маршрут исчез бы без ошибки. Регистрация обязана упасть громко.
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('/news#blog');
+
+        addRoute('GET', '/news#blog', 'newsFeed');
+    }
 }
 ```
 
@@ -1661,19 +1671,44 @@ function &routeRegistry(): array
     return $routes;
 }
 
-function addRoute(string $method, string $pattern, string $handler, array $meta = []): void
+/**
+ * Собирает регулярку маршрута из нормализованного шаблона: сегменты {имя} становятся именованными
+ * группами «[^/]+», прочие символы уходят в паттерн как есть. Общий код для регистрации (где проверка
+ * на валидность) и сопоставления — иначе два места могли бы расходиться и собирать разные регулярки.
+ */
+function routeRegex(string $pattern): string
 {
+    return '#^' . preg_replace_callback(
+        '/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/',
+        static fn (array $m): string => '(?P<' . $m[1] . '>[^/]+)',
+        $pattern
+    ) . '$#u';
+}
+
+/** @param array<string, mixed> $meta */
+function addRoute(string $method, string $pattern, string|Closure $handler, array $meta = []): void
+{
+    $normalized = '/' . trim($pattern, '/');
+
+    // Шаблон пишет разработчик, но опечатка в спецсимволе — «#» у нас разделитель — рвёт паттерн:
+    // preg_match тогда молча вернул бы false, и маршрут исчез бы без единой ошибки. Собираем регулярку
+    // и проверяем её на регистрации, а не на сопоставлении, чтобы упасть громко и назвать виновника.
+    // Предупреждение PCRE гасим: о невалидности сигналят false и preg_last_error(), а не шум в выводе.
+    if (@preg_match(routeRegex($normalized), '') === false && preg_last_error() !== PREG_NO_ERROR) {
+        throw new \LogicException(sprintf('Некорректный шаблон маршрута «%s»: регулярка не собралась.', $normalized));
+    }
+
     $registry = &routeRegistry();
     $registry[] = [
         'method' => strtoupper($method),
-        'pattern' => '/' . trim($pattern, '/'),
+        'pattern' => $normalized,
         'handler' => $handler,
         'meta' => $meta,
         'static' => !str_contains($pattern, '{'),
     ];
 }
 
-/** @return list<array{method: string, pattern: string, handler: string, meta: array<string, mixed>, static: bool}> */
+/** @return list<array{method: string, pattern: string, handler: string|Closure, meta: array<string, mixed>, static: bool}> */
 function routeTable(): array
 {
     $registry = &routeRegistry();
@@ -1687,7 +1722,7 @@ function routesReset(): void
     $registry = [];
 }
 
-/** @return array{handler: string, params: array<string, string>, meta: array<string, mixed>}|null */
+/** @return array{handler: string|Closure, params: array<string, string>, meta: array<string, mixed>}|null */
 function matchRoute(string $method, string $path): ?array
 {
     $clean = '/' . trim(strtok($path, '?') ?: '', '/');
@@ -1703,12 +1738,9 @@ function matchRoute(string $method, string $path): ?array
         }
 
         // Шаблон пишется в коде ядра или приложения, а не приходит из запроса, поэтому подстановка
-        // сегментов в регулярку безопасна: значение {slug} ограничено «[^/]+».
-        $regex = '#^' . preg_replace_callback(
-            '/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/',
-            static fn (array $m): string => '(?P<' . $m[1] . '>[^/]+)',
-            $route['pattern']
-        ) . '$#u';
+        // сегментов в регулярку безопасна: значение {slug} ограничено «[^/]+». Регулярку собирает тот
+        // же routeRegex, что и проверка на регистрации, — сопоставление видит ровно тот паттерн, что одобрен.
+        $regex = routeRegex($route['pattern']);
 
         if (preg_match($regex, $clean, $matches) === 1) {
             $params = [];
@@ -1776,6 +1808,11 @@ Expected: PASS (9/9).
 
 `core/request.php`:
 
+Одно обязательное ограничение к тексту этого файла: название `REMOTE_ADDR` встречается в нём ровно один раз —
+в коде. Комментарий, повторяющий его, сломает страж `ClientIpTest` из задачи 6, который считает вхождения
+по всему исходнику; поэтому в комментарии оно написано словами («адрес клиента из серверного массива»). По той
+же причине в файле нет ни одного названия подставляемых заголовков — тот же страж считывает их как находки.
+
 ```php
 <?php
 
@@ -1784,7 +1821,7 @@ declare(strict_types=1);
 // Адрес клиента берём только из серверного: его подделать запросом нельзя. Заголовки вида «кто меня
 // проксировал» подставляет кто угодно, и лимит входа, прочитанный из них, обходится одной строкой в
 // curl. Названий этих заголовков здесь нет намеренно: страж ClientIpTest читает исходники как текст и
-// считает их находками, а `REMOTE_ADDR` в этом файле обязан встречаться ровно один раз.
+// считает их находками, а адрес клиента из серверного массива обязан встречаться в этом файле ровно один раз.
 function clientIp(): string
 {
     $ip = $_SERVER['REMOTE_ADDR'] ?? '';
@@ -2009,6 +2046,9 @@ final class Kernel
 
     private static ?string $cookieJar = null;
 
+    /** @var resource|null ресурс php -S, который подняли именно мы: им гасит stop() */
+    private static $process = null;
+
     /**
      * @param array<string, string> $env переменные окружения сервера сверх обязательных.
      *        Так тест подставляет `CMS_EXTRA_APPS_DIR` с фикстурами приложений: каталог нужен
@@ -2017,6 +2057,18 @@ final class Kernel
      */
     public static function start(array $env = []): void
     {
+        // Порт обязан быть свободен до запуска. Иначе wait() подключится к зависшему серверу прошлого
+        // прогона (возможно, с другим окружением), а наш процесс упадёт с «Address already in use» в
+        // /dev/null — и проверки молча пойдут не в тот сервер. Падаем громко и называем виновника.
+        if (self::portBusy()) {
+            throw new \RuntimeException(sprintf(
+                'Порт %d занят чужим процессом (%s:%d): остановите висящий php -S перед запуском http-набора.',
+                self::PORT,
+                self::HOST,
+                self::PORT
+            ));
+        }
+
         $root = dirname(__DIR__, 2);
         self::$cookieJar = tempnam(sys_get_temp_dir(), 'cms-cookies-') ?: '/tmp/cms-cookies';
 
@@ -2034,16 +2086,28 @@ final class Kernel
             escapeshellarg($root)
         );
 
-        $process = proc_open($command, [1 => ['file' => '/dev/null', 'w'], 2 => ['file' => '/dev/null', 'w']], $pipes, $root);
+        // Дескрипторы задаём позиционной формой ['file', путь, режим]: ассоциативный массив вида
+        // ['file' => путь, 'w'] PHP читает как тип дескриптора «w» и падает «not a valid descriptor».
+        $process = proc_open($command, [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, $root);
         if (!is_resource($process)) {
             throw new \RuntimeException('Не удалось запустить php -S');
         }
+        self::$process = $process;
 
         self::wait();
     }
 
     public static function stop(): void
     {
+        // Гасим прежде всего собственный процесс: proc_terminate закрывает того ребёнка, что мы
+        // породили, даже если набор упал до готовности сервера. pkill остаётся сверху — он снимает
+        // самого php -S (внук оболочки proc_open), которого proc_terminate не всегда добирает.
+        if (is_resource(self::$process)) {
+            proc_terminate(self::$process);
+            proc_close(self::$process);
+            self::$process = null;
+        }
+
         exec('pkill -f "php -S ' . self::HOST . ':' . self::PORT . '" 2>/dev/null || true');
         if (self::$cookieJar !== null && is_file(self::$cookieJar)) {
             unlink(self::$cookieJar);
@@ -2127,6 +2191,19 @@ final class Kernel
         }
 
         throw new \RuntimeException('Сервер php -S не поднялся за 10 секунд');
+    }
+
+    /** Проба порта до спавна: если на нём уже кто-то слушает, это чужой сервер, а не наш. */
+    private static function portBusy(): bool
+    {
+        $socket = @fsockopen(self::HOST, self::PORT, $errno, $errstr, 0.2);
+        if (is_resource($socket)) {
+            fclose($socket);
+
+            return true;
+        }
+
+        return false;
     }
 }
 ```
