@@ -89,8 +89,8 @@ final class SetupTest extends TestCase
 
         self::assertStringContainsString('Пароли не совпадают', $response['body']);
         self::assertFileDoesNotExist(self::lockPath());
-        // F9: отказ не должен возвращать введённый пароль в разметку — проверка, что шаблон
-        // печатает только белый список полей и ни одно из паролей не попадает в ответ.
+        // F9: отказ не должен возвращать введённый пароль в разметку — шаблон печатает только
+        // белый список полей, и ни один из паролей в ответ не попадает.
         self::assertStringNotContainsString('длинный-тестовый-пароль', $response['body']);
         self::assertStringNotContainsString('другой-длинный-пароль', $response['body']);
     }
