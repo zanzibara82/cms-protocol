@@ -161,6 +161,30 @@ final class AdminAppsTest extends TestCase
         self::assertStringContainsString('Не удалось завершить действие с разделом.', $again['body']);
     }
 
+    public function testУспешноеДействиеСтираетНепоказанныйПрошлыйСбой(): void
+    {
+        $this->enter('admin@school.dev');
+        $this->press('install', 'demo');
+        $this->press('install', 'demo');
+
+        // Токен берём со «Сводки»: заход на «Приложения» показал бы экран и снял flash раньше времени,
+        // а сценарий сбоя именно такой — админ не заглянул на экран между действиями.
+        $summary = Kernel::get('/admin');
+        $response = Kernel::post('/admin/apps', [
+            '_token' => $this->token($summary['body']),
+            'op' => 'disable',
+            'app' => 'demo',
+        ]);
+
+        self::assertSame(302, $response['status']);
+        self::assertStringContainsString('notice=disabled', $response['headers']['location']);
+
+        $page = Kernel::get($response['headers']['location']);
+        self::assertStringContainsString('Приложение выключено.', $page['body'], 'Зелёное уведомление об успехе печатается');
+        self::assertStringNotContainsString('Раздел уже установлен.', $page['body'], 'Непоказанная причина прошлого сбоя не доезжает до экрана');
+        self::assertStringNotContainsString('role="alert"', $page['body'], 'Красный баннер отказа не появляется рядом с успехом');
+    }
+
     public function testРазделИзБудущегоНеУстанавливается(): void
     {
         $this->enter('admin@school.dev');

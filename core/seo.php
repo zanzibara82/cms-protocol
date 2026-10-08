@@ -39,21 +39,6 @@ const ROBOTS_CORE_DISALLOW = [
 ];
 
 /**
- * Снимок последний посчитанных адресов карты. Кеш живёт в ссылке, как реестр манифестов:
- * на shared-хостинге процесс умирает вместе с запросом, поэтому снимок существует «на один запрос».
- * sitemapXml() печатает именно его: адрес с датой, посчитанный фильтром раздела, не имеет права
- * потеряться, даже если между расчётом и выводом хуки были сброшены.
- *
- * @return list<array{loc: string, lastmod?: string}>|null
- */
-function &sitemapUrlsSnapshotRef(): ?array
-{
-    static $urls = null;
-
-    return $urls;
-}
-
-/**
  * Адреса карты сайта. Фильтр sitemap_urls (спецификация §5.4) позволяет разделу добавить свои,
  * не правя ядро; ядро при этом отбраковывает то, что раздел добавить не вправе.
  *
@@ -63,11 +48,7 @@ function sitemapUrls(): array
 {
     $filtered = applyFilters('sitemap_urls', coreSitemapUrls());
     if (!is_array($filtered)) {
-        $fallback = coreSitemapUrls();
-        $fallbackSnapshot = &sitemapUrlsSnapshotRef();
-        $fallbackSnapshot = $fallback;
-
-        return $fallback;
+        return coreSitemapUrls();
     }
 
     $clean = [];
@@ -100,9 +81,6 @@ function sitemapUrls(): array
 
         $clean[] = $entry;
     }
-
-    $snapshot = &sitemapUrlsSnapshotRef();
-    $snapshot = $clean;
 
     return $clean;
 }
@@ -138,17 +116,13 @@ function robotsDisallowed(): array
 
 function sitemapXml(): string
 {
-    // Печатаем снимок последнего расчёта: если адрес с датой уже прошёл через sitemap_urls,
-    // он обязан попасть в xml, даже если хуки после расчёта были сброшены.
-    $urls = &sitemapUrlsSnapshotRef();
-    if ($urls === null) {
-        $urls = sitemapUrls();
-    }
-
+    // Карта сайта считается заново на каждый вызов: рабочий процесс PHP (FPM, mod_php, php -S)
+    // живёт между запросами, и статический кеш показал бы поисковику устаревший список
+    // до перезапуска воркера.
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
-    foreach ($urls as $url) {
+    foreach (sitemapUrls() as $url) {
         $xml .= "  <url>\n";
         $xml .= '    <loc>' . e(absoluteUrl((string) $url['loc'])) . '</loc>' . "\n";
         if (isset($url['lastmod'])) {

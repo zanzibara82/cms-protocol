@@ -224,6 +224,10 @@ function finishAppAction(array $result, string $to, string $notice): void
         redirectWithNotice($to, 'migration-failed');
     }
 
+    // Успех тоже убирает flash: незапоказанная причина прошлого сбоя иначе доехала бы до экрана
+    // красным баннером рядом с зелёным уведомлением. Сессию открыл csrfCheck() вызывающего обработчика.
+    unset($_SESSION['admin_error']);
+
     if ($notice === '') {
         redirect($to);
     }
