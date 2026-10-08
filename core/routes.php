@@ -118,9 +118,26 @@ function coreAdminApps(array $params = []): void
         ];
     }
 
+    // Причина сбоя приезжает из сессионного flash, а не из адресной строки: текст драйвера не должен
+    // светиться в URL, истории браузера и access-логах. Flash показывается ровно один раз.
+    startSession();
+    $flashed = $_SESSION['admin_error'] ?? '';
+    unset($_SESSION['admin_error']);
+    $alertReason = is_string($flashed) ? $flashed : '';
+
+    // Заголовок отказа — из словаря по ключу migration-failed: свободный текст из адреса не печатается.
+    // Зелёной плашкой этот ключ показывать нельзя, поэтому noticeOfRequest для него гасим.
+    $noticeKey = queryString('notice', '');
+    $failureRequested = is_string($noticeKey) && $noticeKey === 'migration-failed';
+    $alertTitle = ($alertReason !== '' || $failureRequested)
+        ? (string) (noticeText('migration-failed', CORE_NOTICE_TEXT) ?? '')
+        : '';
+    $notice = $failureRequested ? '' : (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? '');
+
     render('admin/apps', [
-        'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
-        'error' => (string) queryString('error', ''),
+        'notice' => $notice,
+        'alertTitle' => $alertTitle,
+        'alertReason' => $alertReason,
         'coreVersion' => CORE_VERSION,
         'corePending' => coreSqlPending(),
         'apps' => $rows,
@@ -142,13 +159,13 @@ function coreAdminAppsAction(array $params = []): void
     if ($op === 'update-core') {
         $plan = planApp('core');
         $result = $plan->isEmpty() ? ['ok' => true, 'error' => ''] : applyApp($plan);
-        finishAppAction($result, '/admin/apps', $plan->isEmpty() ? '' : 'updated');
+        finishAppAction($result, '/admin/apps', $plan->isEmpty() ? '' : 'core-updated');
 
         return;
     }
 
     if ($app === '' || appManifest($app) === null) {
-        redirect('/admin/apps?error=' . rawurlencode('Раздел не найден в сборке.'));
+        finishAppAction(['ok' => false, 'error' => 'Раздел не найден в сборке.'], '/admin/apps', '');
     }
 
     $result = match ($op) {
@@ -171,15 +188,19 @@ function coreAdminAppsAction(array $params = []): void
 }
 
 /**
- * Отказ показывается текстом на той же странице, а не исключением: человек читает причину
- * и решает, что делать. Успех — PRG-редирект с ключом уведомления.
+ * Отказ показывается на той же странице: заголовок берётся из словаря уведомлений, подробная
+ * причина пишется в сессионный flash и не уезжает в адресную строку. Успех — PRG-редирект
+ * с ключом уведомления.
  *
  * @param array{ok: bool, error?: string} $result
  */
 function finishAppAction(array $result, string $to, string $notice): void
 {
     if (($result['ok'] ?? false) === false) {
-        redirect($to . '?error=' . rawurlencode((string) ($result['error'] ?? 'Действие не удалось.')));
+        startSession();
+        // Экрану хватает 200 символов причины: в журнал она пишется целиком, а flash только показывается.
+        $_SESSION['admin_error'] = mb_substr((string) ($result['error'] ?? 'Действие не удалось.'), 0, 200);
+        redirectWithNotice($to, 'migration-failed');
     }
 
     if ($notice === '') {

@@ -13,7 +13,8 @@ const APP_STATE_LABELS = [
 ];
 
 /** @var string $notice */
-/** @var string $error */
+/** @var string $alertTitle */
+/** @var string $alertReason */
 /** @var string $coreVersion */
 /** @var list<string> $corePending */
 /** @var list<array{id: string, title: string, state: string, dbVersion: string, manifestVersion: string, reason: string}> $apps */
@@ -80,8 +81,14 @@ $table = '<div class="overflow-x-auto rounded-lg border border-ink/10 bg-white">
     . '<th class="py-2 pr-3 font-medium">Версия в базе / в сборке</th><th class="py-2 pr-3 font-medium">Пояснение</th>'
     . '<th class="py-2 pr-4 text-right font-medium">Действия</th></tr></thead><tbody>' . $rows . '</tbody></table></div>';
 
-$alert = $error === ''
+// Отказ: заголовок берётся из словаря уведомлений, подробная причина приезжает из сессионного
+// flash. В адресную строку причина не уезжает — свободный текст из адреса не печатается.
+// Если причины нет (второй показ), остаётся только заголовок.
+$alert = ($alertTitle === '' && $alertReason === '')
     ? ''
-    : '<p class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">' . e($error) . '</p>';
+    : '<div class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3" role="alert">'
+        . ($alertTitle !== '' ? '<p class="text-sm font-medium text-bad">' . e($alertTitle) . '</p>' : '')
+        . ($alertReason !== '' ? '<p class="mt-1 text-sm text-bad">' . e($alertReason) . '</p>' : '')
+        . '</div>';
 
 /* @safe html */ echo $alert . adminShell('Приложения', $core . $table, $notice);

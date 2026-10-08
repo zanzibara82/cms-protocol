@@ -134,12 +134,31 @@ final class AdminAppsTest extends TestCase
         $this->press('install', 'demo');
         $second = $this->press('install', 'demo');
 
-        self::assertStringContainsString('error=', $second['headers']['location']);
+        // Причина сбоя уезжает в сессионный flash, в адресную строку — только ключ словаря.
+        self::assertStringContainsString('notice=migration-failed', $second['headers']['location']);
+        self::assertStringNotContainsString('error=', $second['headers']['location']);
         self::assertSame(2, (int) value('SELECT COUNT(*) FROM ' . t('app_migration') . ' WHERE app = ?', ['demo']));
         self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('app_installation') . ' WHERE id = ?', ['demo']));
 
-        $page = Kernel::get('/admin/apps?' . (string) parse_url($second['headers']['location'], PHP_URL_QUERY));
-        self::assertStringContainsString('Раздел уже установлен.', $page['body']);
+        $page = Kernel::get('/admin/apps?notice=migration-failed');
+        self::assertStringContainsString('Не удалось завершить действие с разделом.', $page['body'], 'Заголовок отказа печатается из словаря');
+        self::assertStringContainsString('Раздел уже установлен.', $page['body'], 'Подробная причина приезжает из сессионного flash');
+        self::assertStringContainsString('role="alert"', $page['body']);
+    }
+
+    public function testПричинаСбояИсчезаетПослеОдногоПоказа(): void
+    {
+        $this->enter('admin@school.dev');
+        $this->press('install', 'demo');
+        $second = $this->press('install', 'demo');
+
+        $first = Kernel::get($second['headers']['location']);
+        self::assertStringContainsString('Раздел уже установлен.', $first['body']);
+
+        // Flash убирается сразу после показа: повторный GET печатает только заголовок из словаря.
+        $again = Kernel::get($second['headers']['location']);
+        self::assertStringNotContainsString('Раздел уже установлен.', $again['body'], 'Причина сбоя показывается ровно один раз');
+        self::assertStringContainsString('Не удалось завершить действие с разделом.', $again['body']);
     }
 
     public function testРазделИзБудущегоНеУстанавливается(): void
@@ -147,11 +166,13 @@ final class AdminAppsTest extends TestCase
         $this->enter('admin@school.dev');
         $response = $this->press('install', 'future');
 
-        self::assertStringContainsString('error=', $response['headers']['location']);
+        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
+        self::assertStringNotContainsString('error=', $response['headers']['location']);
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('app_installation') . ' WHERE id = ?', ['future']));
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('app_migration') . ' WHERE app = ?', ['future']));
 
-        $page = Kernel::get('/admin/apps?' . (string) parse_url($response['headers']['location'], PHP_URL_QUERY));
+        $page = Kernel::get('/admin/apps?notice=migration-failed');
+        self::assertStringContainsString('Не удалось завершить действие с разделом.', $page['body']);
         self::assertStringContainsString('Нужна версия ядра не ниже 99.0.0, в сборке ' . CORE_VERSION . '.', $page['body']);
     }
 
@@ -222,8 +243,12 @@ final class AdminAppsTest extends TestCase
         $this->enter('admin@school.dev');
         $response = $this->press('install', 'нету');
 
-        self::assertStringContainsString('error=', $response['headers']['location']);
+        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
+        self::assertStringNotContainsString('error=', $response['headers']['location']);
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('app_installation')));
+
+        $page = Kernel::get('/admin/apps?notice=migration-failed');
+        self::assertStringContainsString('Раздел не найден в сборке.', $page['body'], 'Причину отказа печатает flash, а не адресная строка');
     }
 
     public function testНеизвестноеДействиеОтказывается(): void
@@ -232,8 +257,39 @@ final class AdminAppsTest extends TestCase
         $this->press('install', 'demo');
         $response = $this->press('сломать', 'demo');
 
-        self::assertStringContainsString('error=', $response['headers']['location']);
+        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
+        self::assertStringNotContainsString('error=', $response['headers']['location']);
         self::assertSame(1, (int) value('SELECT enabled FROM ' . t('app_installation') . ' WHERE id = ?', ['demo']));
+
+        $page = Kernel::get('/admin/apps?notice=migration-failed');
+        self::assertStringContainsString('Неизвестное действие.', $page['body']);
+    }
+
+    public function testОбновлениеЯдраПриПустомПланеВозвращаетБезОшибки(): void
+    {
+        // TestDb::reset() раскладывает схему ядра из sql/, но строку журнала пишет установщик.
+        // Без этой строки план ядра не пуст, и ветка пустого плана осталась бы непроверенной.
+        insert('app_migration', [
+            'id' => newId(),
+            'app' => 'core',
+            'name' => '0001_core_baseline.sql',
+            'checksum' => migrationChecksum(dirname(__DIR__, 2) . '/sql/0001_core_baseline.sql'),
+            'applied_at' => utcStamp(nowUtc()),
+        ]);
+
+        $this->enter('admin@school.dev');
+        $response = $this->press('update-core');
+
+        // Пустой план — ничего применять не нужно: обычный PRG-возврат без текста ошибки.
+        self::assertSame(302, $response['status']);
+        self::assertSame('/admin/apps', $response['headers']['location']);
+        self::assertStringNotContainsString('error=', $response['headers']['location']);
+
+        $page = Kernel::get('/admin/apps');
+        self::assertSame(200, $page['status']);
+        self::assertStringNotContainsString('role="alert"', $page['body']);
+        self::assertSame([], coreSqlPending(), 'План ядра обязан остаться пустым');
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('app_migration') . ' WHERE app = ?', ['core']), 'Повторного применения не было');
     }
 
     public function testВкладкаРазделаПоявляетсяПослеУстановки(): void

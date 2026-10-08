@@ -53,4 +53,78 @@ final class RouteHandlersTest extends TestCase
     {
         self::assertNotSame([], routeTable());
     }
+
+    // Гейт смотрит только в метку маршрута (core/router.php), поэтому забытый «private» открывает
+    // админский обработчик публике. Скоуп выпуска «приватные пути закрыты гейтом» сторожится здесь.
+    public function testПриватныйПутьЗакрытГейтом(): void
+    {
+        $prefixes = array_merge(appPrivatePaths(), ['/admin']);
+        $violations = [];
+
+        foreach (routeTable() as $route) {
+            $pattern = (string) $route['pattern'];
+            $isPrivatePath = false;
+            foreach ($prefixes as $prefix) {
+                if (str_starts_with($pattern, $prefix)) {
+                    $isPrivatePath = true;
+                    break;
+                }
+            }
+
+            if (!$isPrivatePath) {
+                continue;
+            }
+
+            if (($route['meta']['private'] ?? false) !== true || ($route['meta']['permission'] ?? '') === '') {
+                $violations[] = (string) $route['method'] . ' ' . $pattern;
+            }
+        }
+
+        self::assertSame([], $violations, 'Приватные пути без метки гейта');
+    }
+
+    // Словарь прав гейта живёт в dispatch() (core/router.php): «login» и «manage». Значение,
+    // которого там нет, не закрыло бы маршрут ничем — опечатку ловим до коммита.
+    public function testЗначенияПраваИзвестныГейту(): void
+    {
+        $unknown = [];
+
+        foreach (routeTable() as $route) {
+            $permission = (string) ($route['meta']['permission'] ?? '');
+            if ($permission !== '' && !in_array($permission, ['login', 'manage'], true)) {
+                $unknown[] = (string) $route['method'] . ' ' . $route['pattern'] . ' → ' . $permission;
+            }
+        }
+
+        self::assertSame([], $unknown, 'Неизвестные гейту значения права');
+    }
+
+    public function testПослеСбросаТаблицыМаршрутыРазделаНаМесте(): void
+    {
+        // Первый registerAppRoutes() уже исполнил routes.php фикстур в этом процессе.
+        // require_once файл повторно не выполнит, поэтому маршруты возвращаются из снимка.
+        routesReset();
+        registerCoreRoutes();
+        registerAppRoutes();
+
+        $paths = [];
+
+        foreach (routeTable() as $route) {
+            $paths[] = (string) $route['method'] . ' ' . (string) $route['pattern'];
+        }
+
+        self::assertContains('GET /demo', $paths, 'Публичные маршруты раздела после сброса');
+        self::assertContains('GET /future', $paths, 'Маршрут раздела из будущего после сброса');
+
+        foreach (routeTable() as $route) {
+            if (($route['meta']['app'] ?? '') === '') {
+                continue;
+            }
+
+            self::assertTrue(
+                is_callable($route['handler']),
+                'Обработчик маршрута ' . (string) $route['method'] . ' ' . (string) $route['pattern'] . ' не определён после сброса'
+            );
+        }
+    }
 }

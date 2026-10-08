@@ -200,14 +200,52 @@ function appPrivatePaths(): array
     return $paths;
 }
 
+/**
+ * Снимок маршрутов разделов: какие файлы уже исполнены и что каждый из них добавил в таблицу.
+ * Нужен потому, что routes.php исполняется в процессе один раз (require_once), а таблицы маршрутов
+ * между наборами тестов сбрасываются.
+ *
+ * @return array{files: list<string>, routes: list<array<string, mixed>>}
+ */
+function &appRoutesSnapshot(): array
+{
+    static $state = ['files' => [], 'routes' => []];
+
+    return $state;
+}
+
 // Маршруты регистрируются для всех приложений из сборки, включая неустановленные: dispatch()
 // отвечает 404 по метке app, а таблица маршрутов остаётся полной для стража.
 function registerAppRoutes(): void
 {
+    $snapshot = &appRoutesSnapshot();
+
+    // Файлы уже исполнены — функции контроллеров определены, а таблицу заполняем снимком.
+    if ($snapshot['files'] !== []) {
+        foreach ($snapshot['routes'] as $route) {
+            addRoute(
+                (string) $route['method'],
+                (string) $route['pattern'],
+                (string) $route['handler'],
+                (array) ($route['meta'] ?? [])
+            );
+        }
+
+        return;
+    }
+
+    $before = count(routeTable());
+
     foreach (appManifests() as $manifest) {
         $routes = rtrim((string) $manifest['dir'], '/') . '/routes.php';
+
         if (is_file($routes)) {
             require_once $routes;
+            $snapshot['files'][] = $routes;
         }
     }
+
+    // В снимок попадает только то, что добавили разделы: маршруты ядра регистрируются отдельно
+    // и на повторе не должны удваиваться.
+    $snapshot['routes'] = array_slice(routeTable(), $before);
 }
