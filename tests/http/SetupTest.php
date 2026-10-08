@@ -89,6 +89,10 @@ final class SetupTest extends TestCase
 
         self::assertStringContainsString('Пароли не совпадают', $response['body']);
         self::assertFileDoesNotExist(self::lockPath());
+        // F9: отказ не должен возвращать введённый пароль в разметку — проверка, что шаблон
+        // печатает только белый список полей и ни одно из паролей не попадает в ответ.
+        self::assertStringNotContainsString('длинный-тестовый-пароль', $response['body']);
+        self::assertStringNotContainsString('другой-длинный-пароль', $response['body']);
     }
 
     public function testЧужойТокенОтклоняется(): void
@@ -142,6 +146,29 @@ final class SetupTest extends TestCase
 
         self::assertSame(404, $page['status']);
         self::assertStringNotContainsString('Установка сайта', $page['body']);
+    }
+
+    // Порядок объявления важен: замок уже выставлен предыдущим прогоном, и POST обязан получить
+    // тот же 404 до CSRF-проверки. Заглушка токена это доказывает: отказ происходит раньше,
+    // чем сравнивается _token, иначе csrfCheck() выдал бы 403.
+    public function testПослеЗамкаУстановщикОтклоняетИPOST(): void
+    {
+        $response = Kernel::post('/setup.php', [
+            '_token' => str_repeat('0', 64),
+            'site_name' => 'Школа английского',
+            'admin_email' => 'second@school.dev',
+            'admin_name' => 'Второй',
+            'password' => 'длинный-тестовый-пароль',
+            'password_again' => 'длинный-тестовый-пароль',
+        ]);
+
+        self::assertSame(404, $response['status']);
+        self::assertStringNotContainsString('Установка сайта', $response['body']);
+        self::assertSame(
+            1,
+            (int) value('SELECT COUNT(*) FROM ' . t('user') . ' WHERE role = ?', ['admin']),
+            'POST поверх замка не должен создать второго администратора'
+        );
     }
 
     public function testЗамокНеОтдаётсяФайлом(): void
