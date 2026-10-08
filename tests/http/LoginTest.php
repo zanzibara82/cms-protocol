@@ -60,10 +60,30 @@ final class LoginTest extends TestCase
 
     public function testВерныйПарольПереноситВАдминку(): void
     {
+        TestDb::clearTable('login_attempt');
         $response = Kernel::post('/login', ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль']);
 
         self::assertSame(302, $response['status']);
         self::assertSame('/admin', $response['headers']['location']);
+
+        $page = Kernel::get('/admin');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Сводка', $page['body']);
+    }
+
+    // Тест, отложенный задачей 6: страница выхода была и раньше, но проверить гашение сессии можно
+    // было только на экране админки — он появился в этой задаче.
+    public function testВыходГаситСессию(): void
+    {
+        TestDb::clearTable('login_attempt');
+        Kernel::post('/login', ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль']);
+
+        $page = Kernel::get('/admin');
+        $logout = Kernel::post('/logout', ['_token' => $this->tokenFrom($page['body'])]);
+
+        self::assertSame(302, $logout['status']);
+        self::assertStringContainsString('notice=signed-out', $logout['headers']['location']);
+        self::assertSame(302, Kernel::get('/admin')['status'], 'После выхода сводка снова закрыта');
     }
 
     public function testНеверныйПарольПоказываетТотЖеТекстЧтоИЧужойАдрес(): void
@@ -141,7 +161,7 @@ final class LoginTest extends TestCase
         self::assertSame('/news', $response['headers']['location'], 'Скрытое поле next доживает до редиректа');
     }
 
-    // Задачей 8 этот помощник пригодится тесту выхода: там токен берётся со страницы админки.
+    // Помощник теста выхода: токен берётся со страницы админки, а не со формы входа.
     private function tokenFrom(string $body): string
     {
         preg_match('/name="_token" value="([^"]+)"/', $body, $m);

@@ -29,6 +29,10 @@ require_once __DIR__ . '/apps.php';
 require_once __DIR__ . '/migrations.php';
 // Настройки сайта читают установщик и экраны админки, поэтому подключаются до них.
 require_once __DIR__ . '/options.php';
+// Каркас админки подключается последним: его функции зовут appManifests(), isAppActive() и getOption(),
+// а сами экраны админки их только вызывают. В установщике этот каркас не нужен, но лишний require
+// безопасен — public/setup.php ничего из него не печатает.
+require_once dirname(__DIR__) . '/admin/layout.php';
 
 // Классы ядра (Mailer, SmtpSocket, MigrationPlan) подгружаются по имени.
 spl_autoload_register(static function (string $class): void {

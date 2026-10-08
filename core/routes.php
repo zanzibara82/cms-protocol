@@ -9,6 +9,9 @@ function registerCoreRoutes(): void
     addRoute('GET', '/login', 'coreLoginPage');
     addRoute('POST', '/login', 'coreLoginSubmit');
     addRoute('POST', '/logout', 'coreLogout');
+    addRoute('GET', '/admin', 'coreAdminSummary', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/apps', 'coreAdminApps', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/apps', 'coreAdminAppsAction', ['private' => true, 'permission' => 'manage']);
 }
 
 /** @param array<string, string> $params */
@@ -65,6 +68,125 @@ function coreLogout(array $params = []): void
     csrfCheck();
     logoutUser();
     redirectWithNotice('/', 'signed-out');
+}
+
+/** @param array<string, string> $params */
+function coreAdminSummary(array $params = []): void
+{
+    $apps = [];
+    foreach (appInstallations() as $id => $row) {
+        // Ядро — не раздел: у него нет ни манифеста, ни вкладки, ни кнопки «Выключить».
+        if ($id === 'core') {
+            continue;
+        }
+
+        $manifest = appManifest((string) $id);
+        $nav = (array) ($manifest['adminNav'] ?? []);
+        $first = is_array($nav[0] ?? null) ? (string) ($nav[0]['href'] ?? '/admin/apps') : '/admin/apps';
+
+        $apps[] = [
+            'title' => (string) ($manifest['title'] ?? $id),
+            'href' => $first,
+            // enabled приходит то числом, то строкой — зависит от драйвера и режима подготовки,
+            // поэтому сравниваем после приведения к int.
+            'state' => (int) $row['enabled'] === 1 ? 'Включён, версия ' . (string) $row['version'] : 'Выключен',
+        ];
+    }
+
+    render('admin/summary', [
+        'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
+        'siteName' => getOption('site_name', (string) configValue('SITE_NAME', '')),
+        'adminEmail' => getOption('admin_email'),
+        'users' => (int) value('SELECT COUNT(*) FROM ' . t('user')),
+        'apps' => $apps,
+    ], ['title' => 'Сводка — админка', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function coreAdminApps(array $params = []): void
+{
+    $rows = [];
+    foreach (appManifests() as $id => $manifest) {
+        $state = appState((string) $id);
+        $rows[] = [
+            'id' => (string) $id,
+            'title' => (string) $manifest['title'],
+            'state' => (string) $state['state'],
+            'dbVersion' => (string) $state['dbVersion'],
+            'manifestVersion' => (string) $state['manifestVersion'],
+            'reason' => (string) $state['reason'],
+        ];
+    }
+
+    render('admin/apps', [
+        'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
+        'error' => (string) queryString('error', ''),
+        'coreVersion' => CORE_VERSION,
+        'corePending' => coreSqlPending(),
+        'apps' => $rows,
+    ], ['title' => 'Приложения — админка', 'noindex' => true]);
+}
+
+// Все действия — один обработчик: намерение приходит полем op, а не адресом. Так страж
+// CsrfCoverageTest видит одну точку проверки, а журнал — одно событие на действие.
+/** @param array<string, string> $params */
+function coreAdminAppsAction(array $params = []): void
+{
+    csrfCheck();
+
+    // Право «управлять приложениями» проверяет гейт маршрута (permission => 'manage' в core/router.php),
+    // и только он: повторная сверка роли в обработчике дала бы второй источник истины о праве.
+    $op = postString('op');
+    $app = postString('app');
+
+    if ($op === 'update-core') {
+        $plan = planApp('core');
+        $result = $plan->isEmpty() ? ['ok' => true, 'error' => ''] : applyApp($plan);
+        finishAppAction($result, '/admin/apps', $plan->isEmpty() ? '' : 'updated');
+
+        return;
+    }
+
+    if ($app === '' || appManifest($app) === null) {
+        redirect('/admin/apps?error=' . rawurlencode('Раздел не найден в сборке.'));
+    }
+
+    $result = match ($op) {
+        'install' => installApp($app),
+        'update' => updateApp($app),
+        'disable' => setAppEnabled($app, false),
+        'enable' => setAppEnabled($app, true),
+        default => ['ok' => false, 'error' => 'Неизвестное действие.'],
+    };
+
+    $notice = match ($op) {
+        'install' => 'installed',
+        'update' => 'updated',
+        'disable' => 'disabled',
+        'enable' => 'enabled',
+        default => '',
+    };
+
+    finishAppAction($result, '/admin/apps', $notice);
+}
+
+/**
+ * Отказ показывается текстом на той же странице, а не исключением: человек читает причину
+ * и решает, что делать. Успех — PRG-редирект с ключом уведомления.
+ *
+ * @param array{ok: bool, error?: string} $result
+ */
+function finishAppAction(array $result, string $to, string $notice): void
+{
+    if (($result['ok'] ?? false) === false) {
+        redirect($to . '?error=' . rawurlencode((string) ($result['error'] ?? 'Действие не удалось.')));
+    }
+
+    if ($notice === '') {
+        redirect($to);
+    }
+
+    redirectWithNotice($to, $notice);
 }
 
 // Куда пускаем после входа: только внутренний путь, который начинается с одного «/» и дальше не
