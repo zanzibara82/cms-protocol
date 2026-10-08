@@ -19,9 +19,12 @@ require dirname(__DIR__) . '/core/bootstrap.php';
 
 securityHeaders();
 
-// Домашняя страница регистрируется здесь временно: с задачи 6 её отдаёт registerCoreRoutes().
-addRoute('GET', '/', static function (): void {
-    render('home', [], ['title' => (string) configValue('SITE_NAME', 'Школа'), 'description' => 'Сайт школы английского языка']);
-});
+// Сессию поднимаем до маршрутизатора: обработчик /login обязан увидеть его сразу после входа,
+// а гейт приватных путей — прочитать номер версии из неё.
+startSession();
+
+// Домашняя страница, вход и выход живут в ядре: registerCoreRoutes() регистрирует их вместо
+// временной строки задачи 5.
+registerCoreRoutes();
 
 dispatch();

@@ -14,5 +14,6 @@ putenv('CMS_EXTRA_THEME_DIR=' . dirname(__DIR__) . '/tests/fixtures/theme');
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 require dirname(__DIR__) . '/core/bootstrap.php';
-require dirname(__DIR__) . '/core/db.php';
+// core/db.php больше не подключается здесь: он входит в список core/bootstrap.php (задача 6),
+// а отдельный require привёл бы к «Cannot redeclare db()».
 require dirname(__DIR__) . '/tests/TestDb.php';

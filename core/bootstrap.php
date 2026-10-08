@@ -10,11 +10,16 @@ require_once __DIR__ . '/config-loader.php';
 require_once __DIR__ . '/log.php';
 require_once __DIR__ . '/text.php';
 require_once __DIR__ . '/id.php';
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/hooks.php';
 require_once __DIR__ . '/template.php';
 require_once __DIR__ . '/request.php';
 require_once __DIR__ . '/response.php';
 require_once __DIR__ . '/router.php';
+require_once __DIR__ . '/auth.php';
+// routes.php идёт после auth.php, request.php и router.php: его обработчики регистрируются через addRoute().
+require_once __DIR__ . '/routes.php';
 
 // Классы ядра (Mailer, SmtpSocket, MigrationPlan) подгружаются по имени.
 spl_autoload_register(static function (string $class): void {

@@ -32,9 +32,7 @@ final class TestDb
         insert('user', [
             'id' => $id,
             'email' => $email,
-            // hashPassword() появится в core/auth.php вместе с задачей 6; здесь — осознанная
-            // ранняя ссылка: helper готов заранее, тесты задачи 3 его не вызывают.
-            'password_hash' => hashPassword($password), // @phpstan-ignore function.notFound
+            'password_hash' => hashPassword($password),
             'name' => 'Тестовый редактор',
             'role' => $role,
             'session_version' => 0,

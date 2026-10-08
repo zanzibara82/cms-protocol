@@ -111,14 +111,14 @@ function dispatch(): void
     }
 
     $app = (string) ($match['meta']['app'] ?? '');
-    // isAppActive() появится в задаче 8, getEditorAccess() — в задаче 6: это осознанная ранняя ссылка,
-    // до них dispatch() вызывают только маршруты без меток app и private.
+    // isAppActive() появится в задаче 8: это осознанная ранняя ссылка, до неё
+    // dispatch() вызывают только маршруты без метки app.
     if ($app !== '' && !isAppActive($app)) { // @phpstan-ignore function.notFound
         notFound();
     }
 
     if (($match['meta']['private'] ?? false) === true) {
-        $access = getEditorAccess(); // @phpstan-ignore function.notFound
+        $access = getEditorAccess();
         if ($access['kind'] !== 'granted') {
             if ($method === 'GET' && ($match['meta']['permission'] ?? 'editor') === 'login') {
                 redirect('/login?next=' . rawurlencode(requestPath()));
