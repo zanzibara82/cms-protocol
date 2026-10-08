@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS tbl_demo_note (
+  id VARCHAR(26) NOT NULL,
+  title VARCHAR(120) NOT NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

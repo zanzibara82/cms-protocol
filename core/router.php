@@ -111,19 +111,28 @@ function dispatch(): void
     }
 
     $app = (string) ($match['meta']['app'] ?? '');
-    // isAppActive() появится в задаче 8: это осознанная ранняя ссылка, до неё
-    // dispatch() вызывают только маршруты без метки app.
-    if ($app !== '' && !isAppActive($app)) { // @phpstan-ignore function.notFound
+    if ($app !== '' && !isAppActive($app)) {
         notFound();
     }
 
-    if (($match['meta']['private'] ?? false) === true) {
+    $permission = (string) ($match['meta']['permission'] ?? '');
+    $private = ($match['meta']['private'] ?? false) === true || $permission !== '';
+
+    if ($private) {
         $access = getEditorAccess();
+
         if ($access['kind'] !== 'granted') {
-            if ($method === 'GET' && ($match['meta']['permission'] ?? 'editor') === 'login') {
+            // Анонима отправляем на вход, а не в 403: человек с истёкшей сессией должен попасть
+            // на форму, а не в тупик. Для POST редирект теряет тело, поэтому остаётся 403.
+            if ($method === 'GET' && in_array($permission, ['login', 'manage'], true)) {
                 redirect('/login?next=' . rawurlencode(requestPath()));
             }
+
             forbidden();
+        }
+
+        if ($permission === 'manage' && !grantsAppManage()) {
+            forbidden('Раздел доступен только администратору.');
         }
     }
 

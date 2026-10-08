@@ -23,6 +23,12 @@ require_once __DIR__ . '/router.php';
 require_once __DIR__ . '/auth.php';
 // routes.php идёт после auth.php, request.php и router.php: его обработчики регистрируются через addRoute().
 require_once __DIR__ . '/routes.php';
+// Реестр приложений подключается после маршрутизатора: его функции нужны dispatch()-гейту и админке.
+require_once __DIR__ . '/apps.php';
+// Миграции читают реестр (planApp сверяет манифесты), поэтому идут сразу после него.
+require_once __DIR__ . '/migrations.php';
+// Настройки сайта читают установщик и экраны админки, поэтому подключаются до них.
+require_once __DIR__ . '/options.php';
 
 // Классы ядра (Mailer, SmtpSocket, MigrationPlan) подгружаются по имени.
 spl_autoload_register(static function (string $class): void {

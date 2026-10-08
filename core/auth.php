@@ -51,6 +51,18 @@ function roleGrantsManage(?array $account): bool
     return in_array((string) ($account['role'] ?? ''), [ROLES['admin'], ROLES['editor']], true);
 }
 
+// Установка и обновление разделов меняют схему базы — это право только администратора.
+// roleGrantsManage() шире: она пускает и редактора, поэтому для /admin/apps нужна отдельная проверка.
+function grantsAppManage(): bool
+{
+    $user = currentUser();
+    if ($user === null || $user['blocked_at'] !== null) {
+        return false;
+    }
+
+    return (string) $user['role'] === ROLES['admin'];
+}
+
 // Одна формулировка «кто правит контентом»: её читают и гейт маршрута, и POST-обработчики.
 // Аноним получает редирект на /login (для GET) или 403 (для приватного пути админки раздела).
 /** @return array{kind: 'granted', editor: array{id: string, email: string}}|array{kind: 'denied'} */
