@@ -13,13 +13,37 @@ function &routeRegistry(): array
     return $routes;
 }
 
+/**
+ * Собирает регулярку маршрута из нормализованного шаблона: сегменты {имя} становятся именованными
+ * группами «[^/]+», прочие символы уходят в паттерн как есть. Общий код для регистрации (где проверка
+ * на валидность) и сопоставления — иначе два места могли бы расходиться и собирать разные регулярки.
+ */
+function routeRegex(string $pattern): string
+{
+    return '#^' . preg_replace_callback(
+        '/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/',
+        static fn (array $m): string => '(?P<' . $m[1] . '>[^/]+)',
+        $pattern
+    ) . '$#u';
+}
+
 /** @param array<string, mixed> $meta */
 function addRoute(string $method, string $pattern, string|Closure $handler, array $meta = []): void
 {
+    $normalized = '/' . trim($pattern, '/');
+
+    // Шаблон пишет разработчик, но опечатка в спецсимволе — «#» у нас разделитель — рвёт паттерн:
+    // preg_match тогда молча вернул бы false, и маршрут исчез бы без единой ошибки. Собираем регулярку
+    // и проверяем её на регистрации, а не на сопоставлении, чтобы упасть громко и назвать виновника.
+    // Предупреждение PCRE гасим: о невалидности сигналят false и preg_last_error(), а не шум в выводе.
+    if (@preg_match(routeRegex($normalized), '') === false && preg_last_error() !== PREG_NO_ERROR) {
+        throw new \LogicException(sprintf('Некорректный шаблон маршрута «%s»: регулярка не собралась.', $normalized));
+    }
+
     $registry = &routeRegistry();
     $registry[] = [
         'method' => strtoupper($method),
-        'pattern' => '/' . trim($pattern, '/'),
+        'pattern' => $normalized,
         'handler' => $handler,
         'meta' => $meta,
         'static' => !str_contains($pattern, '{'),
@@ -56,12 +80,9 @@ function matchRoute(string $method, string $path): ?array
         }
 
         // Шаблон пишется в коде ядра или приложения, а не приходит из запроса, поэтому подстановка
-        // сегментов в регулярку безопасна: значение {slug} ограничено «[^/]+».
-        $regex = '#^' . preg_replace_callback(
-            '/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/',
-            static fn (array $m): string => '(?P<' . $m[1] . '>[^/]+)',
-            $route['pattern']
-        ) . '$#u';
+        // сегментов в регулярку безопасна: значение {slug} ограничено «[^/]+». Регулярку собирает тот
+        // же routeRegex, что и проверка на регистрации, — сопоставление видит ровно тот паттерн, что одобрен.
+        $regex = routeRegex($route['pattern']);
 
         if (preg_match($regex, $clean, $matches) === 1) {
             $params = [];

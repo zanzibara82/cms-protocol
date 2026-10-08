@@ -13,6 +13,9 @@ final class Kernel
 
     private static ?string $cookieJar = null;
 
+    /** @var resource|null ресурс php -S, который подняли именно мы: им гасит stop() */
+    private static $process = null;
+
     /**
      * @param array<string, string> $env переменные окружения сервера сверх обязательных.
      *        Так тест подставляет `CMS_EXTRA_APPS_DIR` с фикстурами приложений: каталог нужен
@@ -21,6 +24,18 @@ final class Kernel
      */
     public static function start(array $env = []): void
     {
+        // Порт обязан быть свободен до запуска. Иначе wait() подключится к зависшему серверу прошлого
+        // прогона (возможно, с другим окружением), а наш процесс упадёт с «Address already in use» в
+        // /dev/null — и проверки молча пойдут не в тот сервер. Падаем громко и называем виновника.
+        if (self::portBusy()) {
+            throw new \RuntimeException(sprintf(
+                'Порт %d занят чужим процессом (%s:%d): остановите висящий php -S перед запуском http-набора.',
+                self::PORT,
+                self::HOST,
+                self::PORT
+            ));
+        }
+
         $root = dirname(__DIR__, 2);
         self::$cookieJar = tempnam(sys_get_temp_dir(), 'cms-cookies-') ?: '/tmp/cms-cookies';
 
@@ -44,12 +59,22 @@ final class Kernel
         if (!is_resource($process)) {
             throw new \RuntimeException('Не удалось запустить php -S');
         }
+        self::$process = $process;
 
         self::wait();
     }
 
     public static function stop(): void
     {
+        // Гасим прежде всего собственный процесс: proc_terminate закрывает того ребёнка, что мы
+        // породили, даже если набор упал до готовности сервера. pkill остаётся сверху — он снимает
+        // самого php -S (внук оболочки proc_open), которого proc_terminate не всегда добирает.
+        if (is_resource(self::$process)) {
+            proc_terminate(self::$process);
+            proc_close(self::$process);
+            self::$process = null;
+        }
+
         exec('pkill -f "php -S ' . self::HOST . ':' . self::PORT . '" 2>/dev/null || true');
         if (self::$cookieJar !== null && is_file(self::$cookieJar)) {
             unlink(self::$cookieJar);
@@ -144,5 +169,18 @@ final class Kernel
         }
 
         throw new \RuntimeException('Сервер php -S не поднялся за 10 секунд');
+    }
+
+    /** Проба порта до спавна: если на нём уже кто-то слушает, это чужой сервер, а не наш. */
+    private static function portBusy(): bool
+    {
+        $socket = @fsockopen(self::HOST, self::PORT, $errno, $errstr, 0.2);
+        if (is_resource($socket)) {
+            fclose($socket);
+
+            return true;
+        }
+
+        return false;
     }
 }

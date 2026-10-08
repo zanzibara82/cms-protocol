@@ -90,4 +90,14 @@ final class RouterTest extends TestCase
 
         self::assertSame('newsFeed', matchRoute('GET', '/news?page=2')['handler']);
     }
+
+    public function testНекорректныйШаблонПадаетПриРегистрации(): void
+    {
+        // «#» — наш разделитель регулярки: в шаблоне он рвёт паттерн, и без проверки preg_match
+        // молча вернул бы false — маршрут исчез бы без ошибки. Регистрация обязана упасть громко.
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('/news#blog');
+
+        addRoute('GET', '/news#blog', 'newsFeed');
+    }
 }
