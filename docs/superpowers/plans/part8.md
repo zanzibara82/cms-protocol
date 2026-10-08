@@ -1111,6 +1111,7 @@ declare(strict_types=1);
 // Один `nowUtc()` на экран: вкладки, закрепление и «ещё не время» разбираются по одному моменту,
 // иначе счётчики разошлись бы между собой на границе срока.
 
+/** @param array<string, string> $params */
 function newsAdminSummary(array $params = []): void
 {
     $now = nowUtc();
@@ -1127,6 +1128,7 @@ function newsAdminSummary(array $params = []): void
     ], ['title' => 'Новости — админка', 'noindex' => true]);
 }
 
+/** @param array<string, string> $params */
 function newsAdminItems(array $params = []): void
 {
     $filters = parseAdminFilters([
@@ -1163,6 +1165,7 @@ declare(strict_types=1);
 //
 // Право на переход проверяет lib/items.php, а не набор кнопок на экране: человек может послать
 // op=pin черновику хоть curl'ом, и он обязан получить тот же отказ, что и тот, кто читает текст.
+/** @param array<string, string> $params */
 function newsItemsAction(array $params = []): void
 {
     csrfCheck();
@@ -2644,11 +2647,13 @@ Expected: FAIL — `/news/admin/items/new` отвечает 404: маршрут�
 // `getEditorAccess()`: роль и блокировка могли измениться посреди открытой формы, и имя автора
 // обязано соответствовать тому, кто сейчас за клавиатурой.
 
+/** @param array<string, string> $params */
 function newsItemNew(array $params = []): void
 {
     renderNewsItemForm([], [], [], newsAdminBackHref((string) queryString('back', '')));
 }
 
+/** @param array<string, string> $params */
 function newsItemEdit(array $params = []): void
 {
     $id = mb_substr(trim((string) ($params['id'] ?? '')), 0, NEWS_ID_MAX);
@@ -2716,6 +2721,7 @@ declare(strict_types=1);
 //
 // Успех уходит PRG-редиректом, отказ остаётся на этом же адресе ответом 200: редирект потерял бы
 // набранный текст, а §8.3 требует вернуть его в форму.
+/** @param array<string, string> $params */
 function newsItemSaveAction(array $params = []): void
 {
     csrfCheck();

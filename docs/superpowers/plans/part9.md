@@ -786,6 +786,7 @@ declare(strict_types=1);
 // Идентификатор режется тем же пределом, что и в фильтрах списка: чужая строка в 400 символов
 // не обязана уходить в `WHERE id = ?` целиком.
 
+/** @param array<string, string> $params */
 function newsCategoriesAction(array $params = []): void
 {
     csrfCheck();
@@ -808,6 +809,7 @@ function newsCategoriesAction(array $params = []): void
     finishAppAction($result, NEWS_ADMIN_CATEGORIES_PATH, (string) ($result['notice'] ?? ''));
 }
 
+/** @param array<string, string> $params */
 function newsTagsAction(array $params = []): void
 {
     csrfCheck();
@@ -839,6 +841,7 @@ function catalogUnknown(string $what): string
 // не проверяются — гейт маршрута (permission => 'login') делает это раньше, и вторая проверка
 // была бы вторым описанием того же правила.
 
+/** @param array<string, string> $params */
 function newsAdminCategories(array $params = []): void
 {
     render('news/admin/categories', [
@@ -851,6 +854,7 @@ function newsAdminCategories(array $params = []): void
     ], ['title' => 'Рубрики — админка', 'noindex' => true]);
 }
 
+/** @param array<string, string> $params */
 function newsAdminTags(array $params = []): void
 {
     render('news/admin/tags', [
@@ -866,6 +870,7 @@ function newsAdminTags(array $params = []): void
 Контроллер сводки тоже меняется — целиком, тем же телом с двумя новыми ключами:
 
 ```php
+/** @param array<string, string> $params */
 function newsAdminSummary(array $params = []): void
 {
     $now = nowUtc();

@@ -551,6 +551,7 @@ function registerCoreRoutes(): void
     addRoute('POST', '/logout', 'coreLogout');
 }
 
+/** @param array<string, string> $params */
 function coreHome(array $params = []): void
 {
     render('home', [], [
@@ -559,6 +560,7 @@ function coreHome(array $params = []): void
     ]);
 }
 
+/** @param array<string, string> $params */
 function coreLoginPage(array $params = []): void
 {
     if (currentUser() !== null) {
@@ -568,6 +570,7 @@ function coreLoginPage(array $params = []): void
     render('login', ['error' => '', 'email' => queryString('email', '')], ['title' => 'Вход', 'noindex' => true]);
 }
 
+/** @param array<string, string> $params */
 function coreLoginSubmit(array $params = []): void
 {
     $email = postString('email');
@@ -584,6 +587,7 @@ function coreLoginSubmit(array $params = []): void
     redirect(is_string($next) && isInternalNextPath($next) ? $next : '/admin');
 }
 
+/** @param array<string, string> $params */
 function coreLogout(array $params = []): void
 {
     logoutUser();
@@ -1293,6 +1297,7 @@ Expected: PASS.
 второго метода с тем же именем в файле быть не должно:
 
 ```php
+/** @param array<string, string> $params */
 function coreLoginSubmit(array $params = []): void
 {
     csrfCheck();
@@ -1323,6 +1328,7 @@ function coreLoginSubmit(array $params = []): void
 `coreLoginPage()` путь тоже фильтруется и уезжает в шаблон отдельной переменной, а не остаётся в URL.
 
 ```php
+/** @param array<string, string> $params */
 function coreLogout(array $params = []): void
 {
     csrfCheck();

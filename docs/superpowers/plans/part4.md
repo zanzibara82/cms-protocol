@@ -140,11 +140,13 @@ declare(strict_types=1);
 addRoute('GET', '/demo', 'demoFeed', ['app' => 'demo']);
 addRoute('GET', '/demo/admin', 'demoAdmin', ['app' => 'demo', 'private' => true, 'permission' => 'login']);
 
+/** @param array<string, string> $params */
 function demoFeed(array $params = []): void
 {
     respond(200, 'Демонстрационная лента', ['Content-Type' => 'text/plain; charset=utf-8']);
 }
 
+/** @param array<string, string> $params */
 function demoAdmin(array $params = []): void
 {
     respond(200, 'Демонстрационная админка', ['Content-Type' => 'text/plain; charset=utf-8']);
@@ -181,6 +183,7 @@ declare(strict_types=1);
 
 addRoute('GET', '/future', 'futureFeed', ['app' => 'future']);
 
+/** @param array<string, string> $params */
 function futureFeed(array $params = []): void
 {
     respond(200, 'Лента раздела из будущего', ['Content-Type' => 'text/plain; charset=utf-8']);
@@ -2023,6 +2026,7 @@ $alert = $error === ''
 и четыре функции после `coreLogout()`:
 
 ```php
+/** @param array<string, string> $params */
 function coreAdminSummary(array $params = []): void
 {
     $apps = [];
@@ -2054,6 +2058,7 @@ function coreAdminSummary(array $params = []): void
     ], ['title' => 'Сводка — админка', 'noindex' => true]);
 }
 
+/** @param array<string, string> $params */
 function coreAdminApps(array $params = []): void
 {
     $rows = [];
@@ -2080,6 +2085,7 @@ function coreAdminApps(array $params = []): void
 
 // Все действия — один обработчик: намерение приходит полем op, а не адресом. Так страж
 // CsrfCoverageTest видит одну точку проверки, а журнал — одно событие на действие.
+/** @param array<string, string> $params */
 function coreAdminAppsAction(array $params = []): void
 {
     csrfCheck();
@@ -2927,6 +2933,7 @@ function robotsTxt(): string
 и два контроллера после `coreRobots`-соседей:
 
 ```php
+/** @param array<string, string> $params */
 function coreSitemap(array $params = []): void
 {
     respond(200, sitemapXml(), [
@@ -2936,6 +2943,7 @@ function coreSitemap(array $params = []): void
     ]);
 }
 
+/** @param array<string, string> $params */
 function coreRobots(array $params = []): void
 {
     respond(200, robotsTxt(), [

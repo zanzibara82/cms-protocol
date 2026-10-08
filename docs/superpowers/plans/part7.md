@@ -2830,6 +2830,7 @@ addRoute('GET', '/news/c/{slug}', 'newsCategoryPage', ['app' => 'news']);
 addRoute('GET', '/news/t/{slug}', 'newsTagPage', ['app' => 'news']);
 addRoute('GET', '/news/{slug}', 'newsSinglePage', ['app' => 'news']);
 
+/** @param array<string, string> $params */
 function newsFeedPage(array $params = []): void
 {
     $requested = trim((string) queryString('cat', ''));
@@ -2873,6 +2874,7 @@ function newsFeedPage(array $params = []): void
     ]);
 }
 
+/** @param array<string, string> $params */
 function newsCategoryPage(array $params = []): void
 {
     $slug = trim((string) ($params['slug'] ?? ''));
@@ -2905,6 +2907,7 @@ function newsCategoryPage(array $params = []): void
     ]);
 }
 
+/** @param array<string, string> $params */
 function newsTagPage(array $params = []): void
 {
     $slug = trim((string) ($params['slug'] ?? ''));
@@ -2937,6 +2940,7 @@ function newsTagPage(array $params = []): void
     ]);
 }
 
+/** @param array<string, string> $params */
 function newsSinglePage(array $params = []): void
 {
     $slug = trim((string) ($params['slug'] ?? ''));
