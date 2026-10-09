@@ -17,5 +17,5 @@ $natural = imageNaturalSize('assets/' . $file);
 $height = $natural[0] > 0 ? (int) round($width * $natural[1] / $natural[0]) : $width;
 $lazy = (bool) ($lazy ?? false);
 ?>
-<img src="/assets/<?= e($file) ?>" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
+<img src="/assets/<?= e($file) ?>" class="cat-idle" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
      alt="Кот-талисман школы"<?php if ($lazy): ?> loading="lazy" decoding="async"<?php endif; ?>>

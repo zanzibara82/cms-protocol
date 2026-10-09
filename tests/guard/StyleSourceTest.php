@@ -229,6 +229,65 @@ final class StyleSourceTest extends TestCase
         ));
     }
 
+    public function testКлассыИсточникаСтилейИспользуютсяВРазметке(): void
+    {
+        // Обратное направление к проверке артефакта: там классы собранного файла сверяются с
+        // источниками, а источник стилей входит в sourcesBlob(), поэтому объявленное, но не
+        // использованное правило объясняет само себя собственной строкой определения и остаётся
+        // невидимым. Здесь каждый собственный класс исходника обязан стоять хотя бы в одном
+        // атрибуте class разметки — иначе он едет в артефакт мёртвым грузом, а человек его не видит.
+        $defined = $this->definedClasses($this->sourceConfig());
+
+        // Пустой список объявлений превратил бы страж в зелёную заглушку: сверять было бы нечего.
+        self::assertNotEmpty($defined, 'В исходнике стилей нет ни одного объявленного класса — проверять нечего');
+
+        $markup = '';
+        foreach ($this->markupFiles() as $path) {
+            $markup .= (string) file_get_contents($path) . "\n";
+        }
+
+        $unused = $this->unusedDefinitions($defined, $markup);
+
+        self::assertSame(
+            [],
+            $unused,
+            'Класс объявлен в ' . self::SOURCE_FILE . ', но не стоит ни в одном атрибуте class разметки: '
+            . implode(', ', $unused) . ' — правило печатается в артефакт, которого человек не видит'
+        );
+    }
+
+    // Самопроверки обратного стража: ловится ли мёртвое объявление и не ловит ли оно то, что
+    // классом не является (комментарий, директива сборщика, подстрока соседнего имени).
+    public function testСтражЛовитОбъявленныйНоНеиспользованныйКласс(): void
+    {
+        self::assertSame(['cat-idle'], $this->unusedDefinitions(['cat-idle'], '<div>без класса</div>'));
+        self::assertSame([], $this->unusedDefinitions(['cat-idle'], '<img class="cat-idle">'));
+
+        // Граница токена: «idle» в разметке не имеет права объяснять «cat-idle».
+        self::assertSame(['cat-idle'], $this->unusedDefinitions(['cat-idle'], '<div class="idle">'));
+
+        self::assertSame(['probe-idle'], $this->definedClasses('.probe-idle { animation: none; }'));
+
+        // Имя из комментария объявлением не считается: Tailwind со `source(none)` его не собирает.
+        self::assertSame([], $this->definedClasses("/* .comment-only */\nbody { color: red; }"));
+
+        // Дедупликация внутри вложенного блока: имя находится один раз, хотя селекторов у него два.
+        self::assertSame(
+            ['cat-idle'],
+            $this->definedClasses('@media (prefers-reduced-motion: reduce) { .cat-idle { animation: none; } }')
+        );
+
+        // Директива сборщика — не класс: без её вырезания страж краснеет на имени `php`,
+        // которое классом не является, а следующий читатель начнёт «чинить» не своё.
+        self::assertSame([], $this->definedClasses('@source "../theme/**/*.php";'));
+
+        // Тот же случай в собранном виде: ни `php`, ни `png`, ни `none` не протаскиваются в список.
+        self::assertSame(
+            ['cat-idle'],
+            $this->definedClasses("@import 'tailwindcss' source(none);\n@source \"../t/**/*.php\";\nurl(a.png)\n.cat-idle { animation: none; }")
+        );
+    }
+
     /** @return list<string> */
     private function sourceProblems(string $config): array
     {
@@ -247,7 +306,8 @@ final class StyleSourceTest extends TestCase
         }
 
         // Кавычки директивы бывают оба вида: CSS их не различает, поэтому чёрный список обязан
-        // видеть и «"…"», и «'…'» — иначе источник в одинарных кавычках прошёл бы проверку конфига.
+        // видеть и «"…"», и «'…'» — иначе источник в одинарных кавычках прошёл бы проверку
+        // конфигурации сборки.
         if (preg_match_all('~@source[\n\r\t ]+(["\'])([^"\']*)\1~', $config, $found, PREG_SET_ORDER) > 0) {
             foreach ($found as $directive) {
                 $quote = (string) $directive[1];
@@ -316,6 +376,55 @@ final class StyleSourceTest extends TestCase
         $classes = $this->classSelectors($artifact);
 
         return array_values(array_diff($this->classAttributeTokens($code), $classes));
+    }
+
+    /**
+     * Собственные классы, объявленные правилами исходника стилей.
+     *
+     * Порядок вырезания обязательный: сначала комментарии, затем директивы сборщика. Комментарий
+     * с названием утилиты не обязан собираться (`source(none)` читает только разметку), а в строке
+     * директивы `@source` точка есть у глобуса и у расширения php-файла — наивный поиск выдал бы
+     * «php» в списке классов, и страж краснел бы по причине, которая классом не является.
+     * Граница селектора в регулярном выражении держит ровно это: `.png` в `url(a.png)` закрывающей
+     * скобкой не считается классом, а `@theme`-токены (`--color-ink`), элементы (`html`, `body`,
+     * `section[id]`) и псевдокласс (`:focus-visible`) в список не попадают вовсе.
+     *
+     * @return list<string>
+     */
+    private function definedClasses(string $sourceCss): array
+    {
+        $sourceCss = (string) preg_replace('~/\*.*?\*/~s', ' ', $sourceCss);
+        $sourceCss = (string) preg_replace('~^\s*@(import|source)\b[^;]*;~m', '', $sourceCss);
+
+        $classes = [];
+
+        // Разделитель `~` внутри класса экранирован: без экранирования PHP видит в `~]` конец
+        // шаблона и падает с «Unknown modifier», а список границ селектора обязан остаться
+        // ровно таким: пробел, двоеточие, запятая, плюс, `>` и `~`.
+        if (preg_match_all('~\.([a-z][a-z0-9_-]*)(?=[\s,:>+\~])~', $sourceCss, $found) > 0) {
+            foreach ($found[1] as $class) {
+                // Дедупликация обязательна: `.cat-idle` стоит в источнике четыре раза (правило,
+                // два селектора `a:hover`/`a:focus-visible` и блок `prefers-reduced-motion`),
+                // а находить надо имя один раз.
+                $classes[$class] = true;
+            }
+        }
+
+        return array_keys($classes);
+    }
+
+    /**
+     * Объявления исходника, которым не нашлось места в атрибутах class разметки.
+     *
+     * @param list<string> $defined
+     *
+     * @return list<string>
+     */
+    private function unusedDefinitions(array $defined, string $markup): array
+    {
+        // Сравнивать разрешено только с разметкой: приклеить сюда sourceConfig() означало бы
+        // вернуть исходный дефект — объявленный класс объяснял бы сам себя своей же строкой.
+        return array_values(array_diff($defined, $this->classAttributeTokens($markup)));
     }
 
     /**
