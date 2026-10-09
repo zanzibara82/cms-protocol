@@ -49,9 +49,10 @@ final class CsrfCoverageTest extends TestCase
 
         foreach ($this->phpFiles() as $file) {
             $code = (string) file_get_contents($file);
-            $forms += count($this->formExtents($code));
+            $scan = $this->formsScan($code, $this->relative($file));
+            $forms += $scan['forms'];
 
-            foreach ($this->formViolations($code, $this->relative($file)) as $violation) {
+            foreach ($scan['violations'] as $violation) {
                 $violations[] = $violation;
             }
         }
@@ -87,22 +88,36 @@ PHP;
 return '<form method="post">' . csrfField() . '</form><form method="post">';
 PHP;
 
-        self::assertCount(2, $this->formExtents($both), 'Обход не увидел обе формы в одном файле');
-        self::assertSame([], $this->formViolations($both, 'probe.php'), 'Страж ложно сработал на корректные формы');
-        self::assertCount(
-            1,
-            $this->formViolations($secondWithoutToken, 'probe.php'),
-            'Вторая форма в том же файле осталась незамеченной'
-        );
-        self::assertCount(
-            1,
-            $this->formViolations($firstWithoutToken, 'probe.php'),
-            'Первая форма в файле с несколькими формами осталась незамеченной'
+        self::assertSame(2, $this->formsScan($both)['forms'], 'Обход не увидел обе формы в одном файле');
+        self::assertSame([], $this->formsScan($both)['violations'], 'Страж ложно сработал на корректные формы');
+        self::assertSame(
+            ['probe.php, строка 3: форма method="post" без поля токена внутри своих границ'],
+            $this->formsScan($secondWithoutToken)['violations'],
+            'Вторая форма в том же файле не найдена или названа без номера строки'
         );
         self::assertSame(
-            ['probe.php: форма method="post" не закрыта — её границы не измерить'],
-            $this->formViolations($unclosed, 'probe.php'),
-            'Незакрытая вторая форма не найдена'
+            ['probe.php, строка 2: форма method="post" без поля токена внутри своих границ'],
+            $this->formsScan($firstWithoutToken)['violations'],
+            'Первая форма в файле с несколькими формами не найдена или названа без номера строки'
+        );
+        self::assertSame(
+            ['probe.php, строка 2: форма method="post" не закрыта — её границы не измерить'],
+            $this->formsScan($unclosed, 'probe.php')['violations'],
+            'Незакрытая вторая форма не найдена или названа без номера строки'
+        );
+
+        // Разметка «</FORM>» и «</form >» равноправна «</form>»: поиск подстрокой считал бы
+        // такую форму незакрытой и краснил ворота на корректном коде.
+        $closedUpper = <<<'PHP'
+<?php
+return '<form method="post">' . csrfField() . '</FORM>'
+    . '<form method="post"> <input name="op" value="enable"></form >';
+PHP;
+
+        self::assertSame(
+            ['probe.php, строка 3: форма method="post" без поля токена внутри своих границ'],
+            $this->formsScan($closedUpper)['violations'],
+            'Форма с закрывающим тегом в другом регистре посчитана незакрытой'
         );
     }
 
@@ -561,26 +576,34 @@ PHP;
         return $out;
     }
 
-    /** @return list<string> находки по формам одного файла */
-    private function formViolations(string $code, string $relative): array
+    /**
+     * Разбор форм одного файла: сколько POST-форм найдено и какие из них не несут поля токена.
+     * Обход один — количество и находки считаются по одному списку позиций.
+     *
+     * @return array{forms: int, violations: list<string>}
+     */
+    private function formsScan(string $code, string $relative = 'probe.php'): array
     {
-        $out = [];
+        $extents = $this->formExtents($code);
+        $violations = [];
 
-        foreach ($this->formExtents($code) as $open) {
-            $close = strpos($code, '</form>', $open);
-            if ($close === false) {
-                $out[] = $relative . ': форма method="post" не закрыта — её границы не измерить';
+        foreach ($extents as $open) {
+            $line = substr_count(substr($code, 0, $open), "\n") + 1;
+            // Закрывающий тег ищется без учёта регистра и с необязательными пробелами: «</FORM>»
+            // и «</form >» — равноправная разметка, а поиск подстрокой оставил бы форму
+            // «незакрытой» и выдал бы ложный отказ.
+            if (preg_match('/<\/form\s*>/i', substr($code, $open), $tail, PREG_OFFSET_CAPTURE) !== 1) {
+                $violations[] = $relative . ', строка ' . $line . ': форма method="post" не закрыта — её границы не измерить';
                 continue;
             }
 
-            $chunk = substr($code, $open, $close - $open);
+            $chunk = substr($code, $open, (int) $tail[0][1]);
             if (preg_match('/csrfField\s*\(\s*\)|name=\\\\?["\']_token["\']/', $chunk) !== 1) {
-                $out[] = $relative . ', строка ' . (substr_count(substr($code, 0, $open), "\n") + 1)
-                    . ': форма method="post" без поля токена внутри своих границ';
+                $violations[] = $relative . ', строка ' . $line . ': форма method="post" без поля токена внутри своих границ';
             }
         }
 
-        return $out;
+        return ['forms' => count($extents), 'violations' => $violations];
     }
 
     /** @return list<string> */
