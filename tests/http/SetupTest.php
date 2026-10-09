@@ -171,12 +171,18 @@ final class SetupTest extends TestCase
         );
     }
 
+    // Замок физически лежит в docroot, поэтому проверяется ровно это: ответ 404, а не «403 или
+    // 404». Прежнее допущение пропускало деградацию барьера до отдачи файла текстом — наружу
+    // ушёл бы штамп времени установки. Содержание замка пишется сюда явным маркером: тест не
+    // зависит от порядка объявления и сверяется с непустым эталоном.
     public function testЗамокНеОтдаётсяФайлом(): void
     {
+        file_put_contents(self::lockPath(), 'маркер-содержимого-замка');
+
         $page = Kernel::get('/install.lock');
 
-        self::assertContains($page['status'], [403, 404]);
-        self::assertStringNotContainsString('install.lock', $page['body']);
+        self::assertSame(404, $page['status']);
+        self::assertStringNotContainsString('маркер-содержимого-замка', $page['body']);
     }
 
     public function testВходСозданнымАдминистраторомРаботает(): void

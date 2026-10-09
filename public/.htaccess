@@ -1,6 +1,24 @@
 # Всё, что не существующий файл или каталог, уходит в единственную точку входа.
+
+# Каталоги не отдаются списком: файлы публичных ассетов доступны по имени и так, а вот
+# их перечень наружу уходить не должен.
+Options -Indexes
+
+# http→https для боевого хоста: без редиректа первый заход по http даёт сессию, в которую
+# Secure-кука просто не ляжет. localhost и 127.0.0.1 исключены — локальная приёмка живёт на
+# http://localhost:8080 без сертификата, и редирект заглушил бы её. Протокол берётся только
+# из самого соединения (%{HTTPS}): условий по подставляемым заголовкам здесь нет намеренно.
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:[0-9]+)?$ [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+    # Фактический ответ замку — 404: файл лежит в docroot, и без этого правила он мог бы
+    # уйти наружу как обычный ответ файла со штампом времени установки.
+    RewriteRule ^install\.lock$ - [R=404,L]
+
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [L]
@@ -13,7 +31,16 @@
     Header always set X-Frame-Options "SAMEORIGIN"
 </IfModule>
 
-# Замок установщика не раздаётся: он обязан отвечать 404, а не скачиваться текстом.
+# Замок установщика не раздаётся: при выключенном mod_rewrite отказ даёт этот блок (403),
+# а правило выше отвечает 404. Обе ветки обёрнуты: «Require all denied» без mod_authz_core —
+# неизвестная директива, то есть 500 на весь сайт, а директивы 2.2 работают ровно там, где
+# mod_authz_core отсутствует.
 <Files "install.lock">
-    Require all denied
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
 </Files>

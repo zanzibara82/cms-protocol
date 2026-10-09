@@ -1,4 +1,7 @@
 services:
+  # Все порты опубликованы только на loopback: без префикса Docker слушает 0.0.0.0, и
+  # MySQL с пустым root-паролем, почтовый UI без аутентификации и dev-сайт становятся
+  # доступны любому хосту локальной сети — стереть cms_test посреди прогона одна команда.
   php:
     build:
       context: .
@@ -8,7 +11,7 @@ services:
     volumes:
       - .:/app
     ports:
-      - '8080:8080'
+      - '127.0.0.1:8080:8080'
     environment:
       CMS_DB_HOST: db
       CMS_DB_PORT: '3306'
@@ -23,9 +26,13 @@ services:
       # Каталог дополнительных приложений: пустая строка — значит «дополнений нет».
       CMS_EXTRA_APPS_DIR: ''
     command: php -S 0.0.0.0:8080 -t public public/index.php
+    # mailpit обязана подняться вместе с базой: иначе прогон с SMTP-тестом падает по
+    # connection refused из-за порядка старта контейнеров, а не из-за кода.
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
   db:
     image: mysql:8.0
@@ -37,7 +44,7 @@ services:
     # cms_dev и cms_test с нужным COLLATE создаёт docker/mysql-init.sql.
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
-      - '3307:3306'
+      - '127.0.0.1:3307:3306'
     volumes:
       - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - cms-db-data:/var/lib/mysql
@@ -51,7 +58,7 @@ services:
     image: axllent/mailpit
     container_name: cms-mailpit-1
     ports:
-      - '8025:8025'
+      - '127.0.0.1:8025:8025'
 
 volumes:
   cms-db-data:
