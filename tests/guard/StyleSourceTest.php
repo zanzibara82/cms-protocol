@@ -21,7 +21,12 @@ use PHPUnit\Framework\TestCase;
 // 4) каждый класс из атрибутов разметки лежит в артефакте, включая обязательную зону нажатия.
 final class StyleSourceTest extends TestCase
 {
-    /** Каталоги разметки: они же обязаны быть объявлены директивами @source в src-css/app.css. */
+    /**
+     * Каталоги разметки: они же обязаны быть объявлены директивами @source в src-css/app.css.
+     * Скан стража нарочно шире каталогов сборки (`@source` по приложениям сужен до `templates/`):
+     * класс из php-файла приложения вне `templates/` обязан краснеть проверкой «каждый класс
+     * разметки собран в артефакте», а не выпадать из обеих проверок.
+     */
     private const MARKUP_DIRS = ['theme', 'admin', 'core/templates', 'apps'];
 
     /** Где вообще ядро и приложения печатают HTML: просвет между этим списком и MARKUP_DIRS — находка. */
@@ -74,6 +79,16 @@ final class StyleSourceTest extends TestCase
             $this->sourceProblems($working . "\n" . '@source "../tests/**/*.php";'),
             'Объявленный источник из tests/ не пойман'
         );
+
+        // Та же проза в одинарных кавычках: чёрный список не имеет права видеть только двойные.
+        self::assertNotEmpty(
+            $this->sourceProblems($working . "\n" . "@source '../docs/**/*.md';"),
+            'Источник из docs/ в одинарных кавычках не пойман'
+        );
+
+        // Зелёные контрпримеры: легальный источник находки не даёт ни в двойных, ни в одинарных.
+        self::assertSame([], $this->sourceProblems($working . "\n" . '@source "../theme/**/*.php";'));
+        self::assertSame([], $this->sourceProblems($working . "\n" . "@source '../core/templates/**/*.php';"));
 
         // Без импорта Tailwind артефакт не собирается вовсе: молча зелёным это быть не должно.
         self::assertNotEmpty($this->sourceProblems('@source "../theme/**/*.php";'), 'Сборка без @import не поймана');
@@ -149,6 +164,17 @@ final class StyleSourceTest extends TestCase
             'Голое правило объяснилось вариантом с префиксом: мёртвая утилита прошла бы незамеченной'
         );
         self::assertSame([], $this->unexplainedClasses($prefixed, '<a class="bg-ink/5 hover:bg-ink/5">'));
+
+        // Имя утилиты, упомянутое только в комментарии источника, обязано остаться необъяснённым.
+        $artifact = '.mt-\\[13px\\]{margin-top:13px}';
+        $sources = '/* mt-[13px] — не использовать в комментариях */';
+        self::assertSame(['mt-[13px]'], $this->unexplainedClasses($artifact, $sources));
+
+        // Многострочный комментарий — тот же обход.
+        self::assertSame(['mt-[13px]'], $this->unexplainedClasses($artifact, "/* строка\n mt-[13px] — упоминание\n */"));
+
+        // Зелёный контрпример: тот же класс вне комментария объясняет правило как раньше.
+        self::assertSame([], $this->unexplainedClasses($artifact, $sources . '<a class="mt-[13px]">'));
     }
 
     public function testКлассыРазметкиСобралисьВАртефакте(): void
@@ -220,10 +246,15 @@ final class StyleSourceTest extends TestCase
             }
         }
 
-        if (preg_match_all('~@source[\n\r\t ]+"([^"]*)"~', $config, $found) > 0) {
-            foreach ($found[1] as $pattern) {
+        // Кавычки директивы бывают оба вида: CSS их не различает, поэтому чёрный список обязан
+        // видеть и «"…"», и «'…'» — иначе источник в одинарных кавычках прошёл бы проверку конфига.
+        if (preg_match_all('~@source[\n\r\t ]+(["\'])([^"\']*)\1~', $config, $found, PREG_SET_ORDER) > 0) {
+            foreach ($found as $directive) {
+                $quote = (string) $directive[1];
+                $pattern = (string) $directive[2];
+
                 if (preg_match('~(^|/|\.\./)(docs|tests|node_modules|vendor)(/|$)~', $pattern) === 1) {
-                    $problems[] = '@source "' . $pattern . '" объявляет источником прозу или тесты, а не разметку';
+                    $problems[] = '@source ' . $quote . $pattern . $quote . ' объявляет источником прозу или тесты, а не разметку';
                 }
             }
         }
@@ -259,6 +290,13 @@ final class StyleSourceTest extends TestCase
     private function unexplainedClasses(string $artifact, string $sources): array
     {
         $out = [];
+
+        // Комментарии источников вырезаются до сверки: Tailwind со `source(none)` утилиты из текста
+        // `/* … */` не собирает, поэтому имя, случайно названное в комментарии, не имеет права
+        // объяснять правило артефакта. Иначе опечатка в комментарии маскирует настоящий протёк
+        // прозы в собранный файл. Вырезается на входе в сравнение, а не в sourcesBlob(): самопроверки
+        // передают текст источников прямо сюда и обязаны ловить обход на той же мере.
+        $sources = (string) preg_replace('~/\*.*?\*/~s', ' ', $sources);
 
         foreach ($this->classSelectors($artifact) as $class) {
             // Граница токена обязательна: иначе «flex» считается объяснённым классом «inline-flex».

@@ -26,6 +26,15 @@ if node_modules/.bin/tailwindcss -i ./src-css/app.css -o "$css_tmp/app.css" --mi
     diff --unified=0 <(tr ';' '\n' < public/assets/app.css) <(tr ';' '\n' < "$css_tmp/app.css") | head -40 || true
     exit 1
   fi
+  # Сборка, которая прошла, но что-то сказала, — находка: до этой проверки весь вывод шага
+  # выбрасывался вместе с временным каталогом, и предупреждение нового Tailwind (устаревшая
+  # директива, не найденный источник, нечитаемый файл) исчезало молча, оставив ворота зелёными.
+  # Чистый вывод сборки — пара строк про версию и время, порогу там не срабатывать.
+  if grep -qiE 'warn|error|cannot|not found' "$css_tmp/build.log"; then
+    echo 'Сборка стилей прошла без падения, но с предупреждениями — это находка (вывод без предупреждений):' >&2
+    cat "$css_tmp/build.log" >&2
+    exit 1
+  fi
 else
   echo 'Сборка стилей упала:' >&2
   cat "$css_tmp/build.log" >&2
