@@ -16,8 +16,11 @@ echo '— синтаксис'
 # стражи не может повториться после переезда дерева PHP или сбоя прав доступа.
 #
 # Пятый заявленный шаг ворот («вывод тестов без предупреждений») живёт не здесь, а в флагах
-# `phpunit.xml` (`failOnWarning` и `displayDetailsOnTestsThatTriggerWarnings`): читатель ворот
-# должен искать его там, а не добавлять заглушку в этот файл.
+# `phpunit.xml`: `failOnWarning`, `failOnNotice` и `failOnDeprecation` валят прогон на любом
+# предупреждении, notice или устаревании, а `beStrictAboutOutputDuringTests` в паре с
+# `failOnRisky` не даёт тесту напечатать текст вместо проверки — сам по себе этот флаг лишь
+# помечает тест рискованным, и прогон остаётся зелёным. Читатель ворот должен искать их там,
+# а не добавлять заглушку в этот файл.
 run bash -c 'find . -type d \( -name vendor -o -name node_modules -o -name .git \) -prune -o -name "*.php" -print0 \
   > /tmp/php-list.txt; find_status=$?; \
   if [ $find_status -ne 0 ]; then echo "Поиск PHP-файлов упал с кодом $find_status — список не построен, проверять нечего" >&2; exit $find_status; fi; \

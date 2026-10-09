@@ -1596,16 +1596,28 @@ PHP-тегов:
 `render('setup', …)` ищет файл по цепочке `theme/setup.php` → `core/templates/setup.php`; кладите его в
 `core/templates/`, потому что установщик — служебный экран ядра, а не часть темы.
 
-`public/.htaccess` дополняется (после блока `mod_headers`):
+`public/.htaccess` дополняется (после блока `mod_headers`). Голый `Require all denied` в таком
+блоке лежал бы: без `mod_authz_core` это неизвестная директива, то есть 500 на весь сайт, а
+директивы apache 2.2 работают ровно там, где `mod_authz_core` отсутствует. Имя файла берётся без
+регистра: на файловой системе, которая регистра не различает, замок мог быть поднят как
+`INSTALL.LOCK`, и точное имя в `<Files>` его бы не задело.
 
 ```apache
-# Замок установщика не раздаётся: он обязан отвечать 404, а не скачиваться текстом.
-<Files "install.lock">
-    Require all denied
-</Files>
+# Замок установщика не раздаётся: при выключенном mod_rewrite отказ даёт этот блок (403),
+# а правило внутри обёртки выше отвечает 404.
+<FilesMatch "(?i)^install\.lock$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
 ```
 
 Под `php -S` то же делает блок пропуска статики из задачи 5: он исключает расширение `.lock`.
+Форму этих барьеров закрепляет страж `tests/guard/WebServerConfigTest.php`.
 
 - [ ] **Шаг 10: HTTP-тест установщика**
 

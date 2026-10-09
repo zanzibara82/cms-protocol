@@ -26,13 +26,16 @@ services:
       # Каталог дополнительных приложений: пустая строка — значит «дополнений нет».
       CMS_EXTRA_APPS_DIR: ''
     command: php -S 0.0.0.0:8080 -t public public/index.php
-    # mailpit обязана подняться вместе с базой: иначе прогон с SMTP-тестом падает по
-    # connection refused из-за порядка старта контейнеров, а не из-за кода.
+    # mailpit обязана стать готовой к приёму почты вместе с базой: иначе прогон с SMTP-тестом
+    # падает по connection refused из-за порядка старта контейнеров, а не из-за кода. Порождается
+    # это условие тем, что ворота жёстко зависят от образа axllent/mailpit: нет образа —
+    # команда не стартует вовсе (проверено на пустом кэше), и это падение видно сразу, а не
+    # тонет в отказе одного теста.
     depends_on:
       db:
         condition: service_healthy
       mailpit:
-        condition: service_started
+        condition: service_healthy
 
   db:
     image: mysql:8.0
@@ -59,6 +62,13 @@ services:
     container_name: cms-mailpit-1
     ports:
       - '127.0.0.1:8025:8025'
+    healthcheck:
+      # curl в образе нет, wget есть: `/readyz` отвечает 200, только когда SMTP-порт принимает
+      # сообщения.
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8025/readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   cms-db-data:

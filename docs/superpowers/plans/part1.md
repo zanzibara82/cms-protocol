@@ -313,6 +313,9 @@ WORKDIR /app
 
 ```yaml
 services:
+  # Все порты опубликованы только на loopback: без префикса Docker слушает 0.0.0.0, и
+  # MySQL с пустым root-паролем, почтовый UI без аутентификации и dev-сайт становятся
+  # доступны любому хосту локальной сети — стереть cms_test посреди прогона одна команда.
   php:
     build:
       context: .
@@ -322,7 +325,7 @@ services:
     volumes:
       - .:/app
     ports:
-      - '8080:8080'
+      - '127.0.0.1:8080:8080'
     environment:
       CMS_DB_HOST: db
       CMS_DB_PORT: '3306'
@@ -337,8 +340,15 @@ services:
       # Каталог дополнительных приложений: пустая строка — значит «дополнений нет».
       CMS_EXTRA_APPS_DIR: ''
     command: php -S 0.0.0.0:8080 -t public public/index.php
+    # mailpit обязана стать готовой к приёму почты вместе с базой: иначе прогон с SMTP-тестом
+    # падает по connection refused из-за порядка старта контейнеров, а не из-за кода. Порождается
+    # это условие тем, что ворота жёстко зависят от образа axllent/mailpit: нет образа —
+    # команда не стартует вовсе (проверено на пустом кэше), и это падение видно сразу, а не
+    # тонет в отказе одного теста.
     depends_on:
       db:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
 
   db:
@@ -351,7 +361,7 @@ services:
     # cms_dev и cms_test с нужным COLLATE создаёт docker/mysql-init.sql.
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
-      - '3307:3306'
+      - '127.0.0.1:3307:3306'
     volumes:
       - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - cms-db-data:/var/lib/mysql
@@ -365,7 +375,14 @@ services:
     image: axllent/mailpit
     container_name: cms-mailpit-1
     ports:
-      - '8025:8025'
+      - '127.0.0.1:8025:8025'
+    healthcheck:
+      # curl в образе нет, wget есть: `/readyz` отвечает 200, только когда SMTP-порт принимает
+      # сообщения.
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8025/readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
 volumes:
   cms-db-data:
@@ -438,6 +455,7 @@ CREATE DATABASE IF NOT EXISTS cms_test CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
          failOnWarning="true"
          failOnNotice="true"
          failOnDeprecation="true"
+         failOnRisky="true"
          beStrictAboutOutputDuringTests="true">
   <testsuites>
     <testsuite name="unit">
@@ -464,7 +482,9 @@ CREATE DATABASE IF NOT EXISTS cms_test CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
 </phpunit>
 ```
 
-`failOnWarning`/`failOnNotice` — требование «вывод без шума» из критерия §12.19.
+`failOnWarning`/`failOnNotice` — требование «вывод без шума» из критерия §12.19. `failOnRisky`
+нужен, чтобы `beStrictAboutOutputDuringTests` имел силу: без него тест, напечатавший текст вместо
+проверки, лишь помечается рискованным, и прогон остаётся зелёным.
 
 `phpstan.neon`:
 
@@ -593,6 +613,11 @@ echo 'Ядро CMS собирается. Задача 5 подключит ма�
 а точка входа `public/index.php` лежит в этом же каталоге. Отключение интерпретатора — свойство
 каталога загрузок, и задача 18 добавит его в `public/uploads/.htaccess`.
 
+Это заготовка задачи 1, а не готовый файл: `Options -Indexes`, редирект http→https, ответ 404 замку
+установщика и отказ по его имени дорастают в задачах 4…9. Итоговую форму всех этих барьеров закрепляет
+страж `tests/guard/WebServerConfigTest.php` — `php -S` локальной приёмки `.htaccess` не читает вовсе,
+поэтому проверка у барьеров может быть только текстовой.
+
 `.gitignore`:
 
 ```
@@ -670,8 +695,11 @@ echo '— синтаксис'
 # стражи не может повториться после переезда дерева PHP или сбоя прав доступа.
 #
 # Пятый заявленный шаг ворот («вывод тестов без предупреждений») живёт не здесь, а в флагах
-# `phpunit.xml` (`failOnWarning` и `displayDetailsOnTestsThatTriggerWarnings`): читатель ворот
-# должен искать его там, а не добавлять заглушку в этот файл.
+# `phpunit.xml`: `failOnWarning`, `failOnNotice` и `failOnDeprecation` валят прогон на любом
+# предупреждении, notice или устаревании, а `beStrictAboutOutputDuringTests` в паре с
+# `failOnRisky` не даёт тесту напечатать текст вместо проверки — сам по себе этот флаг лишь
+# помечает тест рискованным, и прогон остаётся зелёным. Читатель ворот должен искать их там,
+# а не добавлять заглушку в этот файл.
 run bash -c 'find . -type d \( -name vendor -o -name node_modules -o -name .git \) -prune -o -name "*.php" -print0 \
   > /tmp/php-list.txt; find_status=$?; \
   if [ $find_status -ne 0 ]; then echo "Поиск PHP-файлов упал с кодом $find_status — список не построен, проверять нечего" >&2; exit $find_status; fi; \
