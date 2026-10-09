@@ -80,6 +80,22 @@ final class TemplateTest extends TestCase
         self::assertStringContainsString('Страницы нет', $html);
     }
 
+    public function testНастоящиеРазмерыКартинкиЧитаютсяИзПубличногоКаталога(): void
+    {
+        // Шаблоны считают от этих цифр height: грустный кот не квадратный, и height === width
+        // сплющивает его по вертикали. Числа обязана давать сама картинка, а не предположение кода.
+        self::assertSame([488, 488], imageNaturalSize('assets/cat-happy.png'));
+        self::assertSame([366, 325], imageNaturalSize('assets/cat-sad.png'));
+    }
+
+    public function testВнеПубличногоКаталогаРазмерыНеЧитаются(): void
+    {
+        // Путь собирается внутри public: `..` наружу не выводит, а несуществующий файл означает
+        // «не читается» — шаблоны тогда остаются на квадрате, а не берут размеры чужого файла.
+        self::assertSame([0, 0], imageNaturalSize('../core/template.php'));
+        self::assertSame([0, 0], imageNaturalSize('assets/такой-картинки-нет.png'));
+    }
+
     public function testHeadСтраницыДополняетВыводХукаВРазметкеШапки(): void
     {
         // Разметка из хука page_head и значение $page['head'] обязаны попасть в <head> сырьём;

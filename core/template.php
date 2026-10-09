@@ -100,7 +100,9 @@ function renderToString(string $template, array $data = [], array $page = []): s
 
 // Настоящие размеры картинки из публичного каталога: [ширина, высота] либо [0, 0], если файл не
 // читается. Шаблоны считают от них height, а не приравнивают его к width: браузер по честным
-// размерам заранее занимает под картинку место. Файл опрашивается один раз за запрос.
+// размерам заранее занимает под картинку место. Кэш живёт до конца процесса, а не до конца запроса:
+// php -S и FPM обслуживают несколько запросов одним процессом, а файл за это время меняется только
+// при сборке ассетов.
 /** @return array{0: int, 1: int} */
 function imageNaturalSize(string $relative): array
 {
@@ -111,8 +113,13 @@ function imageNaturalSize(string $relative): array
         return $sizes[$relative];
     }
 
-    $path = dirname(__DIR__) . '/' . $relative;
-    $info = is_readable($path) ? @getimagesize($path) : false;
+    $public = realpath(__DIR__ . '/../public');
+    // Путь опрашивается внутри публичного каталога: `..` и абсолютный адрес наружу не выводят, а
+    // отсутствующий каталог означает «не читается», а не чужой файл вместо картинки.
+    $path = is_string($public) ? realpath($public . '/' . str_replace('\\', '/', $relative)) : false;
+    $info = (is_string($public) && is_string($path) && str_starts_with($path, $public . DIRECTORY_SEPARATOR))
+        ? @getimagesize($path)
+        : false;
     $sizes[$relative] = is_array($info) ? [(int) $info[0], (int) $info[1]] : [0, 0];
 
     return $sizes[$relative];
