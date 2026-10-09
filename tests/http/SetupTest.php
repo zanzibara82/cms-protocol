@@ -55,6 +55,11 @@ final class SetupTest extends TestCase
         self::assertStringContainsString('Установка сайта', $page['body']);
         self::assertStringContainsString('method="post"', $page['body'], 'Форма с паролем обязана быть POST');
         self::assertStringContainsString('noindex, nofollow', $page['body']);
+        // Пакет V, находка 3 аудита просмотра: запрет кэширования обязан исходить от самой страницы, а не
+        // из значения `session.cache_limiter` по умолчанию. Отказ проверки возвращает в форму введённые
+        // название сайта и почту администратора, и сохранённая страница не должна доставаться
+        // другому человеку.
+        self::assertSame('no-store', $page['headers']['cache-control'], 'Страница установки не отдала собственный запрет кэширования');
     }
 
     public function testКороткийПарольНеСоздаётАдминистратора(): void

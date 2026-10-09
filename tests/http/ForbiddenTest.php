@@ -49,6 +49,11 @@ final class ForbiddenTest extends TestCase
         self::assertStringContainsString('noindex', $response['headers']['x-robots-tag']);
         self::assertStringContainsString('<meta name="robots" content="noindex, nofollow">', $response['body']);
         self::assertSame('text/html; charset=utf-8', $response['headers']['content-type']);
+        // Пакет V, находка 3 аудита просмотра: отказ собран через `renderToString()` → `render()`, поэтому
+        // запрет кэширования приходит из того же правила, что и у админки, а не из значения
+        // `session.cache_limiter` по умолчанию. Текст отказа зависит от прав текущего человека, и
+        // сохранённую страницу нельзя отдавать тому, кому вход открыт.
+        self::assertSame('no-store', $response['headers']['cache-control'], 'Отказ 403 не отдал собственный запрет кэширования');
     }
 
     public function testАнонимныйПостПолучаетОтказТакжеСтраницейТемы(): void

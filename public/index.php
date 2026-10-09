@@ -26,7 +26,14 @@ if (!isSiteInstalled()) {
     respond(
         503,
         partial('not-installed'),
-        ['Content-Type' => 'text/html; charset=utf-8', 'X-Robots-Tag' => 'noindex, nofollow']
+        [
+            'Content-Type' => 'text/html; charset=utf-8',
+            'X-Robots-Tag' => 'noindex, nofollow',
+            // Пакет V, находка 3 аудита просмотра: экран собирается `partial()` и не проходит через
+            // `render()`, поэтому запрет кэширования прописан здесь явно. До `startSession()` лимитер
+            // PHP заголовки не присылал бы вовсе, а подсказка подменяется сразу после установки.
+            'Cache-Control' => 'no-store',
+        ]
     );
 }
 

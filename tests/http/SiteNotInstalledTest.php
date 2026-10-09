@@ -44,6 +44,10 @@ final class SiteNotInstalledTest extends TestCase
         self::assertSame(503, $page['status']);
         self::assertStringContainsString('Сайт не установлен', $page['body']);
         self::assertStringContainsString('/setup.php', $page['body']);
+        // Пакет V, находка 3 аудита просмотра: этот экран идёт до `startSession()`, поэтому заголовков
+        // лимитера на нём нет вовсе — запрет кэширования обязан исходить из самого вызова `respond()`.
+        // Экран описывает состояние установки: после её запуска он перестаёт быть правдой.
+        self::assertSame('no-store', $page['headers']['cache-control'], 'Экран «Сайт не установлен» не отдал собственный запрет кэширования');
     }
 
     public function testВходНаНеустановленнойСхемеДаётПодсказку(): void
@@ -52,6 +56,7 @@ final class SiteNotInstalledTest extends TestCase
 
         self::assertSame(503, $page['status']);
         self::assertStringContainsString('Сайт не установлен', $page['body']);
+        self::assertSame('no-store', $page['headers']['cache-control'], 'Тот же экран на пути входа не отдал собственный запрет кэширования');
     }
 
     public function testУстановщикОтдаётФормуПокаСхемаНеУстановлена(): void

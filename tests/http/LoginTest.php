@@ -64,6 +64,19 @@ final class LoginTest extends TestCase
         self::assertStringContainsString('min-h-[44px] w-full rounded-lg bg-ink', $page['body'], 'Кнопка входа не меньше 44 px');
     }
 
+    // Пакет V, находка 3 аудита просмотра: экран входа запрещает кэширование сам, а не ждёт значения
+    // `session.cache_limiter` по умолчанию. Проверяются обе ветки: и чистая форма, и форма с текстом
+    // ошибки — обе печатают введённую почту в поле, и обе собираются одним `render()` с `noindex`.
+    public function testОбеВеткиВходаСамиЗапрещаютКэширование(): void
+    {
+        $page = Kernel::get('/login');
+        self::assertSame('no-store', $page['headers']['cache-control'], 'Страница входа не отдала собственный запрет кэширования');
+
+        $wrong = Kernel::post('/login', ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'мимо']);
+        self::assertSame(200, $wrong['status'], 'Неверный пароль возвращает форму тем же экраном');
+        self::assertSame('no-store', $wrong['headers']['cache-control'], 'Ветка отказа на входе не отдала собственный запрет кэширования');
+    }
+
     public function testВерныйПарольПереноситВАдминку(): void
     {
         TestDb::clearTable('login_attempt');

@@ -29,6 +29,23 @@ final class RobotsTest extends TestCase
         self::assertStringContainsString('User-agent: *', $page['body']);
     }
 
+    public function testПубличныеСтраницыНеПопадаютПодЗапретКэширования(): void
+    {
+        // Пакет V, находка 3 аудита просмотра: правило «страница с `noindex` не кэшируется» живёт в
+        // `render()`, и оно не имеет права задеть публичные страницы — иначе собственный заголовок
+        // перекрыл бы кэширование всему сайту. Проверяется ровно это: ни главная страница, ни
+        // /robots.txt не получают `no-store`.
+        $home = Kernel::get('/');
+
+        self::assertSame(200, $home['status']);
+        self::assertNotSame('no-store', $home['headers']['cache-control'] ?? '', 'Главная не должна запрещать кэширование всему сайту');
+
+        $robots = Kernel::get('/robots.txt');
+
+        self::assertSame(200, $robots['status']);
+        self::assertSame('public, max-age=3600', $robots['headers']['cache-control'], 'Политика robots.txt остаётся публичной');
+    }
+
     public function testСлужебныеПутиЗакрыты(): void
     {
         $body = Kernel::get('/robots.txt')['body'];
