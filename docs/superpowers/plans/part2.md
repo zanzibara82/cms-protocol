@@ -1135,6 +1135,16 @@ function render(string $template, array $data = [], array $page = []): void
     doAction('page_footer');
     $footer = (string) ob_get_clean();
 
+    // Пакет V, находка 3 аудита просмотра: страница, помеченная `noindex`, запрещает кэширование своим
+    // заголовком, а не значением `session.cache_limiter` по умолчанию. На хостинге со своей php.ini, где
+    // этот лимитер выставлен в `public` или оставлен пустым, HTML админки, входа и установщика стал бы
+    // кэшируемым, и метка `noindex` не спасла бы — она описывает индексирование, а не хранение ответа.
+    // Вызов `header()` с таким же именем заменяет значение, поэтому наш заголовок перекрывает тот,
+    // что прислал лимитер.
+    if ($noindex && !headers_sent()) {
+        header('Cache-Control: no-store');
+    }
+
     require dirname(__DIR__) . '/theme/layout.php';
 }
 
