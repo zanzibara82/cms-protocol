@@ -84,8 +84,8 @@ final class TemplateTest extends TestCase
     {
         // Шаблоны считают от этих цифр height: грустный кот не квадратный, и height === width
         // сплющивает его по вертикали. Числа обязана давать сама картинка, а не предположение кода.
-        self::assertSame([488, 488], imageNaturalSize('assets/cat-happy.png'));
-        self::assertSame([366, 325], imageNaturalSize('assets/cat-sad.png'));
+        self::assertSame([64, 64], imageNaturalSize('assets/cat-happy.png'));
+        self::assertSame([192, 170], imageNaturalSize('assets/cat-sad.png'));
     }
 
     public function testВнеПубличногоКаталогаРазмерыНеЧитаются(): void
