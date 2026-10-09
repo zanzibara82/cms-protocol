@@ -46,9 +46,12 @@ function notFound(string $message = ''): never
 function forbidden(string $message = ''): never
 {
     logWarn('access.forbidden', ['path' => requestPath(), 'ip' => clientIp()]);
+    // Отказ — страница темы, а не фрагмент: человек обязан увидеть шапку, футер и подключённые
+    // стили. Канал ответа при этом остаётся единственным местом, где задаются статус и заголовки,
+    // поэтому каркас собирается строкой и передаётся в respond().
     respond(
         403,
-        partial('403', ['message' => $message]),
+        renderToString('403', ['message' => $message], ['title' => 'Сюда нельзя', 'noindex' => true]),
         ['Content-Type' => 'text/html; charset=utf-8', 'X-Robots-Tag' => 'noindex, nofollow']
     );
 }

@@ -83,6 +83,21 @@ function render(string $template, array $data = [], array $page = []): void
     require dirname(__DIR__) . '/theme/layout.php';
 }
 
+// Страницы отказа задают статус и заголовки в respond(), поэтому им нужна собранная строка, а не
+// печать: renderToString() — тот же render() с тем же каркасом темы, только вывод возвращается,
+// а не печатается, и уходит в respond() единственным каналом ответа.
+/**
+ * @param array<string, mixed> $data
+ * @param array{title?: string, description?: string, noindex?: bool, head?: string} $page
+ */
+function renderToString(string $template, array $data = [], array $page = []): string
+{
+    ob_start();
+    render($template, $data, $page);
+
+    return (string) ob_get_clean();
+}
+
 // Разметка абзаца: сырого HTML в материале нет, выделение задаётся **звёздочками**.
 // Возвращает строку, которую шаблон печатает с пометкой /* @safe html */.
 function richText(string $text): string
