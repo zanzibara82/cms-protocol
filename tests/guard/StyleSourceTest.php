@@ -268,6 +268,12 @@ final class StyleSourceTest extends TestCase
 
         self::assertSame(['probe-idle'], $this->definedClasses('.probe-idle { animation: none; }'));
 
+        // Слепая зона границ (находка финальной рецензии пакета V): объявление, записанное впритык
+        // к фигурной скобке, и объявление в последней строке без завершающего символа обязаны
+        // попадать в список, иначе мёртвое правило зелёным проходит все пять шагов ворот.
+        self::assertSame(['probe-dead'], $this->definedClasses('.probe-dead{ animation: none; }'));
+        self::assertSame(['probe-tail'], $this->definedClasses('.probe-tail'));
+
         // Имя из комментария объявлением не считается: Tailwind со `source(none)` его не собирает.
         self::assertSame([], $this->definedClasses("/* .comment-only */\nbody { color: red; }"));
 
@@ -400,8 +406,11 @@ final class StyleSourceTest extends TestCase
 
         // Разделитель `~` внутри класса экранирован: без экранирования PHP видит в `~]` конец
         // шаблона и падает с «Unknown modifier», а список границ селектора обязан остаться
-        // ровно таким: пробел, двоеточие, запятая, плюс, `>` и `~`.
-        if (preg_match_all('~\.([a-z][a-z0-9_-]*)(?=[\s,:>+\~])~', $sourceCss, $found) > 0) {
+        // ровно таким: пробел, двоеточие, запятая, плюс, `>`, `~`, открывающая фигурная скобка
+        // и конец строки (`\z`). Без скобки и `\z` страж молчит на правилах, записанных впритык
+        // к скобке или последним символом файла, а слепота опаснее ложной тревоги: мёртвое
+        // правило проходило бы все пять шагов ворот зелёным.
+        if (preg_match_all('~\.([a-z][a-z0-9_-]*)(?=[\s,:>+\~{]|\z)~', $sourceCss, $found) > 0) {
             foreach ($found[1] as $class) {
                 // Дедупликация обязательна: `.cat-idle` стоит в источнике четыре раза (правило,
                 // два селектора `a:hover`/`a:focus-visible` и блок `prefers-reduced-motion`),

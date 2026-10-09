@@ -10,6 +10,8 @@ declare(strict_types=1);
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Экран помечен `noindex`, поэтому запрет кэширования обязана нести и его строка ответа:
+         заголовок `Cache-Control: no-store` стоит в вызове `respond()` (core/router.php), образец — `public/index.php`. -->
     <meta name="robots" content="noindex, nofollow">
     <title>Что-то сломалось</title>
     <link rel="stylesheet" href="/assets/app.css">

@@ -141,7 +141,15 @@ function dispatch(): void
     $handler = $match['handler'];
     if (!is_callable($handler)) {
         logError('route.handler_missing', ['handler' => $handler, 'path' => requestPath()]);
-        respond(500, partial('error'), ['Content-Type' => 'text/html; charset=utf-8']);
+        // Пакет V, фикс финальной рецензии: экран печатает `meta name="robots" content="noindex"`
+        // и обязан запрещать кэширование своим заголовком — ровно как экран «Сайт не установлен»
+        // в `public/index.php`. Заголовок идёт элементом массива `respond()`, а не разовой строкой
+        // `header()` в шаблоне: шаблон не решает кэш-политику, а единственный канал ответа не
+        // даёт гонки имён с заголовками, которые `respond()` уже собирает.
+        respond(500, partial('error'), [
+            'Content-Type' => 'text/html; charset=utf-8',
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
     $handler($match['params']);

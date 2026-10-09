@@ -34,6 +34,12 @@ final class NotFoundTest extends TestCase
 
         self::assertSame(404, $response['status']);
         self::assertStringContainsString('Страницы нет', $response['body']);
+        // Пакет V, фикс финальной рецензии (остаток V4): экран 404 собран через `render()`
+        // с `noindex`, поэтому правило «`noindex` запрещает кэширование» догоняет его в том же
+        // `core/template.php`. Утверждение точное, а не «содержит»: лимитер сессии в контейнере
+        // даёт комбинированное `no-store, no-cache, must-revalidate`, и «содержит» зеленело бы
+        // даже без правила; совпадение доказывает работу правила, а не лимитера.
+        self::assertSame('no-store', $response['headers']['cache-control'], 'Экран 404 не отдал собственный запрет кэширования');
     }
 
     public function testКотНаСтранице404ИмеетНастоящиеПропорцииИОтложеннуюЗагрузку(): void
