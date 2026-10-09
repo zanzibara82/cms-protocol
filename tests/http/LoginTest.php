@@ -156,6 +156,39 @@ final class LoginTest extends TestCase
         self::assertStringContainsString('Слишком много попыток входа', $response['body']);
     }
 
+    // Равноправные заголовки «кто меня проксировал» шлются все сразу: в суперглобальном массиве
+    // каждый из них становится ключом с префиксом HTTP_, и чтение любого из них определило бы
+    // адрес вместо серверного. Журнал сравнивается построчно, поэтому подмена заметна даже когда
+    // лимит ещё не исчерпан — то есть тест ловит правку clientIp(), а не только её последствия.
+    public function testПодставныеЗаголовкиАдресаНеМеняютНиЗаписьНиЛимит(): void
+    {
+        $spoofed = ['X-Forwarded-For' => '198.51.100.4', 'X-Real-IP' => '203.0.113.9', 'Client-IP' => '192.0.2.7'];
+        $fields = ['email' => 'admin@school.dev', 'password' => 'мимо'];
+
+        Kernel::post('/login', ['_token' => $this->token()] + $fields);
+        Kernel::post('/login', ['_token' => $this->token()] + $fields, ['headers' => $spoofed]);
+
+        $recorded = array_map(
+            static fn (array $row): string => (string) $row['ip'],
+            all('SELECT ip FROM ' . t('login_attempt') . ' ORDER BY id')
+        );
+        self::assertCount(2, $recorded, 'Журнал обязан содержать обе попытки');
+        self::assertSame(
+            $recorded[0],
+            $recorded[1],
+            'Подставной заголовок сменил записанный адрес: он читается не из серверного массива'
+        );
+
+        $this->exhaustLoginLimit();
+        $response = Kernel::post(
+            '/login',
+            ['_token' => $this->token(), 'email' => 'admin@school.dev', 'password' => 'верный-пароль'],
+            ['headers' => $spoofed]
+        );
+
+        self::assertStringContainsString('Слишком много попыток входа', $response['body']);
+    }
+
     public function testГлубиннаяСсылкаПереживаетПостФормы(): void
     {
         // Гейт редиректит на /login?next=/…; форма отправляет на /login без адреса в строке,

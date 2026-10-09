@@ -20,10 +20,27 @@ final class PrivatePathsRobotsTest extends TestCase
         }
     }
 
+    // Прежняя версия обходила sitemapUrls() и спрашивала у каждого адреса, не закрыт ли он, —
+    // а сам sitemapUrls() уже отбраковывает закрытые, поэтому найти нарушение было невозможно:
+    // тест краснел только на пустой карте. Здесь приватные пути добавляются фильтром в самом
+    // тесте, и проверка сравнивает «что вернул фильтр» с «что выпустила карта».
     public function testПриватныеПутиНеПопадаютВКартуСайта(): void
     {
-        foreach (sitemapUrls() as $url) {
-            self::assertFalse(isRobotsDisallowed((string) $url['loc']), 'Закрытый путь ' . (string) $url['loc'] . ' попал в карту сайта');
+        $private = ['/admin/apps', '/login', '/setup.php'];
+        $this->injectIntoSitemap($private);
+
+        $offered = array_column($this->filteredSitemap(), 'loc');
+        foreach ($private as $path) {
+            // Невыполненное условие проверки: если фильтр не доносит приватный путь, утверждение
+            // ниже снова ничего не фиксирует.
+            self::assertContains($path, $offered, 'Фильтр не добавил приватный путь ' . $path . ': проверке не на чём работать');
+        }
+
+        $published = array_column(sitemapUrls(), 'loc');
+        self::assertContains('/', $published, 'Публичная страница «/» исчезла из карты сайта');
+
+        foreach ($private as $path) {
+            self::assertNotContains($path, $published, 'Закрытый путь ' . $path . ' попал в карту сайта');
         }
     }
 
@@ -54,7 +71,7 @@ final class PrivatePathsRobotsTest extends TestCase
         self::assertNotSame('', $base, 'SITE_URL пуст: проверка сборки адреса ничего не фиксирует');
         // Схема обязательна: без неё «абсолютный» адрес карты сайта остаётся путём, и поисковик
         // не сможет его разрешить. Проверка смотрит на настройки, а не на ту же склейку, которую
-        // проверяет, — иначе вырожденный вход прошёл бы бы молча.
+        // проверяет, — иначе вырожденный вход прошёл бы молча.
         self::assertMatchesRegularExpression('#^https?://#', $base, 'SITE_URL обязан содержать схему http:// или https://');
 
         $urls = sitemapUrls();
@@ -68,5 +85,45 @@ final class PrivatePathsRobotsTest extends TestCase
             $loc = (string) $url['loc'];
             self::assertSame($base . '/' . ltrim($loc, '/'), absoluteUrl($loc), 'Адрес ' . $loc . ' собран не из SITE_URL');
         }
+    }
+
+    protected function tearDown(): void
+    {
+        // Фильтр нужен только этому набору: после него реестр пуст, как при загрузке ядра.
+        hooksReset();
+
+        parent::tearDown();
+    }
+
+    /** @param list<string> $paths */
+    private function injectIntoSitemap(array $paths): void
+    {
+        hooksReset();
+
+        // Так раздел добавляет свои адреса в карту сайта (§5.4): тест проигрывает тот же путь,
+        // но с приватными адресами — продуктового кода в проверке нет.
+        addFilter('sitemap_urls', static function (array $urls) use ($paths): array {
+            foreach ($paths as $path) {
+                $urls[] = ['loc' => $path];
+            }
+
+            return $urls;
+        });
+    }
+
+    /**
+     * То, что отдал фильтр до отбраковки ядром: тот же вызов applyFilters(), который делает
+     * sitemapUrls(), но без её решета — иначе проверка вновь стала бы тавтологией.
+     *
+     * @return list<array{loc: string}>
+     */
+    private function filteredSitemap(): array
+    {
+        $filtered = applyFilters('sitemap_urls', coreSitemapUrls());
+        if (!is_array($filtered)) {
+            throw new \RuntimeException('Фильтр карты сайта вернул не список адресов.');
+        }
+
+        return $filtered;
     }
 }
