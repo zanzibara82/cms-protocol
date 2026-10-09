@@ -106,7 +106,9 @@ Tailwind собирается локально Node'ом, в репозитор�
 - Никакого склеивания строк в SQL: только плейсхолдеры `?` или `:name`. Поиск по подстроке — через `escapeLike()`
   (экранирует `\`, `%`, `_`). Запрещены `PDO::query`, `PDO::exec` и `mysqli_*`.
 - Все даты в базе — `DATETIME` в UTC. Перевод в `Europe/Moscow` только в `core/date.php`: вне этого файла запрещены
-  `date(`, `->format(`, `strtotime(`, `new DateTime` (страж).
+  `date(`, `->format(`, `strtotime(`, `new DateTime` (страж). Исключение зафиксировано явно: `PHP_EOL` в скриптах
+  каталога `scripts/` разрешён — страж дат сканирует код сайта, а не вспомогательные скрипты сборки, и расширение
+  его на `scripts/` принимается только человеком, а не «дорабатывается молча».
 - Вывод в шаблонах — только через `e()`; запрещены `echo $` и `<?=` без `e(`, кроме блоков, помеченных комментарием
   `/* @safe html */` (разметка абзацев с `**выделением**`).
 - Функция `mail()` запрещена во всём проекте; письма ходят только через `Cms\Core\Mailer`.
@@ -124,9 +126,18 @@ Tailwind собирается локально Node'ом, в репозитор�
 - Ни один пароль и ни одно значение боевого `config.php` не попадает в репозиторий, в отчёты и в память. Если команду
   нужно выполнить с секретом, он извлекается в переменную внутри команды и не печатается.
 - Адаптивность 360…1440 обязательна для каждого экрана (`scripts/responsive-check.mjs`, задача 21).
+- Зона нажатия любого интерактивного элемента — не меньше 44 px: класс `min-h-[44px]` (для ссылок и кнопок —
+  в связке с `inline-flex … items-center`) стоит на полях и кнопках форм, на ссылках шапки
+  (`theme/partials/header.php`) и на вкладках админки (`admin/layout.php:59`). Исключения «текстовая ссылка
+  может быть мельче» в проект не вводилось: мелкая зона — отказ экрана, а не особая категория элемента.
 - Ворота перед каждым коммитом: `bash scripts/gate.sh` — `php -l` по всем файлам, PHPStan уровень 6, PHP-CS-Fixer
   `--dry-run --diff`, PHPUnit полностью зелёный, вывод без предупреждений. Единственная разрешённая реплика —
   подсказка PHP-CS-Fixer о том, что образ PHP новее минимума проекта (отступление 14); всё остальное — находка.
+- Ворота проверяют и свежесть собранной статики: шаг после тестов пересобирает стили и требует пустого
+  `git diff --exit-code public/assets/app.css`. Артефакт лежит в репозитории, поэтому без этого шага правка
+  шаблона могла бы уехать на хостинг с классом, которого в CSS нет, — экран остался бы свёрстан, но не выглядит.
+  Сборку делает разработчик: Node на сервере нет, ворота работают в локальном окружении, а шаг гасится
+  одной закомментированной строкой там, где Node недоступен.
 - Коммит — от «Алексей <zanzibaradevil@gmail.com>» через переменные окружения `GIT_AUTHOR_*`/`GIT_COMMITTER_*`;
   `git config` не менять, `--amend` без просьбы человека не использовать.
 - Все команды выполняются в каталоге `cms/`. Боевая база `english-portal` не трогается: ни дампов, ни миграций, ни
@@ -653,8 +664,21 @@ echo '— синтаксис'
 # Правка против первого варианта: статус `php -l` обязан доходить до ворот (поэтому `exit $status`,
 # а не `|| true`), и каталогов `admin`, `theme`, `apps` на этой задаче ещё нет — `find` по их списку
 # падал бы с «No such file or directory». Ищем от корня, вырезая чужое.
+#
+# Статус самого `find` захватывается явно, а пустой список — это падение ворот: `xargs -r` при нулевом
+# вводе возвращает 0, и шаг «проверяет» ноль файлов, выглядя зелёным. Так тихое самоисключение
+# стражи не может повториться после переезда дерева PHP или сбоя прав доступа.
+#
+# Пятый заявленный шаг ворот («вывод тестов без предупреждений») живёт не здесь, а в флагах
+# `phpunit.xml` (`failOnWarning` и `displayDetailsOnTestsThatTriggerWarnings`): читатель ворот
+# должен искать его там, а не добавлять заглушку в этот файл.
 run bash -c 'find . -type d \( -name vendor -o -name node_modules -o -name .git \) -prune -o -name "*.php" -print0 \
-  > /tmp/php-list.txt; xargs -0 -r -n1 php -l < /tmp/php-list.txt > /tmp/php-l.txt 2>&1; status=$?; \
+  > /tmp/php-list.txt; find_status=$?; \
+  if [ $find_status -ne 0 ]; then echo "Поиск PHP-файлов упал с кодом $find_status — список не построен, проверять нечего" >&2; exit $find_status; fi; \
+  files=$(tr -d -c "\0" < /tmp/php-list.txt | wc -c); \
+  if [ "$files" -eq 0 ]; then echo "Ни одного PHP-файла не найдено: шаг синтаксиса проверил ноль файлов, ворота не считаются пройденными" >&2; exit 1; fi; \
+  echo "проверяемых файлов: $files"; \
+  xargs -0 -r -n1 php -l < /tmp/php-list.txt > /tmp/php-l.txt 2>&1; status=$?; \
   grep -v "No syntax errors detected" /tmp/php-l.txt || true; exit $status'
 
 echo '— phpstan'
@@ -669,8 +693,21 @@ echo '— стиль'
 run vendor/bin/php-cs-fixer fix --dry-run --diff
 
 echo '— тесты'
-run vendor/bin/phpunit "$@"
+# Аргументы воротам не пробрасываются нарочно: с `"$@"` вызов вида
+# `bash scripts/gate.sh --filter Что-то` гонял бы четверть набора, phpstan и фиксер при этом
+# зеленели, и коммит выглядел проверенным полным прогоном. Ворота не имеют переключателя силы:
+# здесь всегда весь PHPUnit. Отдельные наборы запускают прямыми командами контейнера
+# (`docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit tests/guard`).
+run vendor/bin/phpunit
 ```
+
+> **Поправка текста плана (внесена контроллером после пакета G).** Прежний вариант блока
+> расходился с кодом: он пробрасывал аргументы вызвавшего в PHPUnit (`run vendor/bin/phpunit
+> "$@"`), из-за чего `bash scripts/gate.sh --testsuite unit` гонял четверть набора, а phpstan и
+> фиксер зеленели — коммит выглядел проверенным полным прогоном. Шаг «синтаксис» молча
+> проходил на пустом списке файлов (`xargs -r` при нулевом вводе возвращает 0). Приведённый
+> выше блок — фактическое содержимое `scripts/gate.sh`, сверенное с репозиторием; правки в
+> скрипт вносятся только вместе с правкой этого блока.
 
 `scripts/db-reset`:
 
@@ -751,18 +788,18 @@ final class SmokeTest extends TestCase
 
 - [ ] **Шаг 7: Красный прогон — тесты падают по причине**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite unit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit`
 Expected: FAIL — `Could not open input file: vendor/bin/phpunit`. Зависимостей ещё нет, и это правильное
 падение: ворота умеют падать, а не молчать. Проверка ниже не «придуманный» красный шаг — она ловит реальную
 половку образа, где расширений нет.
 
-Затем: `docker compose -f docker-compose.dev.yml run --rm php composer install --no-interaction`
+Затем: `docker compose -f docker-compose.dev.yml run --rm -T php composer install --no-interaction`
 Эта же команда собирает образ `php-dev` (`build:` в compose), поэтому после неё расширения уже на месте.
 
 - [ ] **Шаг 8: Собираем окружение и доводим тесты до зелёного**
 
 Run: `docker compose -f docker-compose.dev.yml up -d --build`
-Затем: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite unit`
+Затем: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit`
 Expected: 3/3 passing, вывод без предупреждений. Если `testРасширенияЯдраНаМесте` всё же падает — образ не
 пересобран (`docker compose build --no-cache php`), а не «тест лишний».
 Проверка базы: `docker compose -f docker-compose.dev.yml exec -T db mysql -uroot -e "SHOW DATABASES;"` — в списке
@@ -857,7 +894,7 @@ final class IdTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter IdTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter IdTest`
 Expected: FAIL — `Call to undefined function newId()`.
 
 - [ ] **Шаг 2: Реализуем генератор**
@@ -903,7 +940,7 @@ function encodeRandom(string $bytes): string
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter IdTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter IdTest`
 Expected: PASS (4/4).
 
 - [ ] **Шаг 3: Пишем падающие тесты дат**
@@ -981,7 +1018,7 @@ final class DateTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter DateTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter DateTest`
 Expected: FAIL — функции не определены.
 
 - [ ] **Шаг 4: Реализуем даты**
@@ -1083,7 +1120,7 @@ function parseFormDateTime(string $raw): ?DateTimeImmutable
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter DateTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter DateTest`
 Expected: PASS (8/8). Если `2026-13-45T99:99` проходит, сравнение формата в `parseFormDateTime` не сработало —
 проверьте, что сравниваете именно первые 16 символов.
 
@@ -1361,7 +1398,7 @@ final class TextTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite unit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit`
 Expected: PASS — все наборы зелёные.
 
 - [ ] **Шаг 7: Страж дат**
@@ -1446,7 +1483,7 @@ final class DateUsageTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS — `core/log.php` использует `->format()`; если страж на него указывает, добавьте `core/log.php`
 в `ALLOWED` **только** для строки журнала и уберите `->format()` из `logWrite()`, вызвав вместо него
 `utcStamp(nowUtc())`. Правильный вариант — второй: список исключений остаётся из одного файла.
@@ -1619,7 +1656,7 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 require dirname(__DIR__) . '/core/bootstrap.php';
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite unit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit`
 Expected: PASS.
 Run: `bash scripts/gate.sh`
 Expected: зелёные `php -l`, PHPStan, стиль и тесты (стражи и HTTP-наборы пока пустые — PHPUnit это принимает).

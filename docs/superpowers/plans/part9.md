@@ -19,7 +19,9 @@ visibility, up, down, delete, tagRename, tagDelete`). Источник исти�
 **Интерфейсы:**
 - Потребляет:
   - `core/template.php`: `render()`; `core/escape.php`: `e()`; `admin/layout.php`: `adminShell()`
-  - `core/csrf.php`: `csrfCheck()`, `csrfField()`; `core/notice.php`: `noticeOfRequest()`
+  - `core/csrf.php`: `csrfCheck()`, `csrfField()`; `core/notice.php`: `noticeForAdminScreen()`,
+    `takeAdminFlashReason()`, `adminFailureTitle()` (все три — задача 17, тот же канал отказа, что у
+    экранов списка)
   - `core/request.php`: `requestPath()`, `queryString()`, `postString()`
   - `core/response.php`: `redirect()`; `core/routes.php`: `finishAppAction()`
   - `core/text.php`: `plural()`
@@ -67,8 +69,9 @@ newsTagsAction(array $params = []): void
 3. **Адреса справочников не меняются.** Переименование рубрики и тега правит только `title` /
    `label` (`renameCategory()`, `renameTag()`), и экран обязан это показать: в строке рядом с
    названием печатается её адрес. Критерий §12.14 и §12.15 проверяют именно это.
-4. **Поля формы не хранят набранное при отказе.** Отказ — редирект с текстом в `?error=`, поэтому
-   после неудачного «Сохранить» поля пусты. Здесь это осознанно и ограничено по объёму: в
+4. **Поля формы не хранят набранное при отказе.** Отказ — редирект со списком, где в адресе лежит
+   только ключ словаря, а причину экран печатает из сессионного flash, поэтому после неудачного
+   «Сохранить» поля пусты. Здесь это осознанно и ограничено по объёму: в
    справочнике правится одна короткая строка (название или описание до 300 символов), и текст
    отказа называет причину. Форма материала — другое дело, там набранное возвращает задача 18.
    Расхождение записано в «Отступления от спецификации» (part1) и в списке ниже.
@@ -220,7 +223,7 @@ final class NewsCatalogRulesTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite unit --filter NewsCatalogRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsCatalogRulesTest`
 Expected: FAIL — `Constant "NEWS_ADMIN_CATEGORIES_PATH" not found`.
 
 Изменить `tests/unit/NewsAdminRulesTest.php` — проверка полоски вкладок задачи 17 ожидывает две
@@ -295,7 +298,7 @@ const NEWS_TAG_OP_LABEL = [
     'delete' => 'Удалить',
 ];
 
-// Потолок подписи отказа: текст идёт в параметр адреса и в журнал, поэтому он короткое имя
+// Потолок подписи отказа: текст печатается на экране и ложится в журнал, поэтому это короткое имя
 // действия, а не содержимое запроса.
 const NEWS_UNKNOWN_ACTION_MAX = 80;
 
@@ -344,10 +347,10 @@ function catalogFailure(string $error): array
 }
 ```
 
-Run: `php -l apps/news/lib/admin.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/admin.php"`
 Expected: `No syntax errors detected`.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite unit --filter "NewsCatalogRulesTest|NewsAdminRulesTest"`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter "NewsCatalogRulesTest|NewsAdminRulesTest"`
 Expected: PASS. `NewsAdminRulesTest` зелёный вместе с новым — он ждёт четыре вкладки с этого шага.
 
 - [ ] **Шаг 3: Написать падающий HTTP-тест двух экранов**
@@ -365,8 +368,8 @@ use Cms\Tests\http\Kernel;
 use Cms\Tests\TestDb;
 use PHPUnit\Framework\TestCase;
 
-// Справочники проверяются настоящим запросом: адрес рубрики после переименования, текст отказа
-// в параметре `error` и плашка после действия видны только в ответе сервера.
+// Справочники проверяются настоящим запросом: адрес рубрики после переименования, плашка с текстом
+// отказа после редиректа и зелёное уведомление действия видны только в ответе сервера.
 final class NewsCatalogTest extends TestCase
 {
     private const EDITOR_EMAIL = 'redaktor@school.dev';
@@ -443,7 +446,7 @@ final class NewsCatalogTest extends TestCase
         return Kernel::post($path, array_merge(['_token' => $this->token($page['body'])], $fields));
     }
 
-    /** Ключ из адреса ответа: `?notice=published` или `?error=…`. */
+    /** Ключ из адреса ответа: `?notice=renamed` или `?notice=migration-failed`. */
     private function noticeOf(array $response): string
     {
         $query = $this->queryOf($response);
@@ -451,9 +454,17 @@ final class NewsCatalogTest extends TestCase
         return (string) ($query['notice'] ?? '');
     }
 
-    private function errorOf(array $response): string
+    // Причина отказа живёт в сессионном flash, поэтому её читает экран, куда ведёт редирект, а не
+    // заголовок Location. Помощник проверяет и адрес (в нём только ключ словаря), и возвращает тело
+    // открытого экрана — так проверка не пропускает случай, когда отказ уехал в адрес.
+    private function failureBody(array $response): string
     {
-        return (string) urldecode((string) $this->locationOf($response));
+        $location = (string) $response['headers']['location'];
+        self::assertStringContainsString('notice=migration-failed', $location);
+        self::assertStringNotContainsString('error=', $location,
+            'Причина отказа не должна уезжать в адрес: он остаётся в истории браузера и в access-логе');
+
+        return (string) Kernel::get($location)['body'];
     }
 
     private function locationOf(array $response): string
@@ -559,7 +570,7 @@ final class NewsCatalogTest extends TestCase
         $response = $this->send(NEWS_ADMIN_CATEGORIES_PATH, ['op' => 'rename', 'id' => $id, 'title' => 'Жизнь школы']);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('уже есть', urldecode($this->locationOf($response)));
+        self::assertStringContainsString('уже есть', $this->failureBody($response));
         self::assertSame('Методика', (string) $this->rowOf(adminCategoryRows(), $id)['title']);
     }
 
@@ -622,7 +633,9 @@ final class NewsCatalogTest extends TestCase
         $response = $this->send(NEWS_ADMIN_CATEGORIES_PATH, ['op' => 'delete', 'id' => $id]);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('В рубрике 1 материал', urldecode($this->locationOf($response)));
+        $body = $this->failureBody($response);
+        self::assertStringContainsString('В рубрике 1 материал', $body);
+        self::assertStringContainsString('role="alert"', $body, 'Причина печатается плашкой отказа, а не голым текстом');
         self::assertNotNull($this->rowOf(adminCategoryRows(), $id), 'Рубрика осталась');
     }
 
@@ -649,7 +662,7 @@ final class NewsCatalogTest extends TestCase
         $response = $this->send(NEWS_ADMIN_CATEGORIES_PATH, ['op' => 'rename', 'id' => 'нет-такого-ident', 'title' => 'Проверка']);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('обновите страницу', urldecode($this->locationOf($response)));
+        self::assertStringContainsString('обновите страницу', $this->failureBody($response));
     }
 
     // ── Теги ──────────────────────────────────────────────
@@ -693,7 +706,7 @@ final class NewsCatalogTest extends TestCase
         $response = $this->send(NEWS_ADMIN_TAGS_PATH, ['op' => 'delete', 'id' => (string) $tag['id']]);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('Тег стоит на 1 материале', urldecode($this->locationOf($response)));
+        self::assertStringContainsString('Тег стоит на 1 материале', $this->failureBody($response));
         self::assertNotNull($this->tagRowById((string) $tag['id']), 'Тег остался');
     }
 
@@ -721,7 +734,7 @@ final class NewsCatalogTest extends TestCase
             $response = $this->send($path, ['op' => 'взломать', 'id' => categoryIdOf('zhizn-shkoly')]);
 
             self::assertSame(302, $response['status']);
-            self::assertStringContainsString('Неизвестное действие', urldecode($this->locationOf($response)));
+            self::assertStringContainsString('Неизвестное действие', $this->failureBody($response));
         }
     }
 
@@ -755,13 +768,15 @@ final class NewsCatalogTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsCatalogTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsCatalogTest`
 Expected: FAIL — 404 на `/news/admin/categories`: адресов справочников ещё нет.
 
 Три места в этом тесте объясняют его сам:
 
-- Отказ читается из `?error=` в заголовке `Location`, а не из тела ответа: текст отказа живёт
-  в адресе, а страница без параметра показать его не обязана (то же, что в задаче 17).
+- Отказ читается открытием экрана, куда ведёт `Location`, а не из самого заголовка: текст причины
+  живёт в сессионном flash, а в адресе остаётся только ключ `migration-failed` (то же, что в
+  задаче 17). Помощник `failureBody()` проверяет и адрес, и тело — поэтому возврат причины в URL
+  не пройдёт молча.
 - `testСкрытиеУбираетСтраницуИМатериалыИзОбщейЛенты` читает `/news`, а не таблицу: материал
   обязан остаться в базе (§8.4), и только лента различает «скрыт» и «удалён».
 - `testПустойТегУдаляется` вставляет строку в `tbl_news_tag` напрямую. Форма материала пустых
@@ -826,7 +841,7 @@ function newsTagsAction(array $params = []): void
     finishAppAction($result, NEWS_ADMIN_TAGS_PATH, (string) ($result['notice'] ?? ''));
 }
 
-// Текст отказа печатается на экране и кладётся в параметр адреса, поэтому в нём нет содержимого
+// Текст отказа печатается на экране и кладётся в журнал, поэтому в нём нет содержимого
 // запроса: неизвестное намерение описывается общим словом.
 function catalogUnknown(string $what): string
 {
@@ -844,10 +859,13 @@ function catalogUnknown(string $what): string
 /** @param array<string, string> $params */
 function newsAdminCategories(array $params = []): void
 {
+    $alertReason = takeAdminFlashReason();
+
     render('news/admin/categories', [
         'nav' => newsAdminNav(requestPath()),
-        'notice' => (string) (noticeOfRequest(CATALOG_NOTICE_TEXT) ?? ''),
-        'error' => (string) queryString('error', ''),
+        'notice' => noticeForAdminScreen(CATALOG_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
         'rows' => adminCategoryRows(),
         'titleMax' => fieldLimit(CATEGORY_FIELDS, 'title', 'max'),
         'descriptionMax' => fieldLimit(CATEGORY_FIELDS, 'description', 'max'),
@@ -857,15 +875,22 @@ function newsAdminCategories(array $params = []): void
 /** @param array<string, string> $params */
 function newsAdminTags(array $params = []): void
 {
+    $alertReason = takeAdminFlashReason();
+
     render('news/admin/tags', [
         'nav' => newsAdminNav(requestPath()),
-        'notice' => (string) (noticeOfRequest(CATALOG_NOTICE_TEXT) ?? ''),
-        'error' => (string) queryString('error', ''),
+        'notice' => noticeForAdminScreen(CATALOG_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
         'rows' => adminTagRows(),
         'labelMax' => fieldLimit(TAG_FIELDS, 'label', 'max'),
     ], ['title' => 'Теги — админка', 'noindex' => true]);
 }
 ```
+
+Отказ справочников приезжает тем же каналом, что и отказ списка: `finishAppAction()` пишет причину
+во flash, в адрес уходит только ключ `migration-failed`, а экран собирает плашку помощниками ядра.
+Своего `?error=` у разделов быть не может — его запрещает `tests/guard/FailureChannelTest.php`.
 
 Контроллер сводки тоже меняется — целиком, тем же телом с двумя новыми ключами:
 
@@ -876,11 +901,13 @@ function newsAdminSummary(array $params = []): void
     $now = nowUtc();
     $counts = adminItemCounts($now);
     $pinned = pinnedVisibleCount($now);
+    $alertReason = takeAdminFlashReason();
 
     render('news/admin/summary', [
         'nav' => newsAdminNav(requestPath()),
-        'notice' => (string) (noticeOfRequest(NEWS_NOTICE_TEXT) ?? ''),
-        'error' => (string) queryString('error', ''),
+        'notice' => noticeForAdminScreen(NEWS_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
         'counts' => $counts,
         'pinned' => $pinned,
         'waiting' => $counts['scheduled'],
@@ -909,7 +936,7 @@ addRoute('GET', '/news/admin/tags', 'newsAdminTags', ['app' => 'news', 'private'
 addRoute('POST', '/news/admin/tags', 'newsTagsAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 ```
 
-Run: `php -l apps/news/actions/catalog.php && php -l apps/news/admin.php && php -l apps/news/routes.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/actions/catalog.php && php -l apps/news/admin.php && php -l apps/news/routes.php"`
 Expected: `No syntax errors detected` трижды.
 
 - [ ] **Шаг 5: Шаблоны двух экранов и две панели сводки**
@@ -923,7 +950,8 @@ declare(strict_types=1);
 
 /**
  * @var string $notice
- * @var string $error
+ * @var string $alertTitle
+ * @var string $alertReason
  * @var string $nav
  * @var list<array{id: string, slug: string, title: string, description: ?string, order: int, visible: bool, items: array{total: int, visible: int}}> $rows
  * @var int $titleMax
@@ -1019,11 +1047,8 @@ $content = $nav
     . '<ul class="space-y-3">' . $rowsHtml . '</ul>';
 
 $notice = $notice === '' ? null : $notice;
-$errorBlock = $error === ''
-    ? ''
-    : '<p class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">' . e($error) . '</p>';
-
-/* @safe html */ echo $errorBlock . adminShell('Рубрики', $content, $notice);
+/* @safe html */ echo partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason])
+    . adminShell('Рубрики', $content, $notice);
 ```
 
 Создать `apps/news/templates/admin/tags.php`:
@@ -1035,7 +1060,8 @@ declare(strict_types=1);
 
 /**
  * @var string $notice
- * @var string $error
+ * @var string $alertTitle
+ * @var string $alertReason
  * @var string $nav
  * @var list<array{id: string, slug: string, label: string, items: int}> $rows
  * @var int $labelMax
@@ -1086,11 +1112,8 @@ $content = $nav
     . '<ul class="space-y-3">' . $rowsHtml . '</ul>';
 
 $notice = $notice === '' ? null : $notice;
-$errorBlock = $error === ''
-    ? ''
-    : '<p class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">' . e($error) . '</p>';
-
-/* @safe html */ echo $errorBlock . adminShell('Теги', $content, $notice);
+/* @safe html */ echo partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason])
+    . adminShell('Теги', $content, $notice);
 ```
 
 Изменить `apps/news/templates/admin/summary.php` — три точечные правки, файл целиком не
@@ -1126,18 +1149,18 @@ foreach ([
     . '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">' . $panel . $catalogPanels . '</div>'
 ```
 
-Run: `php -l apps/news/templates/admin/categories.php && php -l apps/news/templates/admin/tags.php && php -l apps/news/templates/admin/summary.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/templates/admin/categories.php && php -l apps/news/templates/admin/tags.php && php -l apps/news/templates/admin/summary.php"`
 Expected: `No syntax errors detected` трижды.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsCatalogTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsCatalogTest`
 Expected: PASS — 19 проверок.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter "NewsAdminTest|NewsItemFormTest|NewsPublicTest"`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter "NewsAdminTest|NewsItemFormTest|NewsPublicTest"`
 Expected: PASS — панели сводки и четыре вкладки ничего из прежних экранов не сломали.
 
 - [ ] **Шаг 6: Прогнать ворота целиком**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — четыре набора.
 
 Run: `bash scripts/gate.sh`
@@ -1163,9 +1186,9 @@ Run:
 docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -P -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
 Команды те же, что в шаге 9 задачи 17: `db-reset` — на хосте, замок снять вручную, база тестовая,
@@ -1435,7 +1458,7 @@ final class NewsSitemapTest extends NewsDbTestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db --filter NewsSitemapTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSitemapTest`
 Expected: FAIL — `Call to undefined function newsSitemapUrls()`.
 
 - [ ] **Шаг 2: Адреса раздела в карте сайтов**
@@ -1501,10 +1524,10 @@ addFilter('sitemap_urls', static function (array $urls): array {
 `noindex, nofollow` — задача 17) в карту не попадают.
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db --filter NewsSitemapTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSitemapTest`
 Expected: PASS — 6 проверок.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter "SitemapTest|RobotsTest"`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter "SitemapTest|RobotsTest"`
 Expected: PASS — файл `tests/http/SitemapTest.php` задачи 9 править не нужно, и вот почему: его тест
 `testЯдроОтдаётТолькоГлавнуюПокаРазделовНет` зовёт `sitemapUrls()` в процессе PHPUnit, а `reset()` в
 его `setUpBeforeClass()` пересоздаёт таблицы ядра, поэтому строки `news` в `app_installation` нет и
@@ -1705,7 +1728,7 @@ final class NewsVisibilityTest extends TestCase
 а читает ли раздел — вопрос запроса, а не установщика. Комментарии вырезаются, потому что
 `visibleWhere()` в пояснительной строке не защищает ни одного запроса.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard --filter NewsVisibilityTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter NewsVisibilityTest`
 Expected: PASS — 2 проверки. Если падает вторая, править надо список `ALLOWED`, а не тест:
 расхождение списка и исходников — это и есть тот случай, который страж сторожит.
 
@@ -1825,7 +1848,7 @@ final class AppActionContractTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard --filter AppActionContractTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter AppActionContractTest`
 Expected: PASS — 4 проверки.
 
 - [ ] **Шаг 5: Покрытие текстов уведомлений на живой базе**
@@ -2032,7 +2055,7 @@ final class NewsNoticeCoverageTest extends NewsDbTestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db --filter NewsNoticeCoverageTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsNoticeCoverageTest`
 Expected: PASS — 3 проверки. Порядок тестов здесь важен не для PHPUnit, а для читателя: сначала
 словарь справочников, потом материалов.
 
@@ -2272,7 +2295,7 @@ final class NewsAssemblyTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsAssemblyTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsAssemblyTest`
 Expected: PASS — 6 проверок.
 
 Два места, где этот тест обязан совпадать с собранной формой, а не с вымыслом:
@@ -2288,7 +2311,7 @@ Expected: PASS — 6 проверок.
 
 - [ ] **Шаг 7: Ворота, руками и коммит**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — четыре набора; в `guard` добавились три новых файла.
 
 Run: `bash scripts/gate.sh`

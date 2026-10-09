@@ -63,7 +63,7 @@ final class EscapeLikeTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter EscapeLikeTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter EscapeLikeTest`
 Expected: FAIL — `escapeLike()` не определена.
 
 - [ ] **Шаг 2: Реализуем слой данных**
@@ -212,7 +212,7 @@ function splitSql(string $sql): array
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter EscapeLikeTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter EscapeLikeTest`
 Expected: PASS (4/4).
 
 - [ ] **Шаг 3: Пишем базовую схему ядра**
@@ -487,12 +487,12 @@ final class DbLayerTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: FAIL — таблицы не созданы (`Base table or view not found`).
 
 - [ ] **Шаг 6: Доводим до зелёного и проверяем схему**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: PASS (7/7) — `TestDb::reset()` создаёт таблицы из `sql/`.
 
 `tests/db/CoreSchemaTest.php`:
@@ -563,7 +563,7 @@ final class CoreSchemaTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: PASS.
 
 - [ ] **Шаг 7: Страж SQL**
@@ -692,7 +692,7 @@ final class SqlSafetyTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS. Если `tests/TestDb.php` попадает под страж — он и не должен: страж сканирует `core/ admin/ theme/
 apps/ public/`, а `DROP TABLE` живёт в `tests/`.
 
@@ -829,7 +829,7 @@ final class HooksTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter HooksTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter HooksTest`
 Expected: FAIL — `addAction()` не определена.
 
 - [ ] **Шаг 2: Реализуем хуки**
@@ -914,7 +914,7 @@ function hooksReset(): void
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter HooksTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter HooksTest`
 Expected: PASS (7/7).
 
 - [ ] **Шаг 3: Пишем падающие тесты шаблонов**
@@ -1150,7 +1150,7 @@ function richText(string $text): string
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter TemplateTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter TemplateTest`
 Expected: PASS (8/8). Каталоги фикстур подхватываются потому, что `tests/bootstrap.php` (задача 3) выставляет
 `CMS_EXTRA_THEME_DIR` до подключения ядра.
 
@@ -1498,7 +1498,7 @@ final class OutputEscapingTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS. Если страж указывает на `<?= $head ?>` — пометьте строку комментарием `/* @safe html */`
 (это разметка, собранная хуками, а не данные пользователя).
 
@@ -1653,7 +1653,7 @@ final class RouterTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter RouterTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter RouterTest`
 Expected: FAIL — `addRoute()` не определена.
 
 - [ ] **Шаг 2: Реализуем маршрутизатор**
@@ -1805,7 +1805,7 @@ function dispatch(): void
 маршрутами без метки `private` и без `app`. Тесты этой задачи проверяют `addRoute`/`matchRoute` напрямую,
 поэтому им эти функции не нужны.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter RouterTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter RouterTest`
 Expected: PASS (9/9).
 
 - [ ] **Шаг 3: Запрос и ответ**
@@ -2294,7 +2294,7 @@ final class NotFoundTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http`
 Expected: FAIL на последнем тесте — `php -S` отдаёт файлы из корня проекта, если запускать его с `-t public`,
 только из `public/`; проверьте, что `config.sample.php` лежит вне `public/` (он в корне `cms/`, значит недоступен —
 и тест зелёный). Если `php -S` отвечает 200 на `/config.sample.php`, каталог указан неверно.

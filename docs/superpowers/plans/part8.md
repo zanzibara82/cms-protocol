@@ -7,8 +7,11 @@
 - Modify: `apps/news/routes.php` (три адреса админки + подключение файлов раздела)
 - Modify: `apps/news/lib/boot.php` (девятая строка)
 - Modify: `core/apps.php` (`registerAppRoutes()` — снимок маршрутов)
-- Modify: `core/response.php` (`queryAppend()`), `core/bootstrap.php` (`finishAppAction()` — склейка параметров)
+- Modify: `core/response.php` (`queryAppend()`), `core/routes.php` (`finishAppAction()` — склейка параметров)
+- Modify: `core/notice.php` (помощники отказа), `core/templates/admin/apps.php` (плашка на общий шаблон)
+- Create: `core/templates/admin/alert.php` (плашка отказа — один разметочный файл для ядра и раздела)
 - Modify: `tests/guard/RouteHandlersTest.php` (один тест)
+- Create: `tests/guard/FailureChannelTest.php` (страж канала отказа)
 - Test: `tests/unit/NewsAdminRulesTest.php`, `tests/unit/QueryAppendTest.php`, `tests/http/NewsAdminTest.php`
 
 **Порт:** `english-portal/src/app/news/admin/page.tsx` (сводка), `admin/items/page.tsx` (список с
@@ -23,7 +26,7 @@
 - `core/auth.php`: `getEditorAccess()`, `currentUser()`; `core/form.php`: `postString()`, `queryString()`
 - `core/request.php`: `requestPath()`; `core/template.php`: `render()`, `e()`; `core/text.php`: `plural()`
 - `core/date.php`: `nowUtc()`; `admin/layout.php`: `adminShell()`, `adminNotice()`
-- `core/bootstrap.php` (задача 8): `finishAppAction(array $result, string $to, string $notice): void`
+- `core/routes.php` (задача 8): `finishAppAction(array $result, string $to, string $notice): void`
 - `constants.php`: `NEWS_STATUS`, `NEWS_STATUS_LABEL`, `NEWS_FILTER_LABEL`, `NEWS_FILTERS`,
   `ADMIN_NEWS_PER_PAGE`, `PINNED_WARN_LIMIT`, `SEARCH_MAX_LENGTH`, `NEWS_NOTICE_TEXT`
 - `visibility.php`: `tooManyPinned(int $count): bool`
@@ -68,10 +71,14 @@ appRoutesSnapshot(): array  // core/apps.php: снимок маршрутов р
 
 **Четыре расхождения с портируемым кодом:**
 
-- Уведомление и отказ живут в адресной строке (`?notice=…`, `?error=…`), а не в состоянии формы:
-  в Next.js `useActionState` возвращал ответ под конкретную строку, в PHP без JavaScript страница
+- Уведомление живёт в адресной строке (`?notice=<ключ словаря>`), а не в состоянии формы: в Next.js
+  `useActionState` возвращал ответ под конкретную строку, в PHP без JavaScript страница
   перезагружается, и PRG-редирект — единственный способ не потерять ответ при обновлении.
   Под строкой при этом ничего не показывается: плашка одна, вверху экрана.
+- Причина отказа в адрес не уезжает: свободный текст светился бы в истории браузера и в
+  access-логе хостинга. Она пишется в сессионный flash (`$_SESSION['admin_error']`), а в адрес
+  ставится только ключ `migration-failed` — тот же приём, что в экране «Приложения» (`задача 8`,
+  `finishAppAction()`). Читать экран обязан помощник ядра, а не своё перечисление ключей.
 - Кнопки строк идут отдельной формой каждая с полем `op`, а не `name="op" value=…` на кнопке:
   имя кнопки не попадает в POST, если человек отправил форму клавишей Enter (тот же приём, что
   `core/templates/admin/apps.php`).
@@ -223,7 +230,7 @@ final class NewsAdminRulesTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsAdminRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsAdminRulesTest`
 Expected: FAIL — `Call to undefined function newsRowActions()`.
 
 - [ ] **Шаг 2: Написать правила экрана**
@@ -359,10 +366,10 @@ require_once __DIR__ . '/admin.php';
 `admin.php` подключается после `items.php`: он читает `NEWS_ADMIN_ITEMS_PATH` и опирается на
 `NEWS_STATUS` и `NEWS_NOTICE_TEXT`.
 
-Run: `php -l apps/news/lib/admin.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/admin.php"`
 Expected: `No syntax errors detected`.
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsAdminRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsAdminRulesTest`
 Expected: PASS — 9 проверок.
 
 - [ ] **Шаг 3: Починить повторную регистрацию маршрутов раздела**
@@ -397,7 +404,7 @@ Expected: PASS — 9 проверок.
     }
 ```
 
-Run: `vendor/bin/phpunit --testsuite guard --filter RouteHandlersTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter RouteHandlersTest`
 Expected: FAIL — `Публичные маршруты раздела после сброса` (в таблице только маршруты ядра).
 
 Заменить `registerAppRoutes()` в `core/apps.php` целиком и добавить рядом снимок:
@@ -406,9 +413,10 @@ Expected: FAIL — `Публичные маршруты раздела посл�
 /**
  * Снимок маршрутов разделов: какие файлы уже исполнены и что каждый из них добавил в таблицу.
  * Нужен потому, что routes.php исполняется в процессе один раз (require_once), а таблицы маршрутов
- * между наборами тестов сбрасываются.
+ * между наборами тестов сбрасываются. Форма строки — ровно та, что отдаёт routeTable(): обработчик
+ * бывает и именем функции, и замыканием, поэтому тип надо переписывать целиком, а не сводить к строке.
  *
- * @return array{files: list<string>, routes: list<array<string, mixed>>}
+ * @return array{files: list<string>, routes: list<array{method: string, pattern: string, handler: string|Closure, meta: array<string, mixed>, static: bool}>}
  */
 function &appRoutesSnapshot(): array
 {
@@ -426,12 +434,7 @@ function registerAppRoutes(): void
     // Файлы уже исполнены — функции контроллеров определены, а таблицу заполняем снимком.
     if ($snapshot['files'] !== []) {
         foreach ($snapshot['routes'] as $route) {
-            addRoute(
-                (string) $route['method'],
-                (string) $route['pattern'],
-                (string) $route['handler'],
-                (array) ($route['meta'] ?? [])
-            );
+            addRoute($route['method'], $route['pattern'], $route['handler'], $route['meta']);
         }
 
         return;
@@ -454,10 +457,10 @@ function registerAppRoutes(): void
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite guard --filter RouteHandlersTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter RouteHandlersTest`
 Expected: PASS.
 
-Run: `vendor/bin/phpunit --testsuite db --filter AppsRegistryTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter AppsRegistryTest`
 Expected: PASS — `testМаршрутыПриложенийРегистрируютсяСМеткойПриложения` работает по-прежнему
 (он вызывает `registerAppRoutes()` после `routesReset()`, то есть как раз ветку снимка).
 
@@ -485,16 +488,21 @@ require_once __DIR__ . '/lib/boot.php';
 маршрутов на повторе восстанавливается снимком из шага 3. Обратное направление (чтобы `boot.php`
 подключал `routes.php`) по-прежнему запрещено тем же рассуждением, что записан в задаче 16.
 
-**4б. `finishAppAction()` склеивает адрес вслепую.** Отказ он пишет так:
+**4б. Раздел возвращается в адрес со своими фильтрами — склейку надо проверять, а не повторять.**
+Ядро уже выбирает разделитель, но делает это одной строкой в `redirectWithNotice()`:
 
 ```php
-redirect($to . '?error=' . rawurlencode(...));
+$separator = str_contains($to, '?') ? '&' : '?';
+redirect($to . $separator . 'notice=' . rawurlencode($notice));
 ```
 
-Для `/admin/apps` этого хватает — адрес ядра никогда не несёт параметров. Список раздела возвращает
-человека в тот же фильтр, и `?status=DRAFT&page=2` + `?error=…` склеились бы в
-`/news/admin/items?status=DRAFT&page=2?error=…`: второй `?` MySQL не читает, но и браузер не читает —
-это адрес с одним параметром `status`, чьё значение оборвано, и человек теряет фильтр.
+История у этого выбора не украшение: так `finishAppAction()` склеивал отказ вслепую
+(`$to . '?error=' . …`), и список раздела — адрес фильтра — терял человека на второй `?`:
+`/news/admin/items?status=DRAFT&page=2?notice=…` браузер читает как один параметр `status` с
+оборванным значением, и фильтр исчезает. Исправление приехало вместе с фикс-раундом ветки, но
+проверки на нём нет: единица «значение с запятой и знаком вопроса обязано доехать до адреса
+кодом» не написана, а разделу склейка нужна в двух местах — возврат в список после кнопки строки
+и возврат после сохранения формы.
 
 Вынести склейку в ядро и пользоваться ею обоим местам. Создать падающий тест
 `tests/unit/QueryAppendTest.php`:
@@ -508,8 +516,9 @@ namespace Cms\Tests\unit;
 
 use PHPUnit\Framework\TestCase;
 
-// Разделитель параметров — единственное место, где адрес встречается с вопросом. Ядро склеивало
-// его inline, и этого хватило ровно до адреса со своими параметрами.
+// Разделитель параметров — единственное место, где адрес встречается с вопросом. Ядро выбирал его
+// inline, и этот выбор до сих пор не проверялся: ошибись он на адресе со своими параметрами, человек
+// потерял бы фильтр молча. Разделу склейка нужна в двух местах, поэтому она становится помощником.
 final class QueryAppendTest extends TestCase
 {
     public function testПервыйПараметрИдётПослеЗнакаВопроса(): void
@@ -527,7 +536,8 @@ final class QueryAppendTest extends TestCase
 
     public function testЗначениеИлючкаКодируются(): void
     {
-        self::assertSame('/x?error=a%20b%26c%3Fd', queryAppend('/x', 'error', 'a b&c?d'));
+        // Помощник общий: и имя параметра, и значение кодируются одинаково, какие бы ни подставили.
+        self::assertSame('/x?q=a%20b%26c%3Fd', queryAppend('/x', 'q', 'a b&c?d'));
     }
 
     public function testПустоеЗначениеВсёРавноПишется(): void
@@ -539,7 +549,7 @@ final class QueryAppendTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter QueryAppendTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter QueryAppendTest`
 Expected: FAIL — `Call to undefined function queryAppend()`.
 
 Добавить в `core/response.php` (перед `redirectWithNotice()`):
@@ -567,22 +577,218 @@ function redirectWithNotice(string $to, string $notice): never
 }
 ```
 
-Заменить ветку отказа в `finishAppAction()` (`core/bootstrap.php`) — строку с `?error=` целиком:
+Ветка отказа в `finishAppAction()` (`core/routes.php`) правки не требует — она уже устроена так, как
+сказано в пункте «расхождения» выше: причина ложится в сессионный flash, в адрес едет ключ. Слова тут
+не держат ничего, поэтому инвариант закрепляет страж исходников: он краснеет, если кто-то «для
+удобства» вернёт текст в URL или, наоборот, выключит flash. Создать `tests/guard/FailureChannelTest.php`:
 
 ```php
-    if (($result['ok'] ?? false) === false) {
-        redirect(queryAppend($to, 'error', (string) ($result['error'] ?? 'Действие не удалось.')));
+<?php
+
+declare(strict_types=1);
+
+namespace Cms\Tests\guard;
+
+use PHPUnit\Framework\TestCase;
+
+// Причина сбоя — текст драйвера, базы или filesystem: в адресной строке он светился бы в истории
+// браузера и в access-логе хостинга, а экран печатал бы чужую строку из `?error=`. Разрешённый канал
+// один: сессионный flash `admin_error` + ключ словаря `migration-failed` в адресе.
+//
+// Страж стережёт канал, а не имена ключей: `redirectWithNotice($to, $notice)` — законный вызов,
+// переменная с ключом живёт в обработчике, и за её содержание отвечает NoticeKeyTest. Попытка
+// проверить здесь и тип аргумента даёт ложные красные строки на легальном коде ядра.
+//
+// Страж читает те же корни, что и остальные проверки исходников (core, admin, theme, apps, public):
+// проверка по всему дереву краснела бы на собственных тестовых фикстурах.
+final class FailureChannelTest extends TestCase
+{
+    /** @var list<string> */
+    private const ROOTS = ['core', 'admin', 'theme', 'apps', 'public'];
+
+    /** @return array<string, string> паттерн => что он делает не так */
+    private function forbidden(): array
+    {
+        return [
+            '/queryString\(\s*([\'"])error\1/i' => 'читает причину отказа из адресной строки',
+            '/queryAppend\(\s*[^,()]+,\s*([\'"])error\1/i' => 'пишет причину отказа в адресную строку',
+            '/[\'"][^\'"]*\?error=/i' => 'склеивает отказ с адресом вручную',
+        ];
     }
+
+    public function testНиОдинИсходникНеПереводитПричинуОтказаЧерезАдрес(): void
+    {
+        $files = $this->phpFiles();
+        // Пустой список — сломанный поиск, а не «нарушений нет»: без этой строки шаг зелёный и при
+        // переезде дерева, и при сбое прав доступа.
+        self::assertNotSame([], $files, 'Ни одного PHP-файла не найдено — страж проверяет пустоту');
+
+        $violations = [];
+
+        foreach ($files as $file) {
+            $source = (string) file_get_contents($file);
+
+            foreach ($this->forbidden() as $pattern => $what) {
+                if (preg_match_all($pattern, $source, $matches, PREG_SET_ORDER)) {
+                    foreach ($matches as $match) {
+                        $violations[] = $this->relative($file) . ': ' . $what . ' — ' . trim($match[0]);
+                    }
+                }
+            }
+        }
+
+        self::assertSame([], $violations, 'Причина отказа уехала в адресную строку');
+    }
+
+    // Обратная половина инварианта: flash-канал обязан оставаться включённым. Если его выбросить,
+    // первая проверка пройдёт молча — в адресе отказа нет, но экрану показывать будет нечего.
+    public function testЯдроПишетПричинуОтказаВСессионныйFlash(): void
+    {
+        $routes = (string) file_get_contents(dirname(__DIR__, 2) . '/core/routes.php');
+
+        self::assertMatchesRegularExpression(
+            '/\$_SESSION\[\s*[\'"]admin_error[\'"]\s*\]\s*=/',
+            $routes,
+            'finishAppAction() больше не пишет причину в flash — экран админки останется без объяснения'
+        );
+    }
+
+    /** @return list<string> */
+    private function phpFiles(): array
+    {
+        $root = dirname(__DIR__, 2);
+        $out = [];
+
+        foreach (self::ROOTS as $dir) {
+            if (!is_dir($root . '/' . $dir)) {
+                continue;
+            }
+
+            $items = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root . '/' . $dir));
+            foreach ($items as $item) {
+                if ($item instanceof \SplFileInfo && $item->getExtension() === 'php') {
+                    $out[] = $item->getPathname();
+                }
+            }
+        }
+
+        sort($out);
+
+        return $out;
+    }
+
+    private function relative(string $file): string
+    {
+        return str_replace(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR, '', $file);
+    }
+}
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter QueryAppendTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter FailureChannelTest`
+Expected: PASS на текущем ядре. Проверить силу: временно заменить в `finishAppAction()` строку
+`redirectWithNotice($to, 'migration-failed');` на
+`redirect(queryAppend($to, 'error', (string) ($result['error'] ?? 'Действие не удалось.')));` — это
+ровно тот возврат к «плашке прямо в URL», из-за которого страж и заведён; он обязан покраснеть на
+втором паттерне. Затем убрать правку. Мутация обязательна: страж, который никогда не краснел, —
+украшение.
+
+Экраны раздела получают плашку отказа теми же помощниками ядра, что и экран «Приложения». Добавить в
+`core/notice.php`:
+
+```php
+/**
+ * Причина отказа живёт в сессионном flash и показывается ровно один раз: второй показ означал бы,
+ * что человек увидел старую причину свежего действия.
+ */
+function takeAdminFlashReason(): string
+{
+    startSession();
+    $flashed = $_SESSION['admin_error'] ?? '';
+    unset($_SESSION['admin_error']);
+
+    return is_string($flashed) ? $flashed : '';
+}
+
+// Заголовок отказа — из словаря ядра по ключу 'migration-failed'. Пустая строка означает «отказа нет»:
+// ни один экран не должен выдумывать свою формулировку сбоя.
+function adminFailureTitle(string $reason): string
+{
+    if ($reason === '' && !requestNoticeIsFailure()) {
+        return '';
+    }
+
+    return (string) (noticeText('migration-failed', CORE_NOTICE_TEXT) ?? '');
+}
+```
+
+И перевести `coreAdminApps()` на них: блок чтения flash и сборки заголовка (комментарий «Причина
+сбоя приезжает из сессионного flash» и две строки после него) заменить на `$alertReason =
+takeAdminFlashReason();` и `$alertTitle = adminFailureTitle($alertReason);`. Смысл тот же, но остаётся
+один источник истины о том, где причина лежит и как называется. Консистенцию ключа отказа и словаря
+уже стережёт `tests/guard/NoticeKeyTest.php` — новый страж к нему не дублирует, а дописывает то, чего
+он видеть не может: канал, а не имя ключа.
+
+Вместе с помощниками выводится наружу сама плашка — как шаблон ядра, чтобы пять экранов раздела и
+экран «Приложения» не размечали один и тот же красный блок каждый по-своему. Создать
+`core/templates/admin/alert.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+/** @var string $title */
+/** @var string $reason */
+
+if ($title === '' && $reason === '') {
+    return;
+}
+
+echo '<div class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3" role="alert">';
+
+if ($title !== '') {
+    echo '<p class="text-sm font-medium text-bad">' . e($title) . '</p>';
+}
+
+if ($reason !== '') {
+    echo '<p class="mt-1 text-sm text-bad">' . e($reason) . '</p>';
+}
+
+echo '</div>';
+```
+
+Форма файла не украшение: `OutputEscapingTest` разбирает печатающее выражение целиком, поэтому
+условие внутри тернарника (`$title !== '' ? … : ''`) стало бы нарушением — переменная оказалась бы
+в `echo` накрытая только обычной круглой скобкой, а не вызовом-обёрткой. Отдельные `if` с `echo`
+проходят страж честно.
+
+Вызов `partial('admin/alert', …)` разрешается по иерархии шаблонов (§5.6): приложение → тема → ядро,
+то есть тема может переписать вид плашки, не трогая код. Если файла нет, `resolveTemplate()` молча
+вернёт `theme/404.php` — подмена будет видна по отсутствию `role="alert"` в тесте отказа.
+
+Перевести на неё и экран ядра: в `core/templates/admin/apps.php` блок комментариев «Отказ: заголовок
+берётся из словаря…» с тернарником, собирающим `$alert`, заменить на
+
+```php
+$alert = partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason]);
+```
+
+Строка вывода (`/* @safe html */ echo adminShell(…)`) остаётся как есть: `$alert` — агрегатор
+разметки, собранный тем же файлом.
+
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l core/templates/admin/alert.php && php -l core/templates/admin/apps.php"`
+Expected: `No syntax errors detected` для обоих файлов.
+
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter QueryAppendTest`
 Expected: PASS — 4 проверки.
 
-Run: `vendor/bin/phpunit --testsuite http --filter AdminAppsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter AdminAppsTest`
 Expected: PASS — экран ядра работает на новом помощнике (`/admin/apps` параметров не несёт,
-разделитель для него остаётся «?»).
+разделитель для него остаётся «?»). Проверка отказа печатает и заголовок, и причину и `role="alert"`:
+если `core/templates/admin/alert.php` не создан, `resolveTemplate()` подставит 404 и эта проверка
+покраснеет сама.
 
-Run: `vendor/bin/phpunit --testsuite http --filter NewsPublicTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsPublicTest`
 Expected: PASS — с подключением `boot.php` раздел начинает отвечать в настоящем процессе; до этого
 теста проверка шла вслепую, потому что `unit` и `db` подключают файл сами.
 
@@ -958,10 +1164,13 @@ final class NewsAdminTest extends TestCase
         $response = $this->press('publish', $id);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('?error=', $response['headers']['location']);
+        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
+        self::assertStringNotContainsString('error=', $response['headers']['location'],
+            'Причина отказа не должна уезжать в адрес: он остаётся в истории браузера и в access-логе');
 
-        // Отказ читается по адресу редиректа: текст живёт в параметре «error», а не в базе, и
-        // страница без него показать его не обязана.
+        // Отказ читается на экране: заголовок берётся из словаря по ключу, а подробная причина
+        // приезжает из сессионного flash. В базе от отказа нет ничего, и страница без flash
+        // показать его не обязана.
         $page = Kernel::get($response['headers']['location']);
         self::assertStringContainsString(NEWS_PUBLISH_NEEDS_TEXT, $page['body']);
         self::assertStringContainsString('role="alert"', $page['body']);
@@ -1016,7 +1225,7 @@ final class NewsAdminTest extends TestCase
         $response = $this->press('teleport', $id);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('?error=', $response['headers']['location']);
+        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
         self::assertStringContainsString(
             'Неизвестное действие со материалом.',
             Kernel::get($response['headers']['location'])['body']
@@ -1078,7 +1287,7 @@ final class NewsAdminTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
 Expected: FAIL — `/news/admin` отвечает 404: маршрутов админки раздела ещё нет.
 
 **Пять ловушек этого теста:**
@@ -1093,7 +1302,8 @@ Expected: FAIL — `/news/admin` отвечает 404: маршрутов адм
 - Кнопки проверяются по тексту внутри `<button>`, а не по `value="publish"` скрытого поля: экран
   обязан быть читаемым человеком, и именно это сравнивает критерий §12.4.
 - Отказ читается открытием `$response['headers']['location']`, а не чистой ссылкой списка: текста
-  ошибки в базе нет, он живёт в параметре `error`, и страница без параметра показать его не обязана.
+  ошибки в базе нет, он лежит в сессионном flash, и страница без перехода по адресу редиректа показать
+  его не обязана. В адресе — только ключ `migration-failed`.
 
 - [ ] **Шаг 6: Контроллеры, действие строки и маршруты**
 
@@ -1117,11 +1327,13 @@ function newsAdminSummary(array $params = []): void
     $now = nowUtc();
     $counts = adminItemCounts($now);
     $pinned = pinnedVisibleCount($now);
+    $alertReason = takeAdminFlashReason();
 
     render('news/admin/summary', [
         'nav' => newsAdminNav(requestPath()),
-        'notice' => (string) (noticeOfRequest(NEWS_NOTICE_TEXT) ?? ''),
-        'error' => (string) queryString('error', ''),
+        'notice' => noticeForAdminScreen(NEWS_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
         'counts' => $counts,
         'pinned' => $pinned,
         'waiting' => $counts['scheduled'],
@@ -1139,11 +1351,13 @@ function newsAdminItems(array $params = []): void
     ]);
 
     $now = nowUtc();
+    $alertReason = takeAdminFlashReason();
 
     render('news/admin/items', [
         'nav' => newsAdminNav(requestPath()),
-        'notice' => (string) (noticeOfRequest(NEWS_NOTICE_TEXT) ?? ''),
-        'error' => (string) queryString('error', ''),
+        'notice' => noticeForAdminScreen(NEWS_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
         'filters' => $filters,
         'listing' => adminItemPage($filters, $now),
         'counts' => adminItemCounts($now),
@@ -1212,7 +1426,7 @@ addRoute('POST', '/news/admin/items', 'newsItemsAction', ['app' => 'news', 'priv
 `permission => 'login'`, а не `'manage'`: раздел правит контент-менеджер, а удаление раздела и
 обновления — дело администратора. Заодно это то же право, что у `getEditorAccess()`.
 
-Run: `php -l apps/news/admin.php && php -l apps/news/actions/items.php && php -l apps/news/routes.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/admin.php && php -l apps/news/actions/items.php && php -l apps/news/routes.php"`
 Expected: `No syntax errors detected` трижды.
 
 - [ ] **Шаг 7: Шаблоны двух экранов**
@@ -1230,7 +1444,8 @@ declare(strict_types=1);
 
 /**
  * @var string $notice
- * @var string $error
+ * @var string $alertTitle
+ * @var string $alertReason
  * @var string $nav
  * @var array<string, int> $counts
  * @var int $pinned
@@ -1285,11 +1500,8 @@ $content = $nav . '<p class="text-sm text-ink/70">' . e($waitingText) . '</p>'
     . $foot;
 
 $notice = $notice === '' ? null : $notice;
-$errorBlock = $error === ''
-    ? ''
-    : '<p class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">' . e($error) . '</p>';
-
-/* @safe html */ echo $errorBlock . adminShell('Новости', $content, $notice);
+/* @safe html */ echo partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason])
+    . adminShell('Новости', $content, $notice);
 ```
 
 Создать `apps/news/templates/admin/items.php`:
@@ -1301,7 +1513,8 @@ declare(strict_types=1);
 
 /**
  * @var string $notice
- * @var string $error
+ * @var string $alertTitle
+ * @var string $alertReason
  * @var string $nav
  * @var array{status: string, categoryId: string, query: string, page: int} $filters
  * @var array{items: list<array<string, mixed>>, total: int, pages: int, current: int, window: list<int>, perPage: int, href: string} $listing
@@ -1473,11 +1686,8 @@ $content = $nav . $heading
     . $foot;
 
 $notice = $notice === '' ? null : $notice;
-$errorBlock = $error === ''
-    ? ''
-    : '<p class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">' . e($error) . '</p>';
-
-/* @safe html */ echo $errorBlock . adminShell('Материалы', $content, $notice);
+/* @safe html */ echo partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason])
+    . adminShell('Материалы', $content, $notice);
 ```
 
 Три вещи в этих шаблонах — не украшение:
@@ -1489,10 +1699,10 @@ $errorBlock = $error === ''
 - `$badge` различает «на сайте», «ждёт срока» и «черновик» тремя цветами из токенов темы, а не одним:
   срок, который ещё не наступил, выглядит опубликованным по подписи, и человек решает по цвету.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
 Expected: PASS — 23 проверки.
 
-Run: `php -l apps/news/templates/admin/summary.php && php -l apps/news/templates/admin/items.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/templates/admin/summary.php && php -l apps/news/templates/admin/items.php"`
 Expected: `No syntax errors detected` дважды.
 
 - [ ] **Шаг 8: Прогнать ворота целиком**
@@ -1533,9 +1743,9 @@ Run:
 docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -P -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
 Три вещи в этом блоке — не оформление, а условие, чтобы он запустился:
@@ -1564,7 +1774,8 @@ Run:
 GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \
 GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.com' \
 git add apps/news/admin.php apps/news/actions/items.php apps/news/lib/admin.php apps/news/lib/boot.php \
-  apps/news/routes.php apps/news/templates/admin core/apps.php core/response.php core/bootstrap.php \
+  apps/news/routes.php apps/news/templates/admin core/apps.php core/response.php core/routes.php \
+  core/notice.php core/templates/admin tests/guard/FailureChannelTest.php \
   tests/unit/NewsAdminRulesTest.php tests/unit/QueryAppendTest.php \
   tests/guard/RouteHandlersTest.php tests/http/NewsAdminTest.php
 git commit -m "Экраны админки «Новостей»: сводка, список с фильтрами и кнопки строки"
@@ -1588,6 +1799,7 @@ git commit -m "Экраны админки «Новостей»: сводка, �
 - Modify: `apps/news/templates/admin/summary.php`, `apps/news/templates/admin/items.php`
   (кнопка «Новый материал» и ссылка «Править»)
 - Modify: `.gitignore` (исключение для каталога загрузок)
+- Modify: `tests/guard/WebServerConfigTest.php` (барьеры каталога загрузок — тот же страж)
 - Modify: `tests/http/Kernel.php` (аннотация `post()`: значением может быть `\CURLFile`)
 - Test: `tests/unit/NewsFormRulesTest.php`, `tests/http/NewsItemFormTest.php`
 
@@ -1601,13 +1813,15 @@ git commit -m "Экраны админки «Новостей»: сводка, �
 - `core/form.php`: `postAll()`, `postString()`, `uploadedFile()`, `formValues()`, `isOn()`, `queryString()`
 - `core/auth.php`: `getEditorAccess()`; `core/csrf.php`: `csrfCheck()`, `csrfField()`
 - `core/response.php`: `redirect()`, `redirectWithNotice()`, `forbidden()`; `core/request.php`: `requestPath()`
+- `core/routes.php` (задача 8): `finishAppAction(array $result, string $to, string $notice): void` —
+  единственный канал отказа раздела (причина во flash, в адресе только ключ)
 - `core/id.php`: `newId()` (26 символов алфавита `0123456789abcdefghjkmnpqrstvwxyz`)
 - `core/template.php`: `render()`, `e()`; `admin/layout.php`: `adminShell()`, `adminNotice()`
 - `constants.php`: `NEWS_FORM_FIELDS`, `NEWS_FORM_MAX`, `NEWS_STATUS`, `NEWS_STATUS_LABEL`,
   `NEWS_RESERVED_SLUGS`, `NEWS_SLUG_MAX`, `NEWS_NOTICE_TEXT`, `NEWS_FIELDS`, `TAG_FIELDS`
 - `validators.php`: `parseNewsForm()`, `newsFormErrors()`, `resolveStatus()`, `fieldLimit()`
 - `items.php`: `NEWS_ADMIN_ITEMS_PATH`, `NEWS_ID_MAX`, `NEWS_PUBLISH_NEEDS_TEXT`, `itemForForm()`,
-  `createItem()`, `updateItem()`
+  `createItem()`, `updateItem()`, `itemFailure()`
 - `admin.php` (задача 17): `newsAdminNav()`, `newsAdminBackHref()`; `catalog.php`: `categoryOptions()`
 
 **Производит** (это читают задачи 19–20: справочники повторяют и приём файла, и отказ на месте):
@@ -1860,7 +2074,7 @@ final class NewsFormRulesTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsFormRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsFormRulesTest`
 Expected: FAIL — `Call to undefined function newsFormButtons()`.
 
 - [ ] **Шаг 2: Правила экрана формы и приём файла**
@@ -2094,10 +2308,10 @@ require_once __DIR__ . '/upload.php';
 `NEWS_FORM_FIELDS` и `NEWS_STATUS`), `upload.php` — последним: он не читает правил раздела, только
 `newId()` из ядра, и следующий за ним файл не нужен.
 
-Run: `php -l apps/news/lib/form.php && php -l apps/news/lib/upload.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/form.php && php -l apps/news/lib/upload.php"`
 Expected: `No syntax errors detected` дважды.
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsFormRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsFormRulesTest`
 Expected: PASS — 14 проверок.
 
 - [ ] **Шаг 3: Написать падающий HTTP-тест формы**
@@ -2370,7 +2584,9 @@ final class NewsItemFormTest extends TestCase
         $page = Kernel::get(NEWS_ADMIN_ITEMS_PATH . '/net-takogo-id');
 
         self::assertSame(302, $page['status']);
-        self::assertStringStartsWith(NEWS_ADMIN_ITEMS_PATH . '?error=', $page['headers']['location']);
+        self::assertStringContainsString('notice=migration-failed', $page['headers']['location']);
+        self::assertStringNotContainsString('error=', $page['headers']['location'],
+            'Причина отказа не уезжает в адрес: её печатает плашка из flash, а адресная строка — нет');
     }
 
     // ── Создание ──────────────────────────────────────────
@@ -2545,7 +2761,9 @@ final class NewsItemFormTest extends TestCase
         $response = Kernel::post(NEWS_ADMIN_ITEMS_PATH . '/' . rawurlencode($id), $this->fields());
 
         self::assertSame(302, $response['status']);
-        self::assertStringStartsWith(NEWS_ADMIN_ITEMS_PATH . '?error=', $response['headers']['location']);
+        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
+        self::assertStringNotContainsString('error=', $response['headers']['location'],
+            'Причина отказа не уезжает в адрес: её печатает плашка из flash, а адресная строка — нет');
     }
 
     // ── Загрузка обложки ──────────────────────────────────
@@ -2616,7 +2834,7 @@ final class NewsItemFormTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsItemFormTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsItemFormTest`
 Expected: FAIL — `/news/admin/items/new` отвечает 404: маршрутов формы ещё нет.
 
 **Пять ловушек этого теста:**
@@ -2662,8 +2880,9 @@ function newsItemEdit(array $params = []): void
 
     if ($item === null) {
         // Строки нет — в форму вести нечего: человек оказывается в списке с тем же текстом отказа,
-        // что даёт кнопка строки удалённого материала.
-        redirect(queryAppend(NEWS_ADMIN_ITEMS_PATH, 'error', 'Материала уже нет — обновите страницу.'));
+        // что даёт кнопка строки удалённого материала. Канал один на весь раздел: причина в flash,
+        // в адрес — только ключ словаря (тот же `finishAppAction()`, что и кнопки списка).
+        finishAppAction(itemFailure('Материала уже нет — обновите страницу.'), $back, '');
     }
 
     renderNewsItemForm($item, [], [], $back);
@@ -2740,7 +2959,8 @@ function newsItemSaveAction(array $params = []): void
     $item = $id === '' ? [] : (array) itemForForm($id);
 
     if ($id !== '' && $item === []) {
-        redirect(queryAppend(NEWS_ADMIN_ITEMS_PATH, 'error', 'Материала уже нет — обновите страницу.'));
+        // Строку удалили, пока форма была открыта: тот же канал отказа, что у кнопок списка.
+        finishAppAction(itemFailure('Материала уже нет — обновите страницу.'), $back, '');
     }
 
     // Статус решает нажатая кнопка. Скрытое поле `status` приходит раньше кнопки, и его чтение
@@ -2832,7 +3052,7 @@ addRoute('POST', '/news/admin/items/{id}', 'newsItemSaveAction', ['app' => 'news
 не уезжает в правку с `id = 'new'`, а `newsAdminBackHref()` — наоборот — адрес создания списком не
 считает и возврат в список из формы даёт чистый путь.
 
-Run: `php -l apps/news/admin.php && php -l apps/news/actions/item.php && php -l apps/news/routes.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/admin.php && php -l apps/news/actions/item.php && php -l apps/news/routes.php"`
 Expected: `No syntax errors detected` трижды.
 
 - [ ] **Шаг 5: Шаблон формы**
@@ -3039,11 +3259,8 @@ $form = '<form class="space-y-6" method="post" action="' . e($action) . '" encty
     . 'К списку материалов</a></p></form>';
 
 $notice = $notice === '' ? null : $notice;
-$errorBlock = $error === ''
-    ? ''
-    : '<p class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">' . e($error) . '</p>';
-
-/* @safe html */ echo $errorBlock . adminShell($isNew ? 'Новый материал' : 'Правка материала', $status . $nav . $form, $notice);
+/* @safe html */ echo partial('admin/alert', ['title' => '', 'reason' => $error])
+    . adminShell($isNew ? 'Новый материал' : 'Правка материала', $status . $nav . $form, $notice);
 ```
 
 Три вещи в этом шаблоне обязательны, и каждая — находка стража:
@@ -3058,7 +3275,7 @@ $errorBlock = $error === ''
   решает намерение, и скрытое `status` — страховка на случай, если браузер не добавил значение кнопки
   (тогда материал остаётся в том же статусе, в каком был).
 
-Run: `php -l apps/news/templates/admin/item-form.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/templates/admin/item-form.php"`
 Expected: `No syntax errors detected`.
 
 - [ ] **Шаг 6: Кнопка «Новый материал» и ссылка «Править»**
@@ -3105,15 +3322,76 @@ Expected: `No syntax errors detected`.
 </IfModule>
 
 <FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phar)$">
-    Require all denied
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
 # Список файлов каталога не раздаётся.
 Options -Indexes
 ```
 
+Голый `Require all denied` здесь стоять не может: на Apache 2.2 это неизвестная директива, то есть
+500 на весь сайт, а не отказ по каталогу. Тот же мотив, что и в корневом файле (задача 1, шаг 4),
+его же формой пользуется и страж `tests/guard/WebServerConfigTest.php` — см. ниже, вторая проверка
+файла.
+
 Этот блок живёт здесь, а не в корневом `public/.htaccess` (задача 1, шаг 4): в корне он выключал бы PHP на всём
 сайте, включая `public/index.php`, — поэтому в задаче 1 его сознательно не было.
+
+Барьеры этого файла `php -S` не читает, поэтому их стережёт тот же страж, что и корневой `.htaccess`.
+Изменить `tests/guard/WebServerConfigTest.php` — добавить константу, тест и разбор:
+
+```php
+    private const UPLOADS_CONFIG = 'public/uploads/.htaccess';
+
+    // Каталог загрузок — единственное место, куда ложится то, что принесли люди. Проверяется тем же
+    // механизмом, что и корень: голый «Require» без обёртки роняет сайт 500-м, а отказ, который не
+    // накрывает php-расширения, оставляет исполняемый файл по адресу картинки.
+    public function testКаталогЗагрузокДержитСвоиБарьеры(): void
+    {
+        $path = dirname(__DIR__, 2) . '/' . self::UPLOADS_CONFIG;
+
+        self::assertFileExists($path, 'У каталога загрузок нет .htaccess: PHP в нём исполняется');
+
+        $config = (string) file_get_contents($path);
+        self::assertSame(
+            [],
+            $this->uploadsViolations($config, self::UPLOADS_CONFIG),
+            'Барьеры каталога загрузок обязаны быть на месте и в форме, живой на хостинге'
+        );
+    }
+
+    /** @return list<string> */
+    private function uploadsViolations(string $config, string $relative): array
+    {
+        $found = [];
+
+        if (preg_match('/^\s*Options\b[^\n]*-Indexes/m', $config) !== 1) {
+            $found[] = $relative . ': нет Options -Indexes — содержимое каталога отдаётся списком';
+        }
+
+        if (! $this->hasDeniedWithFallback($config)) {
+            $found[] = $relative . ': нет отказа с обёрткой mod_authz_core и запасной веткой — неизвестная директива роняет сайт 500-м';
+        }
+
+        if (preg_match('/<FilesMatch[^>]*php/i', $config) !== 1) {
+            $found[] = $relative . ': отказ не накрывает php-расширения — файл, переименованный в .php, остаётся исполняемым';
+        }
+
+        return $found;
+    }
+```
+
+Проверить силу: в образце шага 7 заменить обёрнутый отказ на `Require all denied` — находка обязана
+появиться ровно одна; затем вернуть как было. На пустом тексте краснеют все три.
+
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter WebServerConfigTest`
+Expected: PASS — четыре метода (три корневых + каталог загрузок).
 
 Изменить `.gitignore` — в блок каталога загрузок, сразу после `!/public/uploads/.htaccess` из задачи 1, добавить две:
 
@@ -3124,7 +3402,7 @@ Options -Indexes
 !/public/uploads/news/.gitkeep
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php php -r 'require "config.php"; require "core/bootstrap.php"; echo is_dir("public/uploads/news") ? "есть" : "нет", PHP_EOL;'`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'require "config.php"; require "core/bootstrap.php"; echo is_dir("public/uploads/news") ? "есть" : "нет", PHP_EOL;'`
 Expected: `есть` (после `git add` каталога с `.gitkeep`).
 
 - [ ] **Шаг 8: Разрешить `\CURLFile` в транспортном помощнике**
@@ -3140,10 +3418,10 @@ Expected: `есть` (после `git add` каталога с `.gitkeep`).
 принимает его нативно и сам переключает запрос на `multipart/form-data`. Меняется только аннотация:
 `self::request()` передаёт массив дальше без разбора, и `$options` остаётся `array<string, mixed>`.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsItemFormTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsItemFormTest`
 Expected: PASS — 23 проверки, все новые: форма создаёт, правит и принимает файл.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
 Expected: PASS — 23 проверки. Одна из них утверждает, что в списке **нет** ссылки на справочники
 задачи 19; кнопки этой задачи её не ломают.
 
@@ -3175,10 +3453,10 @@ Run:
 docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php scripts/make-og-default.php
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -P -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php scripts/make-og-default.php
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
 Команды те же, что в шаге 9 задачи 17, и правила те же: `db-reset` — на хосте, замок снять вручную,
@@ -3203,7 +3481,7 @@ git add apps/news/lib/form.php apps/news/lib/upload.php apps/news/lib/boot.php \
   apps/news/admin.php apps/news/actions/item.php apps/news/routes.php \
   apps/news/templates/admin/item-form.php apps/news/templates/admin/summary.php \
   apps/news/templates/admin/items.php public/uploads/.htaccess public/uploads/news/.gitkeep \
-  .gitignore tests/http/Kernel.php \
+  .gitignore tests/http/Kernel.php tests/guard/WebServerConfigTest.php \
   tests/unit/NewsFormRulesTest.php tests/http/NewsItemFormTest.php
 git commit -m "Форма материала «Новостей»: создание, правка и загрузка обложки"
 ```

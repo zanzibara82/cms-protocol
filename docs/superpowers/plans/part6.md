@@ -549,7 +549,7 @@ final class CatalogTest extends NewsDbTestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite db --filter CatalogTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter CatalogTest`
 Expected: FAIL — `Call to undefined function createCategory()`.
 
 - [ ] **Шаг 2: Написать справочники раздела**
@@ -1068,20 +1068,20 @@ function deleteTag(string $id): array
 require_once __DIR__ . '/catalog.php';
 ```
 
-Run: `php -l apps/news/lib/catalog.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/catalog.php"`
 Expected: `No syntax errors detected`.
 
-Run: `vendor/bin/phpstan analyse --no-progress apps/news`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpstan analyse --no-progress apps/news`
 Expected: ошибок нет.
 
 - [ ] **Шаг 3: Прогнать тест справочников**
 
-Run: `vendor/bin/phpunit --testsuite db --filter CatalogTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter CatalogTest`
 Expected: PASS — 25 проверок.
 
 - [ ] **Шаг 4: Прогнать все наборы**
 
-Run: `vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора зелёные. `NewsSeedTest` проходит: `setUp()` теста справочников очищает таблицы
 раздела и возвращает рубрики закладки, а `tearDownAfterClass()` убирает таблицы и строку установки.
 
@@ -1541,10 +1541,10 @@ final class NewsFeedTest extends NewsDbTestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsFeedRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsFeedRulesTest`
 Expected: FAIL — `Call to undefined function pageCount()`.
 
-Run: `vendor/bin/phpunit --testsuite db --filter NewsFeedTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsFeedTest`
 Expected: FAIL — `Call to undefined function findFeed()`.
 
 - [ ] **Шаг 2: Написать чтение раздела**
@@ -2092,26 +2092,26 @@ require_once __DIR__ . '/feed.php';
 зависимость видна; функции вызываются после подключения всех файлов, поэтому внутри самого `feed.php`
 порядок не важен.
 
-Run: `php -l apps/news/lib/feed.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/feed.php"`
 Expected: `No syntax errors detected`.
 
-Run: `vendor/bin/phpstan analyse --no-progress apps/news`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpstan analyse --no-progress apps/news`
 Expected: ошибок нет. Если PHPStan не принимает форму `array_merge()` в `toFull()` против объявленного
 `@return`, ключи карточки выписываются в литерал явно — форма, объявленная в комментарии, обязательна:
 её читают шаблоны задачи 16.
 
 - [ ] **Шаг 3: Прогнать тесты чтения**
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsFeedRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsFeedRulesTest`
 Expected: PASS — 9 проверок.
 
-Run: `vendor/bin/phpunit --testsuite db --filter NewsFeedTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsFeedTest`
 Expected: PASS — 13 проверок. Если падает проверка, правка делается в `feed.php`, а не в тесте: тест
 описывает правила из спецификации (§8.2, §8.4, §8.6), а не поведение кода.
 
 - [ ] **Шаг 4: Прогнать все наборы**
 
-Run: `vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора зелёные. `NewsSeedTest` и `CatalogTest` не зависят от `feed.php`.
 
 - [ ] **Шаг 5: Ворота и фиксация**

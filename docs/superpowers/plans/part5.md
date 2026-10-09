@@ -9,7 +9,7 @@
 - Тест: `tests/http/SmtpIntegrationTest.php`
 
 **Интерфейсы:**
-- Потребляет: `applyFilters()` и `hooksReset()` из `core/hooks.php`; `configValue()` из `core/config.php`; `newId()` из `core/id.php`; `logInfo()`, `logWarn()`, `logError()` из `core/log.php`.
+- Потребляет: `applyFilters()` и `hooksReset()` из `core/hooks.php`; `configValue()` из `core/config-loader.php`; `newId()` из `core/id.php`; `logInfo()`, `logWarn()`, `logError()` из `core/log.php`.
 - Производит: `Cms\Core\Mailer` — `send(array $message): array{ok: bool, error: string}`, где ключи письма: обязательные `to`, `subject`, `text`, необязательные `html`, `replyTo`, `from`; `Cms\Core\Mailer::smtpTransport(): callable`; `Cms\Core\SmtpSocket` — `open()`, `deliver(string $raw)`, `close()`; `rfc2822Stamp(DateTimeImmutable $date): string`.
 
 **Зачем интеграционная проверка лежит в `tests/http/`:** ей нужна сеть контейнера (mailpit), а не база и не `php -S`. Набор `http` уже запускается в контейнере, поэтому тест живёт там; при отсутствии `CMS_MAILPIT_URL` он пропускается, чтобы прогоны на хостинге и в CI оставались зелёными.
@@ -253,7 +253,7 @@ final class MailerTest extends TestCase
 
 - [ ] **Шаг 2: Запустить тест и убедиться, что он падает**
 
-Run: `vendor/bin/phpunit --testsuite unit --filter MailerTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter MailerTest`
 Expected: FAIL — `Class "Cms\Core\Mailer" not found`.
 
 - [ ] **Шаг 3: Добавить штамп даты в `core/date.php`**
@@ -706,7 +706,7 @@ final class Mailer
 
 - [ ] **Шаг 6: Запустить тест и убедиться, что он проходит**
 
-Run: `vendor/bin/phpunit --testsuite unit --filter MailerTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter MailerTest`
 Expected: PASS — 13 проверок.
 
 - [ ] **Шаг 7: Написать страж против `mail()`**
@@ -800,7 +800,7 @@ final class MailFunctionTest extends TestCase
 
 - [ ] **Шаг 8: Запустить стража**
 
-Run: `vendor/bin/phpunit --testsuite guard --filter MailFunctionTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter MailFunctionTest`
 Expected: PASS.
 
 - [ ] **Шаг 9: Написать интеграционную проверку на mailpit**
@@ -909,7 +909,7 @@ final class SmtpIntegrationTest extends TestCase
 Run: `docker compose exec php vendor/bin/phpunit --testsuite http --filter SmtpIntegrationTest`
 Expected: PASS — 3 проверки. Вне контейнера (без `CMS_MAILPIT_URL`) тот же тест пропускается:
 
-Run: `vendor/bin/phpunit --testsuite http --filter SmtpIntegrationTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter SmtpIntegrationTest`
 Expected: SKIPPED с текстом про `CMS_MAILPIT_URL`.
 
 - [ ] **Шаг 11: Прогнать ворота и зафиксировать**
@@ -1197,7 +1197,7 @@ final class NewsSchemaTest extends TestCase
 
 - [ ] **Шаг 2: Запустить тест и убедиться, что он падает**
 
-Run: `vendor/bin/phpunit --testsuite db --filter NewsSchemaTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSchemaTest`
 Expected: FAIL — `Раздел «Новости» не установился: Раздел «news» не найден в сборке.`
 
 - [ ] **Шаг 3: Создать манифест и загрузчик правил раздела**
@@ -1479,7 +1479,7 @@ final class NewsConstantsTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsConstantsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsConstantsTest`
 Expected: PASS — 6 проверок.
 
 - [ ] **Шаг 6: Создать первый релиз схемы — каталог**
@@ -1578,7 +1578,7 @@ CREATE TABLE IF NOT EXISTS tbl_news_old_slug (
 
 - [ ] **Шаг 8: Запустить тест схемы и убедиться, что он проходит**
 
-Run: `vendor/bin/phpunit --testsuite db --filter NewsSchemaTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSchemaTest`
 Expected: PASS — 12 проверок.
 
 - [ ] **Шаг 9: Создать начальную закладку и её тест**
@@ -1717,7 +1717,7 @@ final class NewsSeedTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite db --filter NewsSeedTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSeedTest`
 Expected: PASS — 4 проверки.
 
 - [ ] **Шаг 10: Написать страж SQL-файлов раздела и тест реестра**
@@ -1891,12 +1891,12 @@ final class NewsRegistryTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite guard --filter AppSqlTest && vendor/bin/phpunit --testsuite db --filter NewsRegistryTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "vendor/bin/phpunit --testsuite guard --filter AppSqlTest && vendor/bin/phpunit --testsuite db --filter NewsRegistryTest"`
 Expected: PASS — 3 стража и 5 проверок реестра.
 
 - [ ] **Шаг 11: Прогнать все наборы**
 
-Run: `vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — падения только в задачах, которые ещё не написаны, отсутствуют; `AppsRegistryTest` проходит с обновлённым списком приватных путей.
 
 - [ ] **Шаг 12: Ворота и фиксация**
@@ -2034,7 +2034,7 @@ final class NewsVisibilityTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsVisibilityTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsVisibilityTest`
 Expected: FAIL — `Call to undefined function isOpen()`.
 
 - [ ] **Шаг 2: Создать правила видимости**
@@ -2117,7 +2117,7 @@ require_once __DIR__ . '/constants.php';
 require_once __DIR__ . '/visibility.php';
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsVisibilityTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsVisibilityTest`
 Expected: PASS — 9 проверок.
 
 - [ ] **Шаг 3: Написать падающий тест адресов**
@@ -2286,7 +2286,7 @@ final class NewsSlugTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsSlugTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSlugTest`
 Expected: FAIL — `Call to undefined function slugify()`.
 
 - [ ] **Шаг 4: Создать правила адресов**
@@ -2431,7 +2431,7 @@ function rememberOldSlug(array $slugs, string $previous, string $next): array
 require_once __DIR__ . '/slug.php';
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsSlugTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSlugTest`
 Expected: PASS — 16 проверок.
 
 - [ ] **Шаг 5: Написать падающий тест проверки полей**
@@ -2796,7 +2796,7 @@ final class NewsValidatorsTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsValidatorsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsValidatorsTest`
 Expected: FAIL — `Call to undefined function parseBody()`.
 
 - [ ] **Шаг 6: Создать проверку полей**
@@ -3201,12 +3201,12 @@ require_once __DIR__ . '/slug.php';
 require_once __DIR__ . '/validators.php';
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsValidatorsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsValidatorsTest`
 Expected: PASS — 26 проверок.
 
 - [ ] **Шаг 8: Прогнать все наборы, ворота и зафиксировать**
 
-Run: `vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора зелёные.
 
 Run: `bash scripts/gate.sh`

@@ -172,7 +172,7 @@ final class DeploySafetyTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard --filter DeploySafetyTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter DeploySafetyTest`
 Expected: FAIL — «scripts/deploy.sh: файл выкладки обязан существовать». Файлы появятся в шагах 2–5;
 тест падает на первом же отсутствующем, и это правильный провал: он значит, что страж читает
 файлы, а не молчит на пустом дереве.
@@ -536,7 +536,7 @@ $line('зонд удалил себя', $removed ? 'да' : 'нет', $removed, 
 echo implode("\n", $lines) . "\n";
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php php -l scripts/hosting-probe.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -l scripts/hosting-probe.php`
 Expected: `No syntax errors detected`. PHPStan этот файл не смотрит (`phpstan.neon` перечисляет
 `core`, `admin`, `theme`, `apps`, `public`, `tests`), а `php -l` в воротах идёт `find`-ом по всему
 дереву и до `scripts/` доходит.
@@ -548,7 +548,7 @@ Expected: `No syntax errors detected`. PHPStan этот файл не смотр
 
 - [ ] **Шаг 5: Прогнать страж**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard --filter DeploySafetyTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter DeploySafetyTest`
 Expected: PASS — 4 проверки.
 
 Если падает `testЗапаснаяРаскладкаЗакрываетСлужебноеДоПереписывания`, смотреть не на регистр
@@ -840,9 +840,9 @@ bash scripts/css
 docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
-docker compose -f docker-compose.dev.yml run --rm -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -P -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
+docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
 Четыре вещи в этом блоке — условие, чтобы он запустился (повторяют шаг 9 задачи 17, отличаются
@@ -1038,7 +1038,7 @@ curl -sS https://домен/sitemap.xml | head -20
 
 - [ ] **Шаг 11: Ворота, руками и коммит**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — четыре набора; в `guard` добавился `DeploySafetyTest`.
 
 Run: `bash scripts/gate.sh`

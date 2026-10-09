@@ -193,7 +193,7 @@ function futureFeed(array $params = []): void
 `tests/fixtures/apps/future/sql/.gitkeep` — пустой файл: каталог обязан существовать, чтобы `planApp('future')`
 проверял пустой план, а не падение на отсутствующем каталоге.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php -l tests/fixtures/apps/demo/routes.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php -l tests/fixtures/apps/demo/routes.php`
 Expected: `No syntax errors detected`.
 
 - [ ] **Шаг 2: Падающий тест реестра — он же красным, пока реестра нет**
@@ -310,7 +310,7 @@ final class AppsRegistryTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter AppsRegistryTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter AppsRegistryTest`
 Expected: FAIL — `appManifests()` не определена.
 
 - [ ] **Шаг 3: Реестр приложений**
@@ -547,7 +547,7 @@ require_once dirname(__DIR__) . '/admin/layout.php';
 
 - [ ] **Шаг 4: Зелёный тест реестра**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter AppsRegistryTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter AppsRegistryTest`
 Expected: PASS (10/10).
 
 - [ ] **Шаг 5: План миграций**
@@ -1057,7 +1057,7 @@ final class MigrationsTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter MigrationsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter MigrationsTest`
 Expected: PASS (15/15).
 
 - [ ] **Шаг 7: Право на установку разделов**
@@ -1305,7 +1305,7 @@ final class OptionsTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter OptionsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter OptionsTest`
 Expected: PASS (8/8).
 
 - [ ] **Шаг 9: Одноразовый установщик**
@@ -1783,7 +1783,7 @@ final class SetupTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter SetupTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter SetupTest`
 Expected: PASS (8/8). Порядок тестов внутри файла значим: замок появляется в пятом, а следующие три
 проверяют поведение после него.
 
@@ -2437,7 +2437,7 @@ final class AdminAppsTest extends TestCase
     }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http`
 Expected: PASS (`NotFoundTest`, `LoginTest`, `SetupTest`, `AdminAppsTest`).
 
 - [ ] **Шаг 14: Страж обработчиков маршрутов**
@@ -2540,7 +2540,7 @@ final class RouteHandlersTest extends TestCase
 задачи 9. Чтобы ворота не были красными между задачами, создайте этот тест в задаче 9 (шаг 5), а в задаче 8
 держите в файле только первые два теста и `testТаблицаМаршрутовНеПуста`.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS.
 
 - [ ] **Шаг 15: Ворота и коммит**
@@ -2776,7 +2776,7 @@ final class RobotsTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter 'SitemapTest|RobotsTest'`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter 'SitemapTest|RobotsTest'`
 Expected: FAIL — маршрутов `/sitemap.xml` и `/robots.txt` ещё нет.
 
 - [ ] **Шаг 2: Карта сайта и robots.txt**
@@ -2974,7 +2974,7 @@ function coreRobots(array $params = []): void
 require_once __DIR__ . '/seo.php';
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter 'SitemapTest|RobotsTest'`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter 'SitemapTest|RobotsTest'`
 Expected: PASS (7/7 и 6/6).
 
 - [ ] **Шаг 3: Страж приватных путей**
@@ -3067,7 +3067,7 @@ final class PrivatePathsRobotsTest extends TestCase
     }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS.
 
 - [ ] **Шаг 4: Ворота и коммит**

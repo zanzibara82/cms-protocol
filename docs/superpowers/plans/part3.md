@@ -93,7 +93,7 @@ final class PasswordTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter PasswordTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter PasswordTest`
 Expected: FAIL — `hashPassword()` не определена.
 
 - [ ] **Шаг 2: Реализуем пароли и право**
@@ -454,7 +454,7 @@ final class LoginLimitTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: PASS. Тест «Неверный пароль…» ожидает 2 строки: `attemptLogin()` с пустым адресом не пишет попытку,
 а две неудачи — пишут.
 
@@ -823,7 +823,7 @@ final class LoginTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter LoginTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter LoginTest`
 Expected: PASS. Красным этот набор был до шага 4: маршрутов `/login` и `/logout` в реестре ещё нет, страница входа
 не собрана.
 
@@ -895,7 +895,7 @@ final class ClientIpTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS.
 
 - [ ] **Шаг 7: Ворота и коммит**
@@ -1013,7 +1013,7 @@ final class FormValuesTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter FormValuesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter FormValuesTest`
 Expected: FAIL — функции не определены.
 
 - [ ] **Шаг 2: Реализуем помощники форм и уведомления**
@@ -1087,7 +1087,6 @@ const CORE_NOTICE_TEXT = [
     'updated' => 'Приложение обновлено.',
     'enabled' => 'Приложение включено.',
     'disabled' => 'Приложение выключено.',
-    'settings-saved' => 'Настройки сохранены.',
 ];
 
 function noticeText(string $key, array $dictionary): ?string
@@ -1159,7 +1158,7 @@ require_once __DIR__ . '/notice.php';
 require_once __DIR__ . '/form.php';
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter FormValuesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter FormValuesTest`
 Expected: PASS (8/8).
 
 - [ ] **Шаг 3: Тест отказа при чужом токене**
@@ -1230,7 +1229,7 @@ final class CsrfTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter CsrfTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter CsrfTest`
 Expected: FAIL — класса `Cms\Core\ResponseFinished` нет, а `respond()` обрывает процесс через `exit`, поэтому
 тест до проверок не доходит.
 
@@ -1282,7 +1281,7 @@ function respond(int $status, string $body, array $headers = []): never
 define('PHPUNIT_RUNNING', true);
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite db`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: PASS.
 
 - [ ] **Шаг 5: Включаем CSRF во вход и выход**
@@ -1370,7 +1369,7 @@ function coreLogout(array $params = []): void
     }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --filter LoginTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter LoginTest`
 Expected: PASS — `token()` начинает получать настоящий токен, и проверка формы проходит.
 
 - [ ] **Шаг 6: Страж покрытия CSRF**
@@ -1528,7 +1527,7 @@ final class CsrfCoverageTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS — `coreLoginSubmit()` и `coreLogout()` начинаются с `csrfCheck()`.
 
 - [ ] **Шаг 7: Ворота и коммит**

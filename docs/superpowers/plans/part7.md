@@ -388,7 +388,7 @@ final class NewsPublishRulesTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsPublishRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsPublishRulesTest`
 Expected: FAIL — `Call to undefined function parseAdminFilters()`.
 
 - [ ] **Шаг 2: Написать `apps/news/lib/items.php`**
@@ -1310,15 +1310,15 @@ require_once __DIR__ . '/items.php';
 `items.php` подключается последним: он читает `paragraphsOf()` и `pageWindow()` из `feed.php`,
 `resolveTagIds()` из `catalog.php` и `bodyToFormText()` из `validators.php`.
 
-Run: `php -l apps/news/lib/items.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/items.php"`
 Expected: `No syntax errors detected`.
 
-Run: `vendor/bin/phpstan analyse --no-progress apps/news`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpstan analyse --no-progress apps/news`
 Expected: ошибок нет. Если PHPStan не принимает форму `array_merge()` в `adminItemPage()` или
 `itemForForm()`, ключи выписываются литералом явно — объявленные в `@return` формы обязательны:
 их читают шаблоны задач 17 и 18.
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsPublishRulesTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsPublishRulesTest`
 Expected: PASS — 15 проверок.
 
 - [ ] **Шаг 3: Написать падающий тест на базе**
@@ -1847,16 +1847,16 @@ final class NewsItemsTest extends NewsDbTestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite db --filter NewsItemsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsItemsTest`
 Expected: FAIL — `Call to undefined function adminItemPage()`.
 
 - [ ] **Шаг 4: Прогнать тесты правил редактора**
 
-Run: `vendor/bin/phpunit --testsuite db --filter NewsItemsTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsItemsTest`
 Expected: PASS — 24 проверки. Если падает проверка, правка делается в `items.php`, а не в тесте:
 тест описывает правила из спецификации (§8.2, §8.3, §8.5), а не поведение кода.
 
-Run: `vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора зелёные. `CatalogTest` и `NewsFeedTest` не зависят от `items.php`;
 `NewsItemsTest` читает `findFeed()` из задачи 14, поэтому прогоняет и её запросы.
 
@@ -2148,7 +2148,7 @@ final class NewsSeoTest extends TestCase
 }
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
 Expected: FAIL — `Call to undefined function newsTitle()`.
 
 - [ ] **Шаг 2: Реализуем метаданные раздела**
@@ -2471,7 +2471,7 @@ function modifiedTimeOf(array $item): ?string
 require_once __DIR__ . '/seo.php';
 ```
 
-Run: `vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
 Expected: PASS — 13 проверок.
 
 - [ ] **Шаг 3: Рисуем фирменное превью**
@@ -2486,7 +2486,7 @@ declare(strict_types=1);
 // Заготовка фирменного превью 1200×630. Раздел обязан отдавать картинку даже у материала
 // без обложки (§8.6), а требовать GD от виртуального хостинга нельзя: рисунок создаётся
 // один раз здесь и попадает в репозиторий готовым файлом.
-// Запуск: docker compose -f docker-compose.dev.yml run --rm php php scripts/make-og-default.php
+// Запуск: docker compose -f docker-compose.dev.yml run --rm -T php php scripts/make-og-default.php
 
 $target = __DIR__ . '/../public/assets/og-default.png';
 
@@ -2522,12 +2522,12 @@ imagedestroy($image);
 echo 'Готово: ' . $target . PHP_EOL;
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php php scripts/make-og-default.php`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php php scripts/make-og-default.php`
 Expected: `Готово: …/public/assets/og-default.png`.
 
 Проверить размер готового файла:
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php php -r 'echo implode(" ", getimagesize("public/assets/og-default.png")), PHP_EOL;'`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'echo implode(" ", getimagesize("public/assets/og-default.png")), PHP_EOL;'`
 Expected: `1200 630 3 …` (ширина, высота, тип PNG).
 
 Файл коммитится вместе с задачей — на хостинге его никто не перерисовывает.
@@ -2799,7 +2799,7 @@ final class NewsPublicTest extends TestCase
 }
 ```
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsPublicTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsPublicTest`
 Expected: FAIL — `/news` отвечает 404: маршрутов раздела ещё нет.
 
 **Две ловушки этого теста:**
@@ -3379,18 +3379,18 @@ declare(strict_types=1);
 
 - [ ] **Шаг 7: Прогнать тесты**
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
 Expected: PASS — 13 проверок.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite http --filter NewsPublicTest`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsPublicTest`
 Expected: PASS — 14 проверок.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit --testsuite guard`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS. Здесь ловятся три вещи: `RouteHandlersTest` находит четыре новых маршрута с вызываемыми
 обработчиками, `OutputEscapingTest` читает новые шаблоны вместе с `apps/news/lib/seo.php`, а `SqlSafetyTest`
 не находит склеивания в `routes.php`.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm php vendor/bin/phpunit`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора. Набор `db` зелёный без изменений: эта задача не трогает слой данных.
 
 - [ ] **Шаг 8: Ворота**
