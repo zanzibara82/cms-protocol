@@ -1033,7 +1033,8 @@ echo 'Привет, ' . e($name);
 ```
 
 `apps/news/templates/feed.php` появится в задаче 16; чтобы тест не зависел от будущего файла, создайте
-заглушку сейчас:
+заглушку сейчас. Класс заглушке не назначается: `class="news-feed"` не определялся ни в одном источнике
+стилей, правило для него не собиралось, и атрибут только притворялся вёрсткой (задача V5 пакета фиксов).
 
 ```php
 <?php
@@ -1041,7 +1042,7 @@ echo 'Привет, ' . e($name);
 declare(strict_types=1);
 
 // Лента новостей. Вёрстка придёт в задаче 16; файл создан, чтобы иерархия шаблонов проверялась.
-echo '<section class="news-feed"></section>';
+echo '<section></section>';
 ```
 
 `resolveTemplate()` ищет тему в двух корнях: обычный `theme/` и каталог из `EXTRA_THEME_DIR` (его подставляют
@@ -1410,10 +1411,17 @@ declare(strict_types=1);
 ```
 
 `src-css/app.css` — переносится из `english-portal/src/app/globals.css` (173 строки) с переводом дизайн-токенов в
-Tailwind v4 `@theme`:
+Tailwind v4 `@theme`. Источники классов объявлены явно: без `source(none)` CLI v4 сканирует всё рабочее дерево и
+вычитает только то, что попало в `.gitignore`, поэтому в артефакт попадают слова из текста планов и литералов
+тестов, а пересборка зависит от правок, к вёрстке не относящихся (задача V5 пакета фиксов).
 
 ```css
-@import 'tailwindcss';
+@import 'tailwindcss' source(none);
+
+@source "../theme/**/*.php";
+@source "../admin/**/*.php";
+@source "../core/templates/**/*.php";
+@source "../apps/**/templates/**/*.php";
 
 @theme {
   --color-paper: #fdf6ec;

@@ -1,10 +1,36 @@
 #!/usr/bin/env bash
-# Единственные ворота перед коммитом: синтаксис, статический анализ, стиль, тесты.
+# Единственные ворота перед коммитом: свежесть стилей, синтаксис, статический анализ, стиль, тесты.
 set -euo pipefail
 
 run() {
   docker compose -f docker-compose.dev.yml run --rm -T php "$@"
 }
+
+echo '— свежесть стилей'
+# Единственный шаг ворот, который живёт на хосте, а не в контейнере: образ php:8.3-cli Node не
+# ставит, а сборщик стилей (Tailwind CLI) лежит в node_modules разработчика. Шаг ничего не
+# переписывает в репозитории: он собирает в временный каталог и сравнивает побайтово, поэтому
+# зелёный прогон безопасен, а красный означает ровно одно — public/assets/app.css отстал от
+# разметки или от src-css/app.css. Сканируется тот же набор каталогов, что и при обычной сборке:
+# список @source задан в src-css/app.css, а не здесь.
+if [ ! -x node_modules/.bin/tailwindcss ]; then
+  echo 'Нет node_modules/.bin/tailwindcss: выполни `npm ci` или `bash scripts/css` — сверять артефакт нечем.' >&2
+  exit 1
+fi
+css_tmp=$(mktemp -d)
+trap 'rm -rf "$css_tmp"' EXIT
+if node_modules/.bin/tailwindcss -i ./src-css/app.css -o "$css_tmp/app.css" --minify >"$css_tmp/build.log" 2>&1; then
+  if ! cmp -s "$css_tmp/app.css" public/assets/app.css; then
+    echo 'Собранный стилевой файл не совпадает с public/assets/app.css: пересобери (`bash scripts/css`) и закоммити результат.' >&2
+    # Минифицированный артефакт — одна строка, поэтому различия показываются по сегментам правил.
+    diff --unified=0 <(tr ';' '\n' < public/assets/app.css) <(tr ';' '\n' < "$css_tmp/app.css") | head -40 || true
+    exit 1
+  fi
+else
+  echo 'Сборка стилей упала:' >&2
+  cat "$css_tmp/build.log" >&2
+  exit 1
+fi
 
 echo '— синтаксис'
 # Правка против первого варианта: статус `php -l` обязан доходить до ворот (поэтому `exit $status`,
