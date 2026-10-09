@@ -49,26 +49,61 @@ final class CsrfCoverageTest extends TestCase
 
         foreach ($this->phpFiles() as $file) {
             $code = (string) file_get_contents($file);
-            $relative = $this->relative($file);
+            $forms += count($this->formExtents($code));
 
-            foreach ($this->formExtents($code) as $open) {
-                $forms++;
-                $close = strpos($code, '</form>', $open);
-                if ($close === false) {
-                    $violations[] = $relative . ': форма method="post" не закрыта — её границы не измерить';
-                    continue;
-                }
-
-                $chunk = substr($code, $open, $close - $open);
-                if (preg_match('/csrfField\s*\(\s*\)|name=\\\\?["\']_token["\']/', $chunk) !== 1) {
-                    $violations[] = $relative . ', строка ' . (substr_count(substr($code, 0, $open), "\n") + 1)
-                        . ': форма method="post" без поля токена внутри своих границ';
-                }
+            foreach ($this->formViolations($code, $this->relative($file)) as $violation) {
+                $violations[] = $violation;
             }
         }
 
         self::assertGreaterThan(0, $forms, 'Ни одной POST-формы не найдено: проверке не на чём работать');
         self::assertSame([], $violations, 'Каждая форма method="post" обязана нести csrfField() внутри себя');
+    }
+
+    // Отдельная проверка на множественные формы: экран «Приложения» собирает две формы в одном
+    // файле, и ровно этот случай страж пропускал, требуя «в файле ровно одно совпадение».
+    public function testСтражПроверяетКаждуюФормуЕслиИхВФайлеНесколько(): void
+    {
+        $both = <<<'PHP'
+<?php
+return '<form method="post">' . csrfField() . '</form>'
+    . '<form method="post">' . csrfField() . '</form>';
+PHP;
+
+        $secondWithoutToken = <<<'PHP'
+<?php
+return '<form method="post">' . csrfField() . '</form>'
+    . '<form method="post"><input name="title"></form>';
+PHP;
+
+        $firstWithoutToken = <<<'PHP'
+<?php
+return '<form method="post"><input name="title"></form>'
+    . '<form method="post">' . csrfField() . '</form>';
+PHP;
+
+        $unclosed = <<<'PHP'
+<?php
+return '<form method="post">' . csrfField() . '</form><form method="post">';
+PHP;
+
+        self::assertCount(2, $this->formExtents($both), 'Обход не увидел обе формы в одном файле');
+        self::assertSame([], $this->formViolations($both, 'probe.php'), 'Страж ложно сработал на корректные формы');
+        self::assertCount(
+            1,
+            $this->formViolations($secondWithoutToken, 'probe.php'),
+            'Вторая форма в том же файле осталась незамеченной'
+        );
+        self::assertCount(
+            1,
+            $this->formViolations($firstWithoutToken, 'probe.php'),
+            'Первая форма в файле с несколькими формами осталась незамеченной'
+        );
+        self::assertSame(
+            ['probe.php: форма method="post" не закрыта — её границы не измерить'],
+            $this->formViolations($unclosed, 'probe.php'),
+            'Незакрытая вторая форма не найдена'
+        );
     }
 
     // «Покрыт» значит «сверено поле формы с токеном сессии постоянным по времени сравнением».
@@ -148,7 +183,8 @@ final class CsrfCoverageTest extends TestCase
     private function handlerSource(string|\Closure $handler): string
     {
         if (is_string($handler) && !function_exists($handler)) {
-            // Забытое имя называет страж обработчиков маршрутов — здесь не его зона.
+            // Забытое имя называет страж обработчиков маршрутов: RouteHandlersTest краснеет,
+            // если обработчик маршрута не существует, — здесь не его зона.
             return '';
         }
 
@@ -509,13 +545,39 @@ final class CsrfCoverageTest extends TestCase
     /** @return list<int> позиции открывающих тегов POST-форм */
     private function formExtents(string $code): array
     {
-        if (preg_match_all('/<form\b[^>]*method=["\']post["\'][^>]*>/i', $code, $matches, PREG_OFFSET_CAPTURE) !== 1) {
+        // Совпадений может быть несколько на файл: экран «Приложения» собирает по форме на каждую
+        // строку списка. Условие «ровно одно» молча возвращало пустой список и оставляло весь
+        // такой файл вне проверки — форма без токена рядом с формой с токеном проходила зелёной.
+        $found = preg_match_all('/<form\b[^>]*method=["\']post["\'][^>]*>/i', $code, $matches, PREG_OFFSET_CAPTURE);
+        if ($found === false || $found === 0) {
             return [];
         }
 
         $out = [];
         foreach ($matches[0] as $match) {
             $out[] = (int) $match[1];
+        }
+
+        return $out;
+    }
+
+    /** @return list<string> находки по формам одного файла */
+    private function formViolations(string $code, string $relative): array
+    {
+        $out = [];
+
+        foreach ($this->formExtents($code) as $open) {
+            $close = strpos($code, '</form>', $open);
+            if ($close === false) {
+                $out[] = $relative . ': форма method="post" не закрыта — её границы не измерить';
+                continue;
+            }
+
+            $chunk = substr($code, $open, $close - $open);
+            if (preg_match('/csrfField\s*\(\s*\)|name=\\\\?["\']_token["\']/', $chunk) !== 1) {
+                $out[] = $relative . ', строка ' . (substr_count(substr($code, 0, $open), "\n") + 1)
+                    . ': форма method="post" без поля токена внутри своих границ';
+            }
         }
 
         return $out;
