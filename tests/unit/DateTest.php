@@ -67,4 +67,19 @@ final class DateTest extends TestCase
         // 23:40 по Москве — 20:40 UTC того же дня: формат обязан показать 23:40, а не вчерашнее число.
         self::assertSame('2026-10-06T23:40:00+03:00', moscowIso(fromDb('2026-10-06 20:40:00')));
     }
+
+    public function testШтампПисьмаВФорматеRfc2822ВсегдаВUtc(): void
+    {
+        // Заголовок Date письма: день недели по-английски и пояс «+0000» — момент переводится в UTC
+        // до форматирования, и почтовый сервер сверяет это время со своим.
+        $utc = fromDb('2026-10-06 06:00:00');
+        self::assertInstanceOf(DateTimeImmutable::class, $utc);
+        self::assertSame('Tue, 06 Oct 2026 06:00:00 +0000', rfc2822Stamp($utc));
+
+        // Тот же момент, набранный редактором по Москве (09:00 = 06:00 UTC), даёт идентичный штамп:
+        // иначе письмо утверждало бы, что отправлено на три часа раньше.
+        $fromForm = parseFormDateTime('2026-10-06T09:00');
+        self::assertInstanceOf(DateTimeImmutable::class, $fromForm);
+        self::assertSame('Tue, 06 Oct 2026 06:00:00 +0000', rfc2822Stamp($fromForm));
+    }
 }

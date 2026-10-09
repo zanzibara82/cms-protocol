@@ -67,6 +67,14 @@ function formatRuDateTime(?DateTimeImmutable $date): string
     return formatRuDate($date) . ', ' . $date->setTimezone(moscowZone())->format('H:i');
 }
 
+// Штамп письма по RFC 2822: почтовый сервер сверяет заголовок Date со своим временем, и пояс
+// здесь всегда +0000 — момент переводится в UTC до форматирования. Русские названия дней и
+// месяцев для дат в письмах не используются, поэтому берётся стандартный английский набор.
+function rfc2822Stamp(DateTimeImmutable $date): string
+{
+    return $date->setTimezone(new DateTimeZone('UTC'))->format('D, d M Y H:i:s') . ' +0000';
+}
+
 // Поле datetime-local приносит «2026-10-06T09:00» без пояса: время понимается как московское —
 // ровно то, о чём договорён контент-менеджер, назначая публикацию «на девять утра».
 function parseFormDateTime(string $raw): ?DateTimeImmutable
