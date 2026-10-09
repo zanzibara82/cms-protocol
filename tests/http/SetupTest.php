@@ -146,6 +146,10 @@ final class SetupTest extends TestCase
 
         self::assertSame(404, $page['status']);
         self::assertStringNotContainsString('Установка сайта', $page['body']);
+        // Причина отказа обязана быть видна: notFound('Сайт уже установлен.') говорит человеку,
+        // почему страница закрыта, иначе вместо ответа он получает общую подсказку про опечатку.
+        self::assertStringContainsString('Сайт уже установлен.', $page['body']);
+        self::assertStringNotContainsString('Адрес мог измениться', $page['body']);
     }
 
     // Порядок объявления важен: замок уже выставлен предыдущим прогоном, и POST обязан получить

@@ -1059,6 +1059,7 @@ declare(strict_types=1);
 // Иерархия шаблонов из спецификации §5.6: приложение → тема → ядро → 404. Тема добавляет вёрстку,
 // не трогая код приложения; каталог темы можно перекрыть настройкой EXTRA_THEME_DIR (её
 // используют тесты, чтобы не создавать файлы в настоящей теме).
+/** @return list<string> */
 function themeRoots(): array
 {
     $root = dirname(__DIR__);
@@ -1094,6 +1095,7 @@ function resolveTemplate(string $template): string
 
 // partial() возвращает строку: её можно собрать в переменную и передать в layout, не смешивая
 // вывод с данными.
+/** @param array<string, mixed> $data */
 function partial(string $template, array $data = []): string
 {
     $file = resolveTemplate($template);
@@ -1109,6 +1111,10 @@ function partial(string $template, array $data = []): string
 }
 
 // render() печатает страницу целиком: шаблон внутри layout, метаданные из $page.
+/**
+ * @param array<string, mixed> $data
+ * @param array{title?: string, description?: string, noindex?: bool, head?: string} $page
+ */
 function render(string $template, array $data = [], array $page = []): void
 {
     $content = partial($template, $data);
@@ -1129,6 +1135,21 @@ function render(string $template, array $data = [], array $page = []): void
     $footer = (string) ob_get_clean();
 
     require dirname(__DIR__) . '/theme/layout.php';
+}
+
+// Страницы отказа задают статус и заголовки в respond(), поэтому им нужна собранная строка, а не
+// печать: renderToString() — тот же render() с тем же каркасом темы, только вывод возвращается,
+// а не печатается, и уходит в respond() единственным каналом ответа.
+/**
+ * @param array<string, mixed> $data
+ * @param array{title?: string, description?: string, noindex?: bool, head?: string} $page
+ */
+function renderToString(string $template, array $data = [], array $page = []): string
+{
+    ob_start();
+    render($template, $data, $page);
+
+    return (string) ob_get_clean();
 }
 
 // Разметка абзаца: сырого HTML в материале нет, выделение задаётся **звёздочками**.
@@ -1296,11 +1317,19 @@ $size = (int) ($size ?? 40);
 <?php
 
 declare(strict_types=1);
+
+/** @var string $message */
 ?>
 <section class="py-12 text-center">
     <?= partial('partials/cat', ['mood' => 'sad', 'size' => 96]) /* @safe html */ ?>
     <h1 class="mt-6 text-3xl font-bold">Страницы нет</h1>
-    <p class="mt-3 text-ink/70">Адрес мог измениться или в нём опечатка. Загляните в ленту новостей — возможно, материал переехал.</p>
+    <p class="mt-3 text-ink/70">
+        <?php if (($message ?? '') !== ''): ?>
+            <?= e((string) $message) ?>
+        <?php else: ?>
+            Адрес мог измениться или в нём опечатка. Загляните в ленту новостей — возможно, материал переехал.
+        <?php endif; ?>
+    </p>
     <p class="mt-6 flex flex-wrap justify-center gap-3">
         <a class="rounded-lg bg-ink px-4 py-3 text-cream hover:opacity-90" href="/">На главную</a>
         <a class="rounded-lg border border-ink/20 px-4 py-3 hover:bg-cream" href="/news">К новостям</a>
@@ -1931,9 +1960,12 @@ function notFound(string $message = ''): never
 function forbidden(string $message = ''): never
 {
     logWarn('access.forbidden', ['path' => requestPath(), 'ip' => clientIp()]);
+    // Отказ — страница темы, а не фрагмент: человек обязан увидеть шапку, футер и подключённые
+    // стили. Канал ответа при этом остаётся единственным местом, где задаются статус и заголовки,
+    // поэтому каркас собирается строкой и передаётся в respond().
     respond(
         403,
-        partial('403', ['message' => $message]),
+        renderToString('403', ['message' => $message], ['title' => 'Сюда нельзя', 'noindex' => true]),
         ['Content-Type' => 'text/html; charset=utf-8', 'X-Robots-Tag' => 'noindex, nofollow']
     );
 }
@@ -2286,18 +2318,34 @@ final class NotFoundTest extends TestCase
 
     public function testСлужебныеКаталогиНедоступныПоHttp(): void
     {
-        foreach (['/config.sample.php', '/composer.json', '/core/bootstrap.php', '/sql/0001_core_baseline.sql'] as $path) {
+        // Каждый путь закрывается ровно одним статусом. Прежнее допущение «403 или 404» проходило
+        // и на мёртвом фронт-контроллере: встроенный сервер сам отвечает 404 на файл вне корня,
+        // и проверка зеленела, ничего не проверяя. Здесь статус сверяется точно, тело обязано быть
+        // страницей приложения, а подпись содержимого не имеет права попасть в ответ ни под каким
+        // видом — закрытый каталог не равен «отдали исходник под статусом 404».
+        $closed = [
+            '/config.sample.php' => 'DB_PASS',
+            '/composer.json' => '"require-dev"',
+            '/core/bootstrap.php' => 'require_once',
+            '/sql/0001_core_baseline.sql' => 'CREATE TABLE',
+        ];
+
+        foreach ($closed as $path => $signature) {
             $response = Kernel::get($path);
-            self::assertContains($response['status'], [403, 404], $path . ' обязан быть закрыт');
+
+            self::assertSame(404, $response['status'], $path . ' обязан закрываться приложением со статусом 404');
+            self::assertStringContainsString('Страницы нет', $response['body'], $path . ' обязан попасть на страницу 404 приложения');
+            self::assertStringNotContainsString($signature, $response['body'], $path . ' отдал наружу своё содержимое');
         }
     }
 }
 ```
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http`
-Expected: FAIL на последнем тесте — `php -S` отдаёт файлы из корня проекта, если запускать его с `-t public`,
-только из `public/`; проверьте, что `config.sample.php` лежит вне `public/` (он в корне `cms/`, значит недоступен —
-и тест зелёный). Если `php -S` отвечает 200 на `/config.sample.php`, каталог указан неверно.
+Expected: PASS. Проверка обязана оставаться точной: статус сверяется с 404, а не с «403 или 404», потому что
+`php -S` сам отвечает 404 на файл вне корня, и слабое допущение зеленело бы даже на мёртвом фронт-контроллере.
+Подпись содержимого (`DB_PASS`, `"require-dev"`, `require_once`, `CREATE TABLE`) не имеет права появиться в
+ответе: закрытый каталог — не «отдали исходник под статусом 404».
 
 Run: `bash scripts/gate.sh`
 Expected: всё зелёное.

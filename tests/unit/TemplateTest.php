@@ -60,6 +60,26 @@ final class TemplateTest extends TestCase
         self::assertSame('первая<br>вторая', richText("первая\nвторая"));
     }
 
+    public function testЧетырестаЧетыреПечатаютПричинуЯдраЭкранированной(): void
+    {
+        // notFound() принимает причину из кода («Сайт уже установлен.») и обязана донести её до
+        // человека, а не проглотить: шаблон печатает строку через e() — размёткой она не становится.
+        $html = partial('404', ['message' => '<b>причина</b>']);
+
+        self::assertStringContainsString('&lt;b&gt;причина&lt;/b&gt;', $html);
+        self::assertStringNotContainsString('<b>причина</b>', $html);
+    }
+
+    public function testЧетырестаЧетыреБезПричиныОтдаютОбщуюПодсказку(): void
+    {
+        // Пустая причина — обычный несуществующий адрес: человек обязан увидеть подсказку,
+        // где искать материал, а не пустое место под заголовком.
+        $html = partial('404', ['message' => '']);
+
+        self::assertStringContainsString('Адрес мог измениться', $html);
+        self::assertStringContainsString('Страницы нет', $html);
+    }
+
     public function testHeadСтраницыДополняетВыводХукаВРазметкеШапки(): void
     {
         // Разметка из хука page_head и значение $page['head'] обязаны попасть в <head> сырьём;
