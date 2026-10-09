@@ -8,9 +8,11 @@ use PHPUnit\Framework\TestCase;
 
 // Сборка стилей обязана зависеть от разметки, а не от того, какие слова случайно написаны рядом.
 // До явных @source CLI Tailwind v4 сканировал всё рабочее дерево и вычитал только то, что лежит
-// в .gitignore: в собранном артефакте 64 класса из 171 пришли из текста планов в docs/ и из
-// литералов тестов, а не со страниц. Страницы при этом не изменились бы никак, но артефакт
-// пересобирался бы при правке плана — и пропадал класс ровно там, где его никто не ждал.
+// в .gitignore: на состоянии до этой правки страж перечислял 60 классов артефакта (из 171), которые
+// не объяснялись ни одним объявленным источником — они пришли из текста планов в docs/ и из литералов
+// тестов, а не со страниц. С явными @source из артефакта ушло 64 правила, и ни одно из них не
+// используется в разметке. Страницы при этом не изменились бы никак, но артефакт пересобирался бы
+// при правке плана — и пропадал класс ровно там, где его никто не ждал.
 //
 // Страж проверяет четыре независимых вещи:
 // 1) конфигурация сборки не скатывается к автосканированию и объявляет каждый каталог разметки;
@@ -137,6 +139,16 @@ final class StyleSourceTest extends TestCase
 
         self::assertSame(['flex', 'sm:hidden'], $this->unexplainedClasses($artifact, $sources));
         self::assertSame([], $this->unexplainedClasses($artifact, $sources . '<a class="flex sm:hidden">'));
+
+        // Вариант с префиксом не объясняет голое правило: `.bg-ink/5` в артефакте остаётся мёртвым,
+        // если в разметке есть только `hover:bg-ink/5`.
+        $prefixed = '.bg-ink\/5{background-color:red}.hover\\:bg-ink\/5:hover{background-color:red}';
+        self::assertSame(
+            ['bg-ink/5'],
+            $this->unexplainedClasses($prefixed, '<a class="hover:bg-ink/5">'),
+            'Голое правило объяснилось вариантом с префиксом: мёртвая утилита прошла бы незамеченной'
+        );
+        self::assertSame([], $this->unexplainedClasses($prefixed, '<a class="bg-ink/5 hover:bg-ink/5">'));
     }
 
     public function testКлассыРазметкиСобралисьВАртефакте(): void
@@ -250,7 +262,9 @@ final class StyleSourceTest extends TestCase
 
         foreach ($this->classSelectors($artifact) as $class) {
             // Граница токена обязательна: иначе «flex» считается объяснённым классом «inline-flex».
-            if (preg_match('~(?:^|[^A-Za-z0-9_\-])' . preg_quote($class, '~') . '(?:[^A-Za-z0-9_]|\z)~m', $sources) !== 1) {
+            // Двоеточие тоже ограничитель, а не продолжение: «hover:bg-ink/5» в разметке не объясняет
+            // голое правило `.bg-ink/5` в артефакте — у Tailwind это разные утилиты.
+            if (preg_match('~(?:^|[^A-Za-z0-9_\-:])' . preg_quote($class, '~') . '(?:[^A-Za-z0-9_]|\z)~m', $sources) !== 1) {
                 $out[] = $class;
             }
         }
