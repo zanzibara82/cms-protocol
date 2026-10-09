@@ -19,7 +19,7 @@ declare(strict_types=1);
 <main class="mx-auto max-w-xl px-4 py-20 text-center">
     <h1 class="text-2xl font-bold">Сайт не установлен</h1>
     <p class="mt-4">Таблицы ядра ещё не созданы. Откройте установщик, чтобы завершить настройку сайта.</p>
-    <p class="mt-6"><a class="underline" href="/setup.php">Перейти к установке</a></p>
+    <p class="mt-6"><a class="inline-flex min-h-[44px] items-center underline" href="/setup.php">Перейти к установке</a></p>
 </main>
 </body>
 </html>

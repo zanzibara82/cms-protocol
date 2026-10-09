@@ -1152,6 +1152,26 @@ function renderToString(string $template, array $data = [], array $page = []): s
     return (string) ob_get_clean();
 }
 
+// Настоящие размеры картинки из публичного каталога: [ширина, высота] либо [0, 0], если файл не
+// читается. Шаблоны считают от них height, а не приравнивают его к width: браузер по честным
+// размерам заранее занимает под картинку место. Файл опрашивается один раз за запрос.
+/** @return array{0: int, 1: int} */
+function imageNaturalSize(string $relative): array
+{
+    /** @var array<string, array{0: int, 1: int}> $sizes */
+    static $sizes = [];
+
+    if (isset($sizes[$relative])) {
+        return $sizes[$relative];
+    }
+
+    $path = dirname(__DIR__) . '/' . $relative;
+    $info = is_readable($path) ? @getimagesize($path) : false;
+    $sizes[$relative] = is_array($info) ? [(int) $info[0], (int) $info[1]] : [0, 0];
+
+    return $sizes[$relative];
+}
+
 // Разметка абзаца: сырого HTML в материале нет, выделение задаётся **звёздочками**.
 // Возвращает строку, которую шаблон печатает с пометкой /* @safe html */.
 function richText(string $text): string
@@ -1285,8 +1305,8 @@ declare(strict_types=1);
     <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-8 text-sm sm:flex-row sm:items-center sm:px-6">
         <p><?= e((string) configValue('SITE_NAME', 'Школа')) ?> — новости, курсы и объявления школы.</p>
         <nav class="flex flex-wrap gap-x-4 gap-y-2 sm:ml-auto">
-            <a class="hover:underline" href="/news">Новости</a>
-            <a class="hover:underline" href="/sitemap.xml">Карта сайта</a>
+            <a class="inline-flex min-h-[44px] items-center hover:underline" href="/news">Новости</a>
+            <a class="inline-flex min-h-[44px] items-center hover:underline" href="/sitemap.xml">Карта сайта</a>
         </nav>
     </div>
     <div class="pb-6 text-center text-xs text-ink/60">Сделано с котом и заботой о языке.</div>
@@ -1295,8 +1315,12 @@ declare(strict_types=1);
 
 `theme/partials/cat.php` — талисман; PNG копируются побайтово из `english-portal` (файлы
 `cat-happy.png` и `cat-sad.png` лежат в `../english-portal/public/cats/`). Векторных версий нет, поэтому
-файлы растровые. Атрибута `loading="lazy"` на `<img>` нет: талисман стоит в шапке над основным содержимым
-и попадает в LCP, а ленивая загрузка откладывает именно его. Шаблон только выбирает картинку:
+файлы растровые: весёлый кот 488×488 px, грустный 366×325 px, поэтому `height` шаблон считает от настоящих
+пропорций файла (`imageNaturalSize()` в `core/template.php`), а не приравнивает его к `width` — иначе
+грустный кот на экранах отказа сплюснут по вертикали. Атрибут `loading="lazy"` ставится только на экранах
+отказа (`theme/403.php`, `theme/404.php`), где талисман не попадает в LCP; в шапке над основным содержимым
+ленивая загрузка отложила бы именно его, поэтому там атрибута нет. Шаблон выбирает картинку, размер и
+режим загрузки:
 
 ```php
 <?php
@@ -1305,10 +1329,21 @@ declare(strict_types=1);
 
 /** @var string $mood */
 /** @var int $size */
-$file = ($mood ?? 'happy') === 'sad' ? 'cat-sad.png' : 'cat-happy.png';
-$size = (int) ($size ?? 40);
+/** @var bool $lazy */
+
+$mood = ($mood ?? 'happy') === 'sad' ? 'sad' : 'happy';
+$file = $mood === 'sad' ? 'cat-sad.png' : 'cat-happy.png';
+$width = max(1, (int) ($size ?? 40));
+
+// height считается от настоящих пропорций файла: грустный кот не квадратный, и при height === width
+// он на экранах отказа сплюснут по вертикали. Если файл не читается, остаётся квадрат — место под
+// картинку всё равно зарезервировано, и вёрстка не едет.
+$natural = imageNaturalSize('public/assets/' . $file);
+$height = $natural[0] > 0 ? (int) round($width * $natural[1] / $natural[0]) : $width;
+$lazy = (bool) ($lazy ?? false);
 ?>
-<img src="/assets/<?= e($file) ?>" width="<?= e((string) $size) ?>" height="<?= e((string) $size) ?>" alt="Кот-талисман школы">
+<img src="/assets/<?= e($file) ?>" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
+     alt="Кот-талисман школы"<?php if ($lazy): ?> loading="lazy" decoding="async"<?php endif; ?>>
 ```
 
 `theme/404.php`:
@@ -1321,7 +1356,7 @@ declare(strict_types=1);
 /** @var string $message */
 ?>
 <section class="py-12 text-center">
-    <?= partial('partials/cat', ['mood' => 'sad', 'size' => 96]) /* @safe html */ ?>
+    <?= partial('partials/cat', ['mood' => 'sad', 'size' => 96, 'lazy' => true]) /* @safe html */ ?>
     <h1 class="mt-6 text-3xl font-bold">Страницы нет</h1>
     <p class="mt-3 text-ink/70">
         <?php if (($message ?? '') !== ''): ?>
@@ -1331,8 +1366,8 @@ declare(strict_types=1);
         <?php endif; ?>
     </p>
     <p class="mt-6 flex flex-wrap justify-center gap-3">
-        <a class="rounded-lg bg-ink px-4 py-3 text-cream hover:opacity-90" href="/">На главную</a>
-        <a class="rounded-lg border border-ink/20 px-4 py-3 hover:bg-cream" href="/news">К новостям</a>
+        <a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-3 text-cream hover:opacity-90" href="/">На главную</a>
+        <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-3 hover:bg-cream" href="/news">К новостям</a>
     </p>
 </section>
 ```
@@ -1350,7 +1385,7 @@ declare(strict_types=1);
         Сайт собирается на собственной CMS: ядро отвечает за маршруты, доступ и обновления, а разделы живут
         в приложениях.
     </p>
-    <p class="mt-6"><a class="rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/news">Читать новости</a></p>
+    <p class="mt-6"><a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/news">Читать новости</a></p>
 </section>
 ```
 
@@ -1981,12 +2016,12 @@ declare(strict_types=1);
 /** @var string $message */
 ?>
 <section class="py-12 text-center">
-    <?= partial('partials/cat', ['mood' => 'sad', 'size' => 96]) /* @safe html */ ?>
+    <?= partial('partials/cat', ['mood' => 'sad', 'size' => 96, 'lazy' => true]) /* @safe html */ ?>
     <h1 class="mt-6 text-3xl font-bold">Сюда нельзя</h1>
     <p class="mt-3 text-ink/70">
         <?= e($message !== '' ? $message : 'Раздел открыт только редактору и администратору.') ?>
     </p>
-    <p class="mt-6"><a class="rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/login">Войти</a></p>
+    <p class="mt-6"><a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/login">Войти</a></p>
 </section>
 ```
 
@@ -2274,7 +2309,6 @@ declare(strict_types=1);
 
 namespace Cms\Tests\http;
 
-use Cms\Tests\http\Kernel;
 use Cms\Tests\TestDb;
 use PHPUnit\Framework\TestCase;
 
@@ -2305,6 +2339,28 @@ final class NotFoundTest extends TestCase
 
         self::assertSame(404, $response['status']);
         self::assertStringContainsString('Страницы нет', $response['body']);
+    }
+
+    public function testКотНаСтранице404ИмеетНастоящиеПропорцииИОтложеннуюЗагрузку(): void
+    {
+        $response = Kernel::get('/такой-страницы-нет');
+
+        // height считается от настоящих размеров файла (cat-sad.png — 366×325), а не приравнивается
+        // к width: иначе кот сплюснут по вертикали, и браузер занимает под картинку неверное место.
+        self::assertStringContainsString('width="96" height="85"', $response['body']);
+        // Экран ошибки — не первый: картинку можно досылать позже, когда человек уже читает текст.
+        self::assertStringContainsString('loading="lazy"', $response['body']);
+        self::assertStringContainsString('decoding="async"', $response['body']);
+    }
+
+    public function testКотВШапкеГлавнойНеТормозитПервыйЭкран(): void
+    {
+        $response = Kernel::get('/');
+
+        // Маскот в шапке стоит на первом экране, поэтому отложенной загрузки у него быть не может:
+        // lazy на логотипе отдаляет самую заметную картинку сайта.
+        self::assertStringContainsString('width="32" height="32"', $response['body']);
+        self::assertStringNotContainsString('loading="lazy"', $response['body']);
     }
 
     public function testЗаголовкиБезопасностиОтдаютсяНаКаждомЗапросе(): void

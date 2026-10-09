@@ -36,6 +36,28 @@ final class NotFoundTest extends TestCase
         self::assertStringContainsString('Страницы нет', $response['body']);
     }
 
+    public function testКотНаСтранице404ИмеетНастоящиеПропорцииИОтложеннуюЗагрузку(): void
+    {
+        $response = Kernel::get('/такой-страницы-нет');
+
+        // height считается от настоящих размеров файла (cat-sad.png — 366×325), а не приравнивается
+        // к width: иначе кот сплюснут по вертикали, и браузер занимает под картинку неверное место.
+        self::assertStringContainsString('width="96" height="85"', $response['body']);
+        // Экран ошибки — не первый: картинку можно досылать позже, когда человек уже читает текст.
+        self::assertStringContainsString('loading="lazy"', $response['body']);
+        self::assertStringContainsString('decoding="async"', $response['body']);
+    }
+
+    public function testКотВШапкеГлавнойНеТормозитПервыйЭкран(): void
+    {
+        $response = Kernel::get('/');
+
+        // Маскот в шапке стоит на первом экране, поэтому отложенной загрузки у него быть не может:
+        // lazy на логотипе отдаляет самую заметную картинку сайта.
+        self::assertStringContainsString('width="32" height="32"', $response['body']);
+        self::assertStringNotContainsString('loading="lazy"', $response['body']);
+    }
+
     public function testЗаголовкиБезопасностиОтдаютсяНаКаждомЗапросе(): void
     {
         $response = Kernel::get('/');

@@ -98,6 +98,26 @@ function renderToString(string $template, array $data = [], array $page = []): s
     return (string) ob_get_clean();
 }
 
+// Настоящие размеры картинки из публичного каталога: [ширина, высота] либо [0, 0], если файл не
+// читается. Шаблоны считают от них height, а не приравнивают его к width: браузер по честным
+// размерам заранее занимает под картинку место. Файл опрашивается один раз за запрос.
+/** @return array{0: int, 1: int} */
+function imageNaturalSize(string $relative): array
+{
+    /** @var array<string, array{0: int, 1: int}> $sizes */
+    static $sizes = [];
+
+    if (isset($sizes[$relative])) {
+        return $sizes[$relative];
+    }
+
+    $path = dirname(__DIR__) . '/' . $relative;
+    $info = is_readable($path) ? @getimagesize($path) : false;
+    $sizes[$relative] = is_array($info) ? [(int) $info[0], (int) $info[1]] : [0, 0];
+
+    return $sizes[$relative];
+}
+
 // Разметка абзаца: сырого HTML в материале нет, выделение задаётся **звёздочками**.
 // Возвращает строку, которую шаблон печатает с пометкой /* @safe html */.
 function richText(string $text): string

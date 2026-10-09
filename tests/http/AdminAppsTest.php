@@ -82,6 +82,19 @@ final class AdminAppsTest extends TestCase
         self::assertStringContainsString('noindex, nofollow', $page['body']);
         self::assertStringContainsString('Приложения', $page['body'], 'Вкладки админки обязаны быть на каждом экране');
         self::assertStringContainsString('Выйти', $page['body']);
+        // Класс контролов админки собирается в PHP (admin/layout.php), и страж исходников их не
+        // видит: проверка зоны нажатия живёт здесь, на отрендеренной странице. Подстрока начинается
+        // с тега, иначе плашка кнопки закрыла бы пропавший класс вкладок.
+        self::assertStringContainsString(
+            '<a class="inline-flex min-h-[44px] items-center rounded-lg',
+            $page['body'],
+            'Вкладки админки не меньше 44 px'
+        );
+        self::assertStringContainsString(
+            '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20',
+            $page['body'],
+            'Кнопка выхода не меньше 44 px'
+        );
     }
 
     // F4: заголовок отказа — не повод показывать его зелёной плашкой об успехе. На «Сводке», как и на

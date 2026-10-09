@@ -8,5 +8,5 @@ declare(strict_types=1);
         Сайт собирается на собственной CMS: ядро отвечает за маршруты, доступ и обновления, а разделы живут
         в приложениях.
     </p>
-    <p class="mt-6"><a class="rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/news">Читать новости</a></p>
+    <p class="mt-6"><a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/news">Читать новости</a></p>
 </section>
