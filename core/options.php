@@ -58,13 +58,16 @@ function setOption(string $name, ?string $value): void
         return;
     }
 
-    $exists = (int) value('SELECT COUNT(*) FROM ' . t('option') . ' WHERE option_name = ?', [$name]) === 1;
-
-    if ($exists) {
-        run('UPDATE ' . t('option') . ' SET option_value = ? WHERE option_name = ?', [$value, $name]);
-    } else {
-        insert('option', ['option_name' => $name, 'option_value' => $value, 'autoload' => 1]);
-    }
+    // Одна пишущая инструкция вместо «сначала узнать, есть ли строка»: между проверкой и вставкой
+    // успевал встать второй писатель, и имя получало дубликат. Уникальный ключ по имени опции
+    // задан в базовой схеме, поэтому ветка обновления выражается через ON DUPLICATE KEY UPDATE.
+    // Функция VALUES() берётся вместо aliases-формы: она работает и на MySQL 8, и на MariaDB,
+    // а обновляет только значение — флаг автозагрузки существующей строки остаётся как был.
+    run(
+        'INSERT INTO ' . t('option') . ' (option_name, option_value, autoload) VALUES (?, ?, 1)'
+        . ' ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)',
+        [$name, $value]
+    );
 
     optionsReset();
 }
