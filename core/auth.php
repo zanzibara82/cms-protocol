@@ -36,6 +36,20 @@ function verifyPassword(string $plain, string $hash): bool
     return password_verify($plain, $hash);
 }
 
+// Хеш-мишень для отказа по несуществующему адресу. Сверка обязана выполняться и когда строки
+// пользователя нет: иначе по времени ответа отличают «такого адреса нет» от «пароль неверный».
+// Оба литерала — настоящие хеши случайно порождённой фразы, которую никто не сохранял, поэтому
+// восстановить пароль из них нельзя и секретом они не являются: задача одна — сжигать ровно
+// столько же времени, сколько честная проверка. Алгоритм выбирается тот же, что и для записи
+// пользователя, иначе ветки остаются различимыми по времени.
+const DUMMY_PASSWORD_HASH_ARGON2ID = '$argon2id$v=19$m=65536,t=4,p=1$bDZ2YWw0eTZHUmFhbTl1dA$MICGPBzV0KnAukwd0GVvmXAT+AJ2cvF5xmgfGXtwQhk';
+const DUMMY_PASSWORD_HASH_BCRYPT = '$2y$10$REqj50.o52bjrJtLSoA92ey8tUvX7o3YE.PY9TerMfr5Xf9h.F73e';
+
+function dummyPasswordHash(): string
+{
+    return passwordAlgorithm() === 'argon2id' ? DUMMY_PASSWORD_HASH_ARGON2ID : DUMMY_PASSWORD_HASH_BCRYPT;
+}
+
 function needsRehash(string $hash): bool
 {
     return password_needs_rehash($hash, passwordAlgoConstant());
@@ -162,7 +176,10 @@ function attemptLogin(string $email, string $password): array
     }
 
     $row = one('SELECT * FROM ' . t('user') . ' WHERE email = ?', [$clean]);
-    if ($row === null || !verifyPassword($password, (string) $row['password_hash'])) {
+    // Проверка пароля выполняется в обеих ветках: при отсутствии строки пользователя сверяется
+    // с хешем-мишенью, чтобы отказ по неизвестному адресу не был быстрее отказа по неверному.
+    $passwordMatches = verifyPassword($password, $row === null ? dummyPasswordHash() : (string) $row['password_hash']);
+    if ($row === null || !$passwordMatches) {
         recordLoginAttempt($clean, $ip);
         logWarn('auth.failed', ['email' => $clean, 'ip' => $ip]);
 

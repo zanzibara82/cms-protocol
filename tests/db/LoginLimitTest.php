@@ -79,6 +79,28 @@ final class LoginLimitTest extends TestCase
         self::assertSame(2, (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'), []));
     }
 
+    // Отказ по несуществующему адресу обязан стоить столько же, сколько настоящая проверка
+    // пароля: пока ветка «строки нет» возвращалась сразу, по времени ответа перечисляли адреса,
+    // хотя тексты отказов уже были одинаковые. Замер сделан относительно эталона, полученного
+    // на этой же машине в этом же процессе, — поэтому он не зависит от скорости диска и не
+    // сравнивает между собой две ветки входа (такой тест дрейфует).
+    public function testОтказПоНеизвестномуАдресуСтоитКакПроверкаПароля(): void
+    {
+        $probeHash = hashPassword('эталон-для-замера');
+
+        $start = hrtime(true);
+        verifyPassword('не тот пароль', $probeHash);
+        $verifyMs = (hrtime(true) - $start) / 1000000;
+
+        $start = hrtime(true);
+        $result = attemptLogin('net-takogo@school.dev', 'неверный-пароль');
+        $loginMs = (hrtime(true) - $start) / 1000000;
+
+        self::assertFalse($result['ok']);
+        self::assertSame(LOGIN_ERROR_GENERIC, $result['error']);
+        self::assertGreaterThanOrEqual($verifyMs * 0.8, $loginMs, 'Отказ по неизвестному адресу быстрее проверки пароля — адрес выдаётся временем ответа');
+    }
+
     public function testВерныйПарольВпускаетРедактора(): void
     {
         TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
