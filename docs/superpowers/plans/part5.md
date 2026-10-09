@@ -454,6 +454,21 @@ final class SmtpSocket
 
 - [ ] **Шаг 5: Написать сборщик писем**
 
+Уточнение контроллера к шагу 4 (внесено по рецензии задачи 10, обязательного кода в блоке выше
+оно не отменяет):
+
+- незашифрованный канал на порту 587 — отказ отправки, а не тихая пересылка открытым текстом:
+  `config.sample.php:24` задаёт именно порт отправки, где `STARTTLS` обязателен для клиента;
+  на прочих портах (курьерское реле на 25, dev-приёмник на 1025) отправка допускается, но обязана
+  оставить в журнале `logWarn('mail.plaintext')`;
+- признак «канал зашифрован» обязан быть проверяемым: на потоке задаётся явный контекст `ssl`
+  с `verify_peer`, `verify_peer_name`, `peer_name` и `local_name` по хосту из настроек, а маска
+  шифрования не допускает TLS 1.0 и 1.1. Контекст нужен и при `ssl://` на 465, и после `STARTTLS`;
+- отказ при незашифрованном канале с заполненным `SMTP_USER`, обе новые ветки выше, разбор
+  многострочного ответа `expect()` и `dotStuff()` покрываются юнит-тестом на подставном сервере
+  `stream_socket_server('tcp://127.0.0.1:0')` — приём уже принят в проекте стражем дат, второй
+  почтовый контейнер для этого не нужен.
+
 Создать `core/Mailer.php`:
 
 ```php
@@ -709,6 +724,13 @@ final class Mailer
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter MailerTest`
 Expected: PASS — 13 проверок.
 
+Цифру снимать как есть, а не подгонять: `testБезНастроенногоСервераПисьмоНеОтправляется` сам
+решает, можно ли проверять отказ, и в dev-контейнере он пропускается, когда `SMTP_HOST` заполнен.
+Заполнен ли он в прогоне, зависит не только от `docker-compose.dev.yml`: `tests/unit/ConfigLoaderTest.php`
+загружается вместе с набором `unit` и на уровне файла обнуляет `CMS_SMTP_HOST`, а `config()` кеширует
+настройки на весь процесс. Поэтому пропуск в контейнере означает, что файл-обнуление больше не мешает
+набору `http`, — см. шаг 10.
+
 - [ ] **Шаг 7: Написать страж против `mail()`**
 
 Создать `tests/guard/MailFunctionTest.php`:
@@ -906,16 +928,31 @@ final class SmtpIntegrationTest extends TestCase
 
 - [ ] **Шаг 10: Запустить интеграционную проверку в контейнере**
 
-Run: `docker compose exec php vendor/bin/phpunit --testsuite http --filter SmtpIntegrationTest`
-Expected: PASS — 3 проверки. Вне контейнера (без `CMS_MAILPIT_URL`) тот же тест пропускается:
-
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter SmtpIntegrationTest`
-Expected: SKIPPED с текстом про `CMS_MAILPIT_URL`.
+Expected: PASS — 3 проверки.
+
+Ветка пропуска проверяется той же командой, но с явным обнулением переменной: `docker compose run`
+наследует `environment` сервиса `php` (там `CMS_MAILPIT_URL: http://mailpit:8025`), поэтому без
+`-e` тест не может пропуститься — он пойдёт на живой приёмник.
+
+Run: `docker compose -f docker-compose.dev.yml run --rm -T -e CMS_MAILPIT_URL= php vendor/bin/phpunit --testsuite http --filter SmtpIntegrationTest`
+Expected: SKIPPED — 3 проверки с текстом про `CMS_MAILPIT_URL`.
+
+Отдельно проверить, что `SMTP_HOST` в прогоне не обнулён чужим файлом: `--testsuite unit` загружает
+`tests/unit/ConfigLoaderTest.php`, а он на уровне файла делает `putenv('CMS_SMTP_HOST=')`, и `config()`
+запоминает настройки на весь процесс. Если набор `http` прогоняется вместе с `unit` (ворота целиком),
+проверки выше могут показаться пропускающимися — цифры надо снимать изолированным прогоном, как здесь,
+и полным прогоном ворот, и объяснять расхождение.
 
 - [ ] **Шаг 11: Прогнать ворота и зафиксировать**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.
+
+Число пропусков в полном прогоне ворот обязано быть объяснимым, а не «просто пропуском»: если
+интеграционные SMTP-проверки показаны пропускающимися, значит `SMTP_HOST` в процессе пуст
+(см. шаг 10) и доставка письма в воротах не проверяется. Тогда чинится тестовая изоляция,
+а цифры в отчёте не подгоняются.
 
 ```bash
 git add core/Mailer.php core/SmtpSocket.php core/date.php tests/unit/MailerTest.php tests/guard/MailFunctionTest.php tests/http/SmtpIntegrationTest.php
@@ -936,7 +973,8 @@ git commit -m "SMTP-клиент ядра: письмо через сокет, �
 - Создать: `apps/news/sql/20261006_0001_catalog.sql`
 - Создать: `apps/news/sql/20261006_0002_items.sql`
 - Изменить: `tests/bootstrap.php` (подключить `apps/news/lib/boot.php`)
-- Изменить: `tests/db/AppsRegistryTest.php:525-528` (в списке приватных путей появился `/news/admin`)
+- Изменить: `tests/db/AppsRegistryTest.php` (в теле метода `testПриватныеПутиСобираютсяИзВсехМанифестов`
+  в списке приватных путей появился `/news/admin`; ориентир — имя метода, а не номер строк, файл короткий)
 - Тест: `tests/db/NewsSchemaTest.php`
 - Тест: `tests/unit/NewsConstantsTest.php`
 - Тест: `tests/db/NewsSeedTest.php`
