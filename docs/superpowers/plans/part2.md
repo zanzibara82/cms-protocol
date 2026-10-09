@@ -1359,14 +1359,21 @@ $width = max(1, (int) ($size ?? 40));
 
 // height считается от настоящих пропорций файла: грустный кот не квадратный, и при height === width
 // он на экранах отказа сплюснут по вертикали. Если файл не читается, остаётся квадрат — место под
-// картинку всё равно зарезервировано, и вёрстка не едет.
-$natural = imageNaturalSize('public/assets/' . $file);
+// картинку всё равно зарезервировано, и вёрстка не едет. Путь задаётся внутри публичного каталога.
+$natural = imageNaturalSize('assets/' . $file);
 $height = $natural[0] > 0 ? (int) round($width * $natural[1] / $natural[0]) : $width;
 $lazy = (bool) ($lazy ?? false);
 ?>
-<img src="/assets/<?= e($file) ?>" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
+<img src="/assets/<?= e($file) ?>" class="cat-idle" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
      alt="Кот-талисман школы"<?php if ($lazy): ?> loading="lazy" decoding="async"<?php endif; ?>>
 ```
+
+Блок приведён к виду, который лежит в дереве после пакета V: `class="cat-idle"` возвращён в задаче V7 —
+без него правило анимации из `src-css/app.css` оставалось мёртвым (объявлено в источнике стилей, никто
+в разметке не использует), а обратный страж `StyleSourceTest` теперь такое ловит. Путь для
+`imageNaturalSize()` задаётся внутри публичного каталога (`assets/…`, а не `public/assets/…`): так
+сделал фикс первой задачи пакета V, а проверка на `../core/template.php` означает «не читается», а не
+«выйти наружу».
 
 `theme/404.php`:
 
