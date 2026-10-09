@@ -301,9 +301,10 @@ final class WebServerConfigTest extends TestCase
     {
         $inside = false;
 
-        foreach (preg_split('/\R/', $config) ?: [] as $line) {
-            $line = (string) $line;
-
+        // Строки режутся по переводу строки, а не по `\R`: без модификатора `u` PCRE считает
+        // переводом и байт 0x85, а он входит в кириллическую «х». Директива, стоящая в строке после
+        // русского текста, оказалась бы во втором фрагменте и не была бы найдена.
+        foreach (explode("\n", $config) as $line) {
             if ($this->find($line, '/<IfModule\s+mod_rewrite\.c>/i') !== null) {
                 $inside = true;
 
@@ -368,9 +369,8 @@ final class WebServerConfigTest extends TestCase
         $insideModern = false;
         $bareRequires = 0;
 
-        foreach (preg_split('/\R/', $config) ?: [] as $line) {
-            $line = (string) $line;
-
+        // Разбор строк тот же, что в hasRewriteOutsideWrapper: `\R` без `u` режет кириллицу.
+        foreach (explode("\n", $config) as $line) {
             if (preg_match('/<IfModule\s+mod_authz_core\.c>/', $line) === 1) {
                 $insideModern = true;
 

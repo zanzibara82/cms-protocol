@@ -47,25 +47,49 @@ final class TapTargetTest extends TestCase
     {
         // Исключение по файлу снимает проверку с тега, но не с разметки: класс обязан остаться
         // в строке кода, а не в комментарии — иначе комментарий про 44 px заменял бы сам класс.
+        // Строки режутся по переводу строки, а не по `\R`: без модификатора `u` тот считает
+        // переводом и байт 0x85, а это половина кириллической «х» — комментарий разрезался бы, и
+        // его хвост подошёл бы вместо кода.
         foreach (self::DYNAMIC_CLASS_FILES as $relative) {
             $code = (string) file_get_contents(dirname(__DIR__, 2) . '/' . $relative);
 
-            $carriers = array_values(array_filter(
-                preg_split('/\R/', $code) ?: [],
-                static function (string $line): bool {
-                    $trimmed = trim($line);
-
-                    return str_contains($line, self::REQUIRED_CLASS)
-                        && !str_starts_with($trimmed, '//')
-                        && !str_starts_with($trimmed, '*');
-                }
-            ));
-
             self::assertNotEmpty(
-                $carriers,
+                $this->codeCarriers($code),
                 $relative . ': класс собирается в PHP — файл обязан нести зону нажатия в коде, а не в комментарии'
             );
         }
+    }
+
+    // Проверка на посаженной разметке: комментарий с кириллической «х» (байт 0x85 внутри буквы) не
+    // должен сойти за код. Без этого probe мутация «снять класс из кода, оставить в комментарии»
+    // проходила бы молча — ровно так, как прошло первое воплощение этой проверки.
+    public function testКомментарийНеСчитаетсяНосителемКласса(): void
+    {
+        $commentOnly = "// Вкладки несут min-h-[44px] — зона нажатия\n\$a = 1;\n";
+        self::assertSame([], $this->codeCarriers($commentOnly));
+
+        $withCode = "// Вкладки несут min-h-[44px] — зона нажатия\n\$class = 'min-h-[44px]';\n";
+        self::assertSame(["\$class = 'min-h-[44px]';"], $this->codeCarriers($withCode));
+    }
+
+    /** @return list<string> */
+    private function codeCarriers(string $code): array
+    {
+        return array_values(array_filter(
+            explode("\n", $code),
+            function (string $line): bool {
+                return $this->isCodeCarrier($line);
+            }
+        ));
+    }
+
+    private function isCodeCarrier(string $line): bool
+    {
+        $trimmed = trim($line);
+
+        return str_contains($line, self::REQUIRED_CLASS)
+            && !str_starts_with($trimmed, '//')
+            && !str_starts_with($trimmed, '*');
     }
 
     public function testСтражЛовитКонтролБезЗоныНажатия(): void
