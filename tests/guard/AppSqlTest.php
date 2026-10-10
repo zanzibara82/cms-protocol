@@ -146,8 +146,8 @@ final class AppSqlTest extends TestCase
     }
 
     // Тело таблицы — между первой открывающей и последней закрывающей скобкой утверждения:
-    // границей служит конец самого утверждения (после splitSql() служебные клаузы ENGINE идут
-    // без скобок), а не слово ENGINE.
+    // границей служит конец утверждения, потому что splitSql() отсекает `;`, а клауза ENGINE=
+    // идёт после тела и своих скобок не содержит.
     /** @return list<string> */
     private function createTableBodies(string $sql): array
     {
