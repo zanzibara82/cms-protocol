@@ -1969,7 +1969,7 @@ git commit -m "Раздел «Новости»: манифест, два рел�
 
 **Что сюда не входит:** `publishTextError()`, `publishNotice()` и `publishDateOf()` остаются в `apps/news/lib/items.php` (задача 14) вместе со своим тестом `tests/unit/NewsPublishRulesTest.php` — они читают строку материала целиком и без неё не проверяются.
 
-**Что переносится дословно, а что нет:** `NEWS_TRANSLIT`, тексты отказов и правила разбора абзацев перенесены из `src/lib/slug.ts` и `src/apps/news/lib/validators.ts` без изменения смысла. Zod заменён явными проверками (у ядра нет рантайм-зависимостей), `newsFormValues()` не переносится — её заменяет `formValues()` из `core/form.php`, а предел `categoryId` ужат с 64 до 26 символов: столько занимает строковый идентификатор из `core/id.php`.
+**Что переносится дословно, а что нет:** `NEWS_TRANSLIT`, тексты отказов и правила разбора абзацев перенесены из `src/lib/slug.ts` и `src/apps/news/lib/validators.ts` без изменения смысла. Две осознанные разницы: отказ про занятый адрес называет сам адрес («Адрес «admin» занят…») — так редактору видно, что именно предложить, и правило картинки строже порталовского — путь с `..`, его процент-кодами, обратным слэшем или управляющим символом отклоняется целиком. Zod заменён явными проверками (у ядра нет рантайм-зависимостей), `newsFormValues()` не переносится — её заменяет `formValues()` из `core/form.php`, а предел `categoryId` ужат с 64 до 26 символов: столько занимает строковый идентификатор из `core/id.php`.
 
 - [ ] **Шаг 1: Написать падающий тест видимости**
 
@@ -2047,7 +2047,11 @@ final class NewsVisibilityTest extends TestCase
         self::assertStringContainsString("status = 'PUBLISHED'", $where);
         self::assertStringContainsString('published_at IS NOT NULL', $where);
         self::assertSame(['2026-10-06 12:00:00'], visibleArgs($this->moment('2026-10-06 12:00:00')));
-        self::assertSame([utcStamp($this->moment('2026-10-06 12:00:00'))], visibleArgs($this->moment('2026-10-06 12:00:00')));
+        self::assertSame(
+            substr_count($where, '?'),
+            count(visibleArgs($this->moment('2026-10-06 12:00:00'))),
+            'плейсхолдеров в условии ровно столько, сколько значений передаётся в запрос'
+        );
     }
 
     public function testПорядокЛентыОдинНаВсехСтраницах(): void
@@ -2306,6 +2310,7 @@ final class NewsSlugTest extends TestCase
         $slugs = ['novyj', 'a', 'a', 'b'];
 
         self::assertSame(['staryj', 'a', 'b'], rememberOldSlug($slugs, 'staryj', 'novyj'));
+        self::assertSame(['staryj', 'a', 'b'], rememberOldSlug(['a', '', 'a', 'staryj', 'b'], 'staryj', 'novyj'));
     }
 
     public function testСписокПрежнихАдресовОбрезаетсяПоПределу(): void
@@ -2438,9 +2443,10 @@ function newsSlugPlan(string $typedSlug, string $title, callable $taken): array
 }
 
 /**
- * Список прежних адресов материала. Прежний адрес ставится первым, совпадения и повторы
- * убираются, а хвост длиннее OLD_SLUGS_MAX отрезается: старые адреса нужны для постоянного
- * перенаправления, а не для того, чтобы хранить всю историю правок.
+ * Список прежних адресов материала. Прежний адрес ставится первым, пустые записи, совпадения и
+ * повторы убираются, а хвост длиннее OLD_SLUGS_MAX отрезается: старые адреса нужны для постоянного
+ * перенаправления, а не для того, чтобы хранить всю историю правок. Пустой адрес в списке — это
+ * перенаправление на `/news/`, поэтому он не попадает в список вовсе.
  *
  * @param list<string> $slugs
  * @return list<string>
@@ -2454,7 +2460,7 @@ function rememberOldSlug(array $slugs, string $previous, string $next): array
     $out = [$previous];
 
     foreach ($slugs as $slug) {
-        if ($slug === $next || in_array($slug, $out, true)) {
+        if ($slug === '' || $slug === $next || in_array($slug, $out, true)) {
             continue;
         }
 
@@ -2642,6 +2648,20 @@ final class NewsValidatorsTest extends TestCase
         self::assertNull(imagePath('//chuzhoj.ru/1.jpg'));
         self::assertNull(imagePath('uploads/news/1.jpg'));
         self::assertNull(imagePath('   '));
+        self::assertNull(imagePath('/uploads/../../../etc/passwd'));
+        self::assertNull(imagePath('/../etc/passwd'));
+        self::assertNull(imagePath('/uploads//../../x'));
+        self::assertNull(imagePath('/uploads/./1.jpg'));
+        self::assertNull(imagePath('/uploads/%2e%2e/etc/passwd'));
+        self::assertNull(imagePath('/uploads/%2E%2E/etc/passwd'));
+        self::assertNull(imagePath('/uploads/a\\b.jpg'));
+        self::assertNull(imagePath('/uploads/a' . chr(0) . 'b.jpg'));
+        self::assertNull(imagePath("/uploads/a\nb.jpg"));
+        self::assertNull(imagePath("/uploads/a\tb.jpg"));
+        self::assertNull(imagePath('/uploads/news/../secret.php'));
+        self::assertNull(imagePath('/uploads/..'));
+        self::assertSame('/uploads/news-2026.photo.jpg', imagePath('/uploads/news-2026.photo.jpg'));
+        self::assertSame('/a.b/c.jpg', imagePath('/a.b/c.jpg'));
         self::assertSame(
             fieldLimit(NEWS_FIELDS, 'image', 'max'),
             mb_strlen((string) imagePath('/' . str_repeat('a', 400)))
@@ -2712,7 +2732,7 @@ final class NewsValidatorsTest extends TestCase
             'Заголовок короче 3 символов — по нему новость находят в ленте и в поиске.',
             $errors['title']
         );
-        self::assertSame('Этот адрес занят разделом новостей — выберите другой.', $errors['slug']);
+        self::assertSame('Адрес «admin» занят служебной страницей раздела — выберите другой.', $errors['slug']);
         self::assertSame('Выберите рубрику: без неё новость не попадёт ни в один раздел.', $errors['categoryId']);
     }
 
@@ -2781,6 +2801,29 @@ final class NewsValidatorsTest extends TestCase
         self::assertSame('Заголовок длиннее 120 символов.', newsTooLongText('title'));
         self::assertSame('Рубрика выбрана неверно.', newsTooLongText('categoryId'));
         self::assertSame('Значение поля слишком длинное.', newsTooLongText('несуществующее'));
+    }
+
+    public function testНестроковыеПоляФормыСтановятсяПустойСтрокой(): void
+    {
+        $result = parseNewsForm([
+            'title' => 'Заголовок',
+            'slug' => ['zagolovok'],
+            'categoryId' => 'abc',
+            'body' => "Текст\n\nВторой абзац",
+            'tags' => ['выпускник', 'выпуск'],
+            'status' => ['PUBLISHED'],
+            'publishedAt' => '2026-10-04T09:00',
+            'pinned' => ['on'],
+            'noindex' => ['on'],
+        ]);
+
+        self::assertArrayHasKey('data', $result);
+        $data = $result['data'];
+        self::assertSame([], $data['tags'], 'список тегов из массива пуст');
+        self::assertSame('DRAFT', $data['status'], 'статус из массива не публикуется и остаётся черновиком');
+        self::assertFalse($data['pinned']);
+        self::assertFalse($data['noindex']);
+        self::assertSame('', (string) $data['slug'], 'адрес из массива становится пустым, а не словом Array');
     }
 
     /** @return array<string, string> */
@@ -3087,13 +3130,27 @@ function formPublishedAt(?DateTimeImmutable $date): string
 }
 
 // Обложка и картинка анонса — только путь внутри сайта: чужой адрес не пройдёт ни политику CSP
-// страницы, ни проверку загрузки, а `//host/path` браузер читает как чужой хост.
+// страницы, ни проверку загрузки, а `//host/path` браузер читает как чужой хост. Тот же путь
+// не должен уходить и за пределы сайта: `..` и его процент-коды выводят запрос из каталога
+// uploads/.
 function imagePath(string $raw): ?string
 {
     $value = mb_substr(trim($raw), 0, fieldLimit(NEWS_FIELDS, 'image', 'max'));
 
     if ($value === '' || !str_starts_with($value, '/') || str_starts_with($value, '//')) {
         return null;
+    }
+
+    // Управляющие символы и обратный слэш ломают файловые функции, `..` выводит за uploads/,
+    // а браузер раскодирует процент-кодированные точки в тот же `..` уже на своей стороне.
+    if (preg_match('#[\x00-\x1f\x7f\\\\]#', $value) === 1) {
+        return null;
+    }
+
+    foreach (explode('/', $value) as $segment) {
+        if (in_array(strtolower($segment), ['.', '..', '%2e', '%2e%2e'], true)) {
+            return null;
+        }
     }
 
     return $value;
@@ -3144,14 +3201,15 @@ function newsFormErrors(array $errors): array
  */
 function parseNewsForm(array $raw): array
 {
-    $values = [];
+    // Поле пришло из браузера: вместо строки там бывает массив (`tags[]=a` в запросе). formValues()
+    // из ядра меняет не-строку на пустую строку — иначе форма печатает предупреждение PHP и
+    // сохраняет в поле слово «Array».
+    $values = formValues($raw, NEWS_FORM_FIELDS);
 
     foreach (NEWS_FORM_FIELDS as $field) {
-        $value = (string) ($raw[$field] ?? '');
-
         // `body` не приводится к одной строке и не обрезается: структуру абзацев задают переводы
         // строк, их разбирает parseBody() со своими пределами.
-        $values[$field] = $field === 'body' ? $value : trim($value);
+        $values[$field] = $field === 'body' ? $values[$field] : trim($values[$field]);
     }
 
     // В заголовке и лиде переноса не бывает: они и в карточке, и в поисковике одной строкой.
@@ -3188,7 +3246,7 @@ function parseNewsForm(array $raw): array
     }
 
     if (in_array($values['slug'], NEWS_RESERVED_SLUGS, true)) {
-        $errors['slug'] = 'Этот адрес занят разделом новостей — выберите другой.';
+        $errors['slug'] = 'Адрес «' . $values['slug'] . '» занят служебной страницей раздела — выберите другой.';
     }
 
     $published = parsePublishedAt($values['publishedAt']);
@@ -3209,20 +3267,20 @@ function parseNewsForm(array $raw): array
             'cover' => imagePath($values['cover']),
             'categoryId' => $values['categoryId'],
             'body' => parseBody($values['body']),
-            'tags' => parseTagList((string) ($raw['tags'] ?? '')),
+            'tags' => parseTagList($values['tags']),
             'status' => resolveStatus('', $values['status']),
             'publishedAt' => $published['date'] ?? null,
-            'pinned' => isOn((string) ($raw['pinned'] ?? '')),
+            'pinned' => isOn($raw['pinned'] ?? ''),
             'seoTitle' => $values['seoTitle'],
             'seoDescription' => $values['seoDescription'],
             'ogImage' => imagePath($values['ogImage']),
-            'noindex' => isOn((string) ($raw['noindex'] ?? '')),
+            'noindex' => isOn($raw['noindex'] ?? ''),
         ],
     ];
 }
 ```
 
-**Почему `tags` разбирается из `$raw`, а не из `$values`:** длина строки тегов ограничена `NEWS_FORM_MAX['tags']`, но сама строка при этом не обрезается — иначе отказ «список слишком длинный» не сработал бы никогда. Поэтому в проверку длины идёт `$values['tags']`, а в `parseTagList()` — исходная строка.
+**Почему теги проверяются по длине, но не обрезаются:** длина строки тегов ограничена `NEWS_FORM_MAX['tags']`, но сама строка при этом не обрезается — иначе отказ «список слишком длинный» не сработал бы никогда. Поэтому в проверку длины и в `parseTagList()` идёт одно и то же очищенное значение из `$values`.
 
 - [ ] **Шаг 7: Подключить правила и запустить тесты**
 

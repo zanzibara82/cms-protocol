@@ -1866,7 +1866,8 @@ newsItemSaveAction(array $params = []): void
 4. **Путь картинки генерируется сервером.** `public/uploads/news/<newId()>.<расширение>`; расширение
    берётся из содержимого (`finfo`), а не из имени, присланное имя файла не читается вообще. Текстовое
    поле `cover` по-прежнему принимает путь сайта — это значение никогда не открывается как файл, оно
-   уходит в `src`/`og:image` и проверяется `imagePath()` (только `/…`, не `//…`).
+   уходит в `src`/`og:image` и проверяется `imagePath()` (только `/…`, не `//…`, без `..` и его
+   процент-кодов).
 
 **Три расхождения с портируемым кодом:**
 
@@ -2661,7 +2662,7 @@ final class NewsItemFormTest extends TestCase
         $response = Kernel::post(NEWS_ITEM_NEW_PATH, $this->fields(['slug' => 'admin']));
 
         self::assertSame(200, $response['status']);
-        self::assertStringContainsString('занят разделом новостей', $response['body']);
+        self::assertStringContainsString('занят служебной страницей раздела', $response['body']);
     }
 
     public function testПечатьДелаетМатериалВидимым(): void
