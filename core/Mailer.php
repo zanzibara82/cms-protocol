@@ -91,14 +91,26 @@ final class Mailer
             return 'Не указан адрес получателя.';
         }
 
+        // Перевод строки отбивает заголовок и привносит в письмо лишний, а остальные управляющие
+        // символы (NUL, ESC) портят экранирование той же строки. Тексты про перевод строки
+        // дословные: ими покрыт отказ из критериев приёмки.
         foreach (['to' => 'получателя', 'subject' => null, 'replyTo' => 'для ответа', 'from' => 'отправителя'] as $key => $label) {
             $value = (string) ($message[$key] ?? '');
+            $what = null;
 
             if (str_contains($value, "\r") || str_contains($value, "\n")) {
-                return $label === null
-                    ? 'В теме письма есть перевод строки.'
-                    : sprintf('В адресе %s есть перевод строки.', $label);
+                $what = 'перевод строки';
+            } elseif (preg_match('/[\x00-\x1f\x7f]/', $value) === 1) {
+                $what = 'управляющий символ';
             }
+
+            if ($what === null) {
+                continue;
+            }
+
+            return $label === null
+                ? 'В теме письма есть ' . $what . '.'
+                : sprintf('В адресе %s есть %s.', $label, $what);
         }
 
         if (trim((string) ($message['subject'] ?? '')) === '') {
@@ -128,6 +140,14 @@ final class Mailer
     public function render(array $message): string
     {
         $headers = $this->headersOf($message);
+
+        // render() публичный и может быть вызван мимо send(), где проверка стоит раньше:
+        // адресные поля зачищаются тем же способом, что и тема, чтобы перевод строки в поле
+        // не превратился в лишний заголовок готового письма.
+        foreach (['from', 'to', 'replyTo'] as $key) {
+            $headers[$key] = self::headerText($headers[$key]);
+        }
+
         $lines = [
             'Date: ' . rfc2822Stamp(nowUtc()),
             'From: <' . $headers['from'] . '>',

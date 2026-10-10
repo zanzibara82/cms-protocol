@@ -155,6 +155,22 @@ final class MailerTest extends TestCase
                 ['to' => 'a@b.ru', 'subject' => 'Тема', 'text' => 'Текст', 'replyTo' => "x@y.ru\n"],
                 'В адресе для ответа есть перевод строки.',
             ],
+            'перевод строки в адресе отправителя' => [
+                ['to' => 'a@b.ru', 'subject' => 'Тема', 'text' => 'Текст', 'from' => "c@d.ru\r\nBcc: vsem@b.ru"],
+                'В адресе отправителя есть перевод строки.',
+            ],
+            'управляющий символ в адресе получателя' => [
+                ['to' => "a@b\x01.ru", 'subject' => 'Тема', 'text' => 'Текст'],
+                'В адресе получателя есть управляющий символ.',
+            ],
+            'управляющий символ в теме' => [
+                ['to' => 'a@b.ru', 'subject' => "Тема\x1b[31m", 'text' => 'Текст'],
+                'В теме письма есть управляющий символ.',
+            ],
+            'управляющий символ в адресе отправителя' => [
+                ['to' => 'a@b.ru', 'subject' => 'Тема', 'text' => 'Текст', 'from' => "c@d\x7f.ru"],
+                'В адресе отправителя есть управляющий символ.',
+            ],
         ];
 
         foreach ($cases as $label => [$message, $expected]) {
@@ -191,6 +207,9 @@ final class MailerTest extends TestCase
 
     public function testБезНастроенногоСервераПисьмоНеОтправляется(): void
     {
+        // В dev-контейнере сервис `php` получает CMS_SMTP_HOST=mailpit из docker-compose.dev.yml,
+        // и здесь проверка пропускается. Вне контейнера (прогон без этой переменной окружения)
+        // SMTP_HOST остаётся пустым из config.sample.php, и отказ проверяется по-настоящему.
         if ((string) configValue('SMTP_HOST') !== '') {
             self::markTestSkipped('SMTP_HOST заполнен — отказ не проверить.');
         }
@@ -211,6 +230,27 @@ final class MailerTest extends TestCase
         $this->mailer()->render($message);
 
         self::assertSame($copy, $message);
+    }
+
+    public function testПрямаяСборкаПисьмаНеДобавляетЛишнихЗаголовков(): void
+    {
+        // send() отклоняет такое письмо раньше, здесь проверяется сам сборщик: вызов render()
+        // напрямую не обязан полагаться на стоящую впереди проверку.
+        $raw = (new Mailer())->render([
+            'to' => "a@b.ru\r\nBcc: vsem@b.ru",
+            'subject' => "Тема\r\nBcc: vsem@b.ru",
+            'text' => 'Текст',
+            'from' => "c@d.ru\r\nBcc: vsem@b.ru",
+            'replyTo' => "e@f.ru\r\nBcc: vsem@b.ru",
+        ]);
+        $head = substr($raw, 0, (int) strpos($raw, "\r\n\r\n"));
+
+        self::assertSame(1, preg_match('/^To: /m', $head));
+        self::assertSame(1, preg_match('/^From: /m', $head));
+        self::assertSame(1, preg_match('/^Reply-To: /m', $head));
+        self::assertSame(0, preg_match('/^Bcc: /m', $head));
+        // Перевод строки заменён пробелом: внедрённая строка остаётся текстом внутри одного заголовка.
+        self::assertMatchesRegularExpression('/^To: <a@b\.ru +Bcc: vsem@b\.ru>\r$/m', $head);
     }
 
     private function bodyOf(string $raw): string

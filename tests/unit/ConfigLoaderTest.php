@@ -10,12 +10,6 @@ require_once dirname(__DIR__, 2) . '/core/date.php';
 require_once dirname(__DIR__, 2) . '/core/log.php';
 require_once dirname(__DIR__, 2) . '/core/config-loader.php';
 
-// Dev-контейнер задачи 1 выставляет CMS_SMTP_HOST=mailpit, и config() честно применяет
-// непустое перекрытие из окружения. Тест проверяет ключ без значения, поэтому переменную
-// обнуляем здесь же: пустая строка перекрытием больше не считается, и ключ остаётся таким,
-// как в файле-образце, — без значения. До первого вызова config() кеш настроек ещё пуст.
-putenv('CMS_SMTP_HOST=');
-
 final class ConfigLoaderTest extends TestCase
 {
     public function testНастройкиБерутсяИзФайлаОбразца(): void
@@ -36,7 +30,10 @@ final class ConfigLoaderTest extends TestCase
 
     public function testОтсутствующийКлючОтдаётЗначениеПоУмолчанию(): void
     {
-        self::assertSame('', (string) configValue('SMTP_HOST', ''));
+        // SMTP_HOST в dev-контейнере перекрывается окружением (CMS_SMTP_HOST=mailpit), поэтому
+        // пустой ключ проверяется на SMTP_USER: он пустой в файле-образце, и CMS_SMTP_USER
+        // не выставляет никто — ни контейнер, ни тесты.
+        self::assertSame('', (string) configValue('SMTP_USER', ''));
         self::assertNull(configValue('такого_ключа_нет'));
     }
 
