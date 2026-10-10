@@ -1572,7 +1572,7 @@ final class NewsItemsTest extends NewsDbTestCase
 
         self::assertSame($result['id'], $id);
         self::assertSame('DRAFT', $this->column('SELECT status FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
-        self::assertSame('Короткий лид.', $this->column('SELECT lead FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
+        self::assertSame('Короткий лид.', $this->column('SELECT lead_text FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
         self::assertNull(value('SELECT published_at FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
         self::assertNull(value('SELECT author_email FROM ' . t('news_item') . ' WHERE id = ?', [$id]), 'черновик снимок автора не ставит');
         // Абзацы читаются тем же разбором, которым их пишет страница: путь внутри JSON плейсхолдером
@@ -1702,7 +1702,7 @@ final class NewsItemsTest extends NewsDbTestCase
         $id = $created['id'];
 
         self::assertSame('Вечер встречи выпускников', $this->column('SELECT title FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
-        self::assertNull(value('SELECT lead FROM ' . t('news_item') . ' WHERE id = ?', [$id]), 'пустой лид стирается в NULL');
+        self::assertNull(value('SELECT lead_text FROM ' . t('news_item') . ' WHERE id = ?', [$id]), 'пустой лид стирается в NULL');
         self::assertSame('1', $this->column('SELECT pinned FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
         self::assertSame('Описание для поисковика.', $this->column('SELECT seo_description FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
         self::assertSame('redaktor@shkola.ru', $this->column('SELECT author_email FROM ' . t('news_item') . ' WHERE id = ?', [$id]), 'выпуск поставил снимок автора');
