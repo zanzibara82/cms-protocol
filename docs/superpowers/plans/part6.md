@@ -1129,7 +1129,7 @@ git commit -m "Справочники раздела «Новости»: руб�
     `findByOldSlug(string $slug): ?array`, `inCategory(string $categorySlug, DateTimeImmutable $now, int $take = 5): array`,
     `relatedLinks(string $categorySlug, string $excludeSlug, DateTimeImmutable $now, int $take = 5): array`,
     `publishedForSitemap(int $limit = 2000): array`.
-  - `categoryFeedRows(string $categorySlug, DateTimeImmutable $now, int $take, string $excludeSlug): array` —
+  - `categoryFeedRows(string $categorySlug, string $excludeSlug, DateTimeImmutable $now, int $take): array` —
     служебная функция этого файла: общее тело `inCategory()` и `relatedLinks()`, чтобы скелет публичной выборки
     рубрики печатался один раз. Соседи по плану её не вызывают.
 
@@ -2011,7 +2011,7 @@ function findByOldSlug(string $slug): ?array
  *
  * @return list<array<string, mixed>>
  */
-function categoryFeedRows(string $categorySlug, DateTimeImmutable $now, int $take, string $excludeSlug): array
+function categoryFeedRows(string $categorySlug, string $excludeSlug, DateTimeImmutable $now, int $take): array
 {
     $exclude = $excludeSlug === '' ? '' : ' AND i.slug <> ?';
 
@@ -2047,7 +2047,7 @@ function categoryFeedRows(string $categorySlug, DateTimeImmutable $now, int $tak
  */
 function inCategory(string $categorySlug, DateTimeImmutable $now, int $take = 5): array
 {
-    return categoryFeedRows($categorySlug, $now, $take, '');
+    return categoryFeedRows($categorySlug, '', $now, $take);
 }
 
 /**
@@ -2058,7 +2058,7 @@ function inCategory(string $categorySlug, DateTimeImmutable $now, int $take = 5)
  */
 function relatedLinks(string $categorySlug, string $excludeSlug, DateTimeImmutable $now, int $take = 5): array
 {
-    return categoryFeedRows($categorySlug, $now, $take, $excludeSlug);
+    return categoryFeedRows($categorySlug, $excludeSlug, $now, $take);
 }
 
 /**
