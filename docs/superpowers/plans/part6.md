@@ -668,8 +668,8 @@ function categoryExists(string $id): bool
     return (int) value('SELECT COUNT(*) FROM ' . t('news_category') . ' WHERE id = ?', [$id]) > 0;
 }
 
-// Рубрика с материалами не удаляется, а отказ называет причину: внешний ключ RESTRICT всё равно
-// не дал бы удалить строку, но человек получил бы вместо текста ошибку базы.
+// Название рубрики занято, если такая строка уже есть и это не та же самая рубрика: сравнение ведёт
+// коллация, поэтому «Методика» и «МЕТОДИКА» — одно название.
 function categoryTitleTaken(string $title, string $exceptId = ''): bool
 {
     $row = one('SELECT id FROM ' . t('news_category') . ' WHERE title = ?', [$title]);
@@ -825,6 +825,8 @@ function toggleCategoryVisibility(string $id): array
     return ['ok' => true, 'notice' => $visible ? 'shown' : 'hidden', 'error' => ''];
 }
 
+// Рубрика с материалами не удаляется, а отказ называет причину: внешний ключ RESTRICT всё равно
+// не дал бы удалить строку, но человек получил бы вместо текста ошибку базы.
 /** @return array{ok: bool, notice: string, error: string} */
 function deleteCategory(string $id): array
 {

@@ -23,8 +23,9 @@
   `routeTable()`, `routesReset()`, `dispatch()`
 - `core/response.php`: `redirect()`, `redirectWithNotice()`, `forbidden()`; `core/csrf.php`: `csrfCheck()`,
   `csrfField()`; `core/notice.php`: `noticeOfRequest()`
-- `core/auth.php`: `getEditorAccess()`, `currentUser()`; `core/form.php`: `postString()`, `queryString()`
-- `core/request.php`: `requestPath()`; `core/template.php`: `render()`, `e()`; `core/text.php`: `plural()`
+- `core/auth.php`: `getEditorAccess()`, `currentUser()`; `core/request.php`: `postString()`, `queryString()`,
+  `requestPath()` (`queryString()` и `postString()` живут в `core/request.php`, а не в `core/form.php`)
+- `core/template.php`: `render()`, `e()`; `core/text.php`: `plural()`
 - `core/date.php`: `nowUtc()`; `admin/layout.php`: `adminShell()`, `adminNotice()`
 - `core/routes.php` (задача 8): `finishAppAction(array $result, string $to, string $notice): void`
 - `constants.php`: `NEWS_STATUS`, `NEWS_STATUS_LABEL`, `NEWS_FILTER_LABEL`, `NEWS_FILTERS`,
@@ -64,7 +65,7 @@ appRoutesSnapshot(): array  // core/apps.php: снимок маршрутов р
 2. **Кнопка решает действие, а право на переход проверяет сервер.** Набор кнопок — это подписи
    (`NEWS_ROW_OP_LABEL`), а не разрешение: `setItemStatus()` и `setItemPinned()` отклоняют то же самое,
    что экран не показывает, и текстом отказа отвечают в список.
-3. **Адрес возврата приходит из браузера, поэтому он sanitизирован.** `back` принимает только путь
+3. **Адрес возврата приходит из браузера, поэтому он обезврежен.** `back` принимает только путь
    этого же списка; всё остальное — чистый адрес списка. Без этого поля нельзя сохранить фильтры,
    а без проверки — получили бы открытый редирект (`Location:` на чужой хост) из формы, которая
    выглядит как наша.
@@ -1810,7 +1811,9 @@ git commit -m "Экраны админки «Новостей»: сводка, �
 картинку принимал route handler на Node, а в PHP приём файла пишется заново.
 
 **Потребляет:**
-- `core/form.php`: `postAll()`, `postString()`, `uploadedFile()`, `formValues()`, `isOn()`, `queryString()`
+- `core/request.php`: `postAll()`, `postString()`, `uploadedFile()`, `queryString()`;
+  `core/form.php`: `formValues()`, `isOn()` (перечисленное первое — файл запроса, `core/form.php`
+  даёт только нормализацию полей)
 - `core/auth.php`: `getEditorAccess()`; `core/csrf.php`: `csrfCheck()`, `csrfField()`
 - `core/response.php`: `redirect()`, `redirectWithNotice()`, `forbidden()`; `core/request.php`: `requestPath()`
 - `core/routes.php` (задача 8): `finishAppAction(array $result, string $to, string $notice): void` —

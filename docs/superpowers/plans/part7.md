@@ -1885,7 +1885,7 @@ git commit -m "Правила редактора раздела «Новости
 - Создать: `apps/news/templates/partials/search.php`, `partials/categories.php`, `partials/list.php`,
   `partials/card.php`, `partials/pager.php`, `partials/body.php`
 - Изменить: `apps/news/lib/boot.php` (восьмая строка — `require_once __DIR__ . '/seo.php';`)
-- Изменить: `public/index.php` (`registerAppRoutes()` между маршрутами ядра и разбором запроса)
+- Проверить: `public/index.php` (`registerAppRoutes()` уже стоит между маршрутами ядра и разбором запроса — строку добавила задача 8Б)
 - Тест: `tests/unit/NewsSeoTest.php`, `tests/http/NewsPublicTest.php`
 
 **Интерфейсы:**
@@ -3015,17 +3015,21 @@ function categoryIntro(array $row): string
 подключён. `require_once` исполнит `boot.php` один раз за процесс, константы и правила останутся
 определены, а таблица маршрутов на повторе после `routesReset()` восстановится снимком.
 
-Изменить `public/index.php` — между `registerCoreRoutes()` и `dispatch()` добавить одну строку:
+Проверить `public/index.php` — между `registerCoreRoutes()` и `dispatch()` уже стоит строка
 
 ```php
 registerAppRoutes();
 ```
 
+её добавила задача 8Б (коммит `cc9cff5`), поэтому в этой задаче файл не правится: второй раз ту же строку
+вставлять не нужно, а проверка порядка остаётся обязательной.
+
 Порядок фиксирован: сессия, маршруты ядра, маршруты разделов, разбор запроса. Без этой строки адресов
 раздела в реестре нет вовсе, и весь набор `http` отвечает на `/news` четвёркой — при этом страж
 `RouteHandlersTest` остаётся зелёным, потому что `registerAppRoutes()` он вызывает сам. Отсюда правило
 для всех следующих разделов: регистрирует приложение ядро на запросе, а не «файл маршрутов сам
-появляется».
+появляется». Проверкой в этой задаче служит тест набора `http`, который доходит до ленты по `/news`
+без ручного вызова `registerAppRoutes()`.
 
 - [ ] **Шаг 6: Шаблоны страниц**
 
@@ -3403,7 +3407,6 @@ Expected: зелёные все четыре проверки. Если PHP-CS-F
 
 ```bash
 git add apps/news/routes.php apps/news/lib/seo.php apps/news/lib/boot.php apps/news/templates/ \
-        public/index.php \
         scripts/make-og-default.php public/assets/og-default.png \
         tests/unit/NewsSeoTest.php tests/http/NewsPublicTest.php
 git status --short
@@ -3412,8 +3415,9 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
 git commit -m "Новости: публичные страницы раздела, метаданные и фирменное превью"
 ```
 
-`public/index.php` — не «файл ядра вообще-то»: без его строки раздел в реестре маршрутов не появляется
-ни на одном живом запросе, поэтому разносить эту правку по другому коммиту нельзя.
+`public/index.php` в этом списке не нужен: строка `registerAppRoutes()` в нём появилась в задаче 8Б, и
+правки файла в этой задаче нет. На месте строки всё равно проверяется — тестом набора `http`, а не глазами:
+без неё адресов раздела в реестре нет ни на одном живом запросе.
 
 `git status --short` перед коммитом обязателен: в индекс не должны попасть `config.php`, журналы и
 `public/install.lock`.
