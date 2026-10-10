@@ -2179,7 +2179,7 @@ final class NewsSlugTest extends TestCase
             'Жизнь школы' => 'zhizn-shkoly',
             'Поступление в 10 класс' => 'postuplenie-v-10-klass',
             'Конкурс «Ученик года»' => 'konkurs-uchenik-goda',
-            'Итоги, итоги и ещё раз итоги' => 'itogi-itogi-i-eshyo-raz-itogi',
+            'Итоги, итоги и ещё раз итоги' => 'itogi-itogi-i-eschyo-raz-itogi',
             'Щедрый вечер' => 'schedryy-vecher',
             'Объект №5' => 'obekt-5',
             '  Пробелы  вокруг  ' => 'probely-vokrug',
@@ -2401,17 +2401,19 @@ function newsSlugPlan(string $typedSlug, string $title, callable $taken): array
     $typed = slugify($typedSlug);
 
     if ($typed !== '') {
-        if (mb_strlen($typed) < NEWS_SLUG_MIN) {
-            return [
-                'slug' => '',
-                'error' => 'Адрес короче ' . NEWS_SLUG_MIN . ' символов — по нему материал открывают по ссылке.',
-            ];
-        }
-
+        // Занятость служебного сегмента проверяется до длины: однобуквенные адреса «c» и «t»
+        // человек может вписать целиком, и отказ обязан называть настоящую причину.
         if (in_array($typed, NEWS_RESERVED_SLUGS, true)) {
             return [
                 'slug' => '',
                 'error' => 'Адрес «' . $typed . '» занят служебной страницей раздела — выберите другой.',
+            ];
+        }
+
+        if (mb_strlen($typed) < NEWS_SLUG_MIN) {
+            return [
+                'slug' => '',
+                'error' => 'Адрес короче ' . NEWS_SLUG_MIN . ' символов — по нему материал открывают по ссылке.',
             ];
         }
 
