@@ -25,7 +25,7 @@
   `csrfField()`; `core/notice.php`: `noticeOfRequest()`
 - `core/auth.php`: `getEditorAccess()`, `currentUser()`; `core/request.php`: `postString()`, `queryString()`,
   `requestPath()` (`queryString()` и `postString()` живут в `core/request.php`, а не в `core/form.php`)
-- `core/template.php`: `render()`, `e()`; `core/text.php`: `plural()`
+- `core/template.php`: `render()`; `core/escape.php`: `e()`; `core/text.php`: `plural()`
 - `core/date.php`: `nowUtc()`; `admin/layout.php`: `adminShell()`, `adminNotice()`
 - `core/routes.php` (задача 8): `finishAppAction(array $result, string $to, string $notice): void`
 - `constants.php`: `NEWS_STATUS`, `NEWS_STATUS_LABEL`, `NEWS_FILTER_LABEL`, `NEWS_FILTERS`,
@@ -1819,10 +1819,11 @@ git commit -m "Экраны админки «Новостей»: сводка, �
 - `core/routes.php` (задача 8): `finishAppAction(array $result, string $to, string $notice): void` —
   единственный канал отказа раздела (причина во flash, в адресе только ключ)
 - `core/id.php`: `newId()` (26 символов алфавита `0123456789abcdefghjkmnpqrstvwxyz`)
-- `core/template.php`: `render()`, `e()`; `admin/layout.php`: `adminShell()`, `adminNotice()`
-- `constants.php`: `NEWS_FORM_FIELDS`, `NEWS_FORM_MAX`, `NEWS_STATUS`, `NEWS_STATUS_LABEL`,
-  `NEWS_RESERVED_SLUGS`, `NEWS_SLUG_MAX`, `NEWS_NOTICE_TEXT`, `NEWS_FIELDS`, `TAG_FIELDS`
-- `validators.php`: `parseNewsForm()`, `newsFormErrors()`, `resolveStatus()`, `fieldLimit()`
+- `core/template.php`: `render()`; `core/escape.php`: `e()`; `admin/layout.php`: `adminShell()`, `adminNotice()`
+- `constants.php`: `NEWS_STATUS`, `NEWS_STATUS_LABEL`, `NEWS_RESERVED_SLUGS`, `NEWS_SLUG_MAX`,
+  `NEWS_NOTICE_TEXT`, `NEWS_FIELDS`, `TAG_FIELDS`, `fieldLimit()`
+- `validators.php`: `NEWS_FORM_FIELDS`, `NEWS_FORM_MAX`, `parseNewsForm()`, `newsFormErrors()`,
+  `resolveStatus()`
 - `items.php`: `NEWS_ADMIN_ITEMS_PATH`, `NEWS_ID_MAX`, `NEWS_PUBLISH_NEEDS_TEXT`, `itemForForm()`,
   `createItem()`, `updateItem()`, `itemFailure()`
 - `admin.php` (задача 17): `newsAdminNav()`, `newsAdminBackHref()`; `catalog.php`: `categoryOptions()`
