@@ -308,7 +308,7 @@ final class NewsPublishRulesTest extends TestCase
 
         $draft = dataOf($input, null, $editor, false, $now);
 
-        self::assertNull($draft['lead'], 'пустой лид — NULL, а не пустая строка');
+        self::assertNull($draft['lead_text'], 'пустой лид — NULL, а не пустая строка');
         self::assertNull($draft['cover']);
         self::assertNull($draft['seo_title']);
         self::assertNull($draft['published_at']);
@@ -1378,6 +1378,7 @@ final class NewsItemsTest extends NewsDbTestCase
         ], $overrides);
     }
 
+    /** @return array{id: string, email: string} */
     private function editor(): array
     {
         return ['id' => 'redaktor-1', 'email' => 'redaktor@shkola.ru'];
