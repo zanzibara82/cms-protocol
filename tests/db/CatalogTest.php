@@ -84,6 +84,20 @@ final class CatalogTest extends NewsDbTestCase
         self::assertSame('Рубрики уже нет — обновите страницу.', $result['error']);
     }
 
+    // Уникальность названия — правило не только создания: переименование и правка описания обязаны
+    // отказать по тому же тексту. Без их проверки человек получил бы ошибку базы на уникальном
+    // индексе `news_category_title` вместо объяснения.
+    public function testДубликатНазванияОтклоняетсяПриПереименованииИПравкеОписания(): void
+    {
+        $renamed = renameCategory(categoryIdOf('metodika'), "  Поступление \n");
+        self::assertFalse($renamed['ok']);
+        self::assertSame('Рубрика с таким названием уже есть.', $renamed['error']);
+
+        $described = updateCategoryDescription(categoryIdOf('zhizn-shkoly'), 'МЕТОДИКА', 'Что смотрят на странице рубрики.');
+        self::assertFalse($described['ok']);
+        self::assertSame('Рубрика с таким названием уже есть.', $described['error']);
+    }
+
     public function testОписаниеРубрикиСохраняетсяИОбнуляется(): void
     {
         $id = categoryIdOf('postuplenie');
