@@ -138,7 +138,7 @@ abstract class NewsDbTestCase extends TestCase
             'id' => $id,
             'slug' => $slug,
             'title' => 'Материал ' . $slug,
-            'lead' => null,
+            'lead_text' => null,
             'cover' => null,
             'category_id' => $categoryId,
             'body' => json_encode([['title' => '', 'text' => 'Текст']], JSON_THROW_ON_ERROR),
@@ -1411,7 +1411,7 @@ final class NewsFeedTest extends NewsDbTestCase
     {
         $itemId = $this->published('itogi-goda', [
             'title' => 'Итоги года',
-            'lead' => 'Короткий лид',
+            'lead_text' => 'Короткий лид',
             'cover' => '/uploads/news/itogi.jpg',
             'body' => json_encode([['title' => 'Итоги', 'text' => 'Текст про **итоги**.']], JSON_THROW_ON_ERROR),
         ]);
@@ -1566,7 +1566,7 @@ const NEWS_PAGER_WINDOW = 7;
 
 // Колонки карточки — явный список. SELECT * притащил бы в ленту JSON каждого материала:
 // страница из 12 карточек читала бы 12 полных текстов, которые на ней не печатаются.
-const NEWS_CARD_COLUMNS = 'i.id, i.slug, i.title, i.lead, i.cover, i.pinned, i.status, i.published_at,'
+const NEWS_CARD_COLUMNS = 'i.id, i.slug, i.title, i.lead_text, i.cover, i.pinned, i.status, i.published_at,'
     . ' c.slug AS category_slug, c.title AS category_title';
 
 // К колонкам карточки добавляется то, что читает страница материала: абзацы, метаданные для
@@ -1746,7 +1746,7 @@ function feedScope(array $filter = []): array
 
     if ($query !== '') {
         $like = '%' . escapeLike($query) . '%';
-        $parts[] = '(i.title LIKE ? OR i.lead LIKE ?)';
+        $parts[] = '(i.title LIKE ? OR i.lead_text LIKE ?)';
         $args[] = $like;
         $args[] = $like;
     }
@@ -1835,7 +1835,7 @@ function toCard(array $row, DateTimeImmutable $now): array
         'id' => (string) $row['id'],
         'slug' => $slug,
         'title' => (string) $row['title'],
-        'lead' => (string) ($row['lead'] ?? ''),
+        'lead' => (string) ($row['lead_text'] ?? ''),
         'cover' => (string) ($row['cover'] ?? ''),
         'pinned' => (int) ($row['pinned'] ?? 0) === 1,
         'open' => isOpen($row, $now),

@@ -216,7 +216,7 @@ final class NewsPublishRulesTest extends TestCase
         $scope = adminWhere(parseAdminFilters(['cat' => 'id-1', 'q' => 'вечер']), $now);
         // Единица появляется только когда условия нет вовсе (общая вкладка): здесь они есть.
         self::assertSame(
-            'i.category_id = ? AND (i.title LIKE ? OR i.lead LIKE ? OR i.slug LIKE ?)',
+            'i.category_id = ? AND (i.title LIKE ? OR i.lead_text LIKE ? OR i.slug LIKE ?)',
             $scope['where']
         );
         self::assertSame(['id-1', '%вечер%', '%вечер%', '%вечер%'], $scope['args']);
@@ -546,7 +546,7 @@ function adminWhere(array $filters, DateTimeImmutable $now): array
 
     if ($query !== '') {
         $like = '%' . escapeLike($query) . '%';
-        $parts[] = '(i.title LIKE ? OR i.lead LIKE ? OR i.slug LIKE ?)';
+        $parts[] = '(i.title LIKE ? OR i.lead_text LIKE ? OR i.slug LIKE ?)';
         $args[] = $like;
         $args[] = $like;
         $args[] = $like;
@@ -759,7 +759,7 @@ function itemForForm(string $id): ?array
     }
 
     $sql = sprintf(
-        'SELECT i.id, i.slug, i.title, i.lead, i.cover, i.category_id, i.body, i.status, i.published_at,'
+        'SELECT i.id, i.slug, i.title, i.lead_text, i.cover, i.category_id, i.body, i.status, i.published_at,'
             . ' i.pinned, i.seo_title, i.seo_description, i.og_image, i.noindex, i.author_email, i.updated_at,'
             . ' c.title AS category_title, c.visible AS category_visible'
             . ' FROM %s i LEFT JOIN %s c ON c.id = i.category_id WHERE i.id = ?',
@@ -788,7 +788,7 @@ function itemForForm(string $id): ?array
         'id' => $itemId,
         'slug' => $slug,
         'title' => (string) $row['title'],
-        'lead' => (string) ($row['lead'] ?? ''),
+        'lead' => (string) ($row['lead_text'] ?? ''),
         'cover' => (string) ($row['cover'] ?? ''),
         'categoryId' => (string) $row['category_id'],
         'categoryTitle' => (string) ($row['category_title'] ?? ''),
@@ -923,7 +923,7 @@ function dataOf(array $input, ?DateTimeImmutable $publishedAt, array $editor, bo
 {
     $row = [
         'title' => (string) ($input['title'] ?? ''),
-        'lead' => orNull((string) ($input['lead'] ?? '')),
+        'lead_text' => orNull((string) ($input['lead'] ?? '')),
         'cover' => orNull((string) ($input['cover'] ?? '')),
         'category_id' => (string) ($input['categoryId'] ?? ''),
         'body' => bodyJson($input['body'] ?? []),
@@ -1454,8 +1454,8 @@ final class NewsItemsTest extends NewsDbTestCase
     public function testПоискСпискаНаходитПоЗаголовкуЛидуИАдресу(): void
     {
         $category = categoryIdOf('zhizn-shkoly');
-        self::makeItem($category, 'itogi-goda', ['title' => 'Итоги года', 'lead' => 'Что мы сделали']);
-        self::makeItem($category, 'vecher', ['title' => 'Вечер встречи', 'lead' => 'Выпускники собрались']);
+        self::makeItem($category, 'itogi-goda', ['title' => 'Итоги года', 'lead_text' => 'Что мы сделали']);
+        self::makeItem($category, 'vecher', ['title' => 'Вечер встречи', 'lead_text' => 'Выпускники собрались']);
 
         $cases = [
             'заголовок' => ['итоги', ['itogi-goda']],
@@ -1532,7 +1532,7 @@ final class NewsItemsTest extends NewsDbTestCase
         $category = categoryIdOf('zhizn-shkoly');
         $id = self::makeItem($category, 'vecher-vstrechi', [
             'title' => 'Вечер встречи',
-            'lead' => 'Короткий лид.',
+            'lead_text' => 'Короткий лид.',
             'body' => json_encode([['title' => 'Подготовка', 'text' => 'Текст']], JSON_THROW_ON_ERROR),
             'status' => NEWS_STATUS['DRAFT'],
             'seo_title' => 'Вечер встречи выпускников',

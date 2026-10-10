@@ -1127,14 +1127,14 @@ final class NewsSchemaTest extends TestCase
     public function testНовыйМатериалЭтоЧерновикБезСрокаИБезЗакрепления(): void
     {
         $item = self::makeItem(self::makeCategory('Рубрика для умолчаний'), 'material-s-umolchaniyami');
-        $row = one('SELECT status, published_at, pinned, noindex, lead FROM ' . t('news_item') . ' WHERE id = ?', [$item]);
+        $row = one('SELECT status, published_at, pinned, noindex, lead_text FROM ' . t('news_item') . ' WHERE id = ?', [$item]);
 
         self::assertIsArray($row);
         self::assertSame(NEWS_STATUS['DRAFT'], (string) $row['status']);
         self::assertNull($row['published_at']);
         self::assertSame(0, (int) $row['pinned']);
         self::assertSame(0, (int) $row['noindex']);
-        self::assertNull($row['lead']);
+        self::assertNull($row['lead_text']);
     }
 
     public function testТаблицыРазделаНаИннодбИВЮникоде(): void
@@ -1565,7 +1565,7 @@ CREATE TABLE IF NOT EXISTS tbl_news_item (
     id VARCHAR(26) NOT NULL,
     slug VARCHAR(60) NOT NULL,
     title VARCHAR(120) NOT NULL,
-    lead VARCHAR(300) NULL,
+    lead_text VARCHAR(300) NULL,
     cover VARCHAR(300) NULL,
     category_id VARCHAR(26) NOT NULL,
     body JSON NULL,
