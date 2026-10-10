@@ -9,3 +9,4 @@ require_once __DIR__ . '/visibility.php';
 require_once __DIR__ . '/slug.php';
 require_once __DIR__ . '/validators.php';
 require_once __DIR__ . '/catalog.php';
+require_once __DIR__ . '/feed.php';
