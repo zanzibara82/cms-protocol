@@ -8,3 +8,4 @@ require_once __DIR__ . '/constants.php';
 require_once __DIR__ . '/visibility.php';
 require_once __DIR__ . '/slug.php';
 require_once __DIR__ . '/validators.php';
+require_once __DIR__ . '/catalog.php';
