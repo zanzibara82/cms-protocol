@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Cms\Tests\unit;
 
+use Cms\Core\SmtpSocket;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 /**
  * Протокольный слой почты проверяется против подставного сервера на петлевом адресе: ветка отказа
@@ -32,6 +34,11 @@ final class SmtpSocketTest extends TestCase
 
     private static string $certificateKeyFile = '';
 
+    /** Сертификат с чужим именем: рукопожатие с ним возможно, а вот проверка имени — нет. */
+    private static string $otherNameFile = '';
+
+    private static string $otherNameKeyFile = '';
+
     /** @var resource|null */
     private $server = null;
 
@@ -46,15 +53,31 @@ final class SmtpSocketTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        // Самоподписанный сертификат нужен одной проверке: на нём видно, что клиент отвергает
-        // непроверенный канал, а не принимает любое рукопожатие. Строится один раз на класс.
+        // Сертификаты нужны проверкам шифрования: на «своём» имени видно, что клиент согласует
+        // канал и войдёт в него, на чужом — что он сверяет имя, а не принимает любое рукопожатие.
+        // Строятся один раз на класс: сборка ключа дольше самой проверки, а меняться им негде.
+        [self::$certificateFile, self::$certificateKeyFile] = self::createCertificate('/CN=' . self::HOST, '');
+        [self::$otherNameFile, self::$otherNameKeyFile] = self::createCertificate('/CN=smtp.example.org', 'DNS:smtp.example.org');
+    }
+
+    /**
+     * Самоподписанный сертификат подставного сервера. Возвращает пару путей: публичная часть
+     * годится и клиенту как явный список доверия (`-d openssl.cafile=`), чтобы шагам шифрования
+     * и входа нашлось исполняемое продолжение — без новых ключей настроек ядра.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private static function createCertificate(string $subject, string $alternativeName): array
+    {
         $base = sys_get_temp_dir() . '/smtp-self-signed-' . newId();
         $command = sprintf(
-            'openssl req -x509 -newkey rsa:2048 -keyout %s -out %s -days 2 -nodes -subj %s',
+            'openssl req -x509 -newkey rsa:2048 -keyout %s -out %s -days 2 -nodes -subj %s%s',
             escapeshellarg($base . '.key'),
             escapeshellarg($base . '.pem'),
-            escapeshellarg('/CN=' . self::HOST)
+            escapeshellarg($subject),
+            $alternativeName === '' ? '' : ' -addext subjectAltName=' . escapeshellarg($alternativeName)
         );
+        $output = [];
 
         exec($command . ' >/dev/null 2>&1', $output, $status);
 
@@ -62,13 +85,12 @@ final class SmtpSocketTest extends TestCase
             self::fail('подставному серверу нужен openssl для самоподписанного сертификата: код ' . $status . '.');
         }
 
-        self::$certificateFile = $base . '.pem';
-        self::$certificateKeyFile = $base . '.key';
+        return [$base . '.pem', $base . '.key'];
     }
 
     public static function tearDownAfterClass(): void
     {
-        foreach ([self::$certificateFile, self::$certificateKeyFile] as $file) {
+        foreach ([self::$certificateFile, self::$certificateKeyFile, self::$otherNameFile, self::$otherNameKeyFile] as $file) {
             if ($file !== '' && is_file($file)) {
                 @unlink($file);
             }
@@ -220,6 +242,136 @@ final class SmtpSocketTest extends TestCase
         self::assertCount(1, $this->commands($received, 'EHLO'), 'после неудачного рукопожатия клиент не обязан повторять EHLO');
     }
 
+    public function testПроверенныйКаналВходитИОтправляетПисьмоБезЗаписиОбОткрытомПере(): void
+    {
+        $this->bind(0);
+        [$answer, $received] = $this->runClientWithTrust(
+            'kluch@example.com',
+            'пароль-секрет',
+            [
+                'ehlo' => "250-STARTTLS\r\n250 OK",
+                'starttls' => '220 2.0.0 Ready to start TLS',
+                'tls' => 'cert',
+            ],
+            $this->rawMessage(),
+            true
+        );
+
+        self::assertSame('OK', $answer);
+        self::assertContains('AUTH LOGIN', $received);
+        self::assertContains(base64_encode('kluch@example.com'), $received);
+        self::assertContains('MAIL FROM:<sender@example.com>', $received);
+        self::assertContains('RCPT TO:<uchenik@example.com>', $received);
+        // Зашифрованный канал — штатный, и записи о пересылке открытым текстом он не оставляет.
+        self::assertStringNotContainsString('mail.plaintext', $this->log());
+    }
+
+    public function testСерверНеПринялВходИПисьмоНеОтправлено(): void
+    {
+        $this->bind(0);
+        [$answer, $received] = $this->runClientWithTrust(
+            'kluch@example.com',
+            'пароль-секрет',
+            [
+                'ehlo' => "250-STARTTLS\r\n250 OK",
+                'starttls' => '220 2.0.0 Ready to start TLS',
+                'tls' => 'cert',
+                'auth-pass' => '535 5.7.8 вход не принят',
+            ],
+            $this->rawMessage(),
+            true
+        );
+
+        self::assertStringStartsWith('ERR', $answer);
+        self::assertSame([], $this->commands($received, 'MAIL FROM'), 'непринятые учётные данные не дают права отправлять письмо');
+    }
+
+    public function testСтрокаСервераНаШагеВходаНеПопадаетВОтказ(): void
+    {
+        // Сервер во время входа может поставить в свой ответ то, что ему передали, или что угодно
+        // ещё; текст отказа уходит в журнал, поэтому от шага входа остаётся только код.
+        $this->bind(0);
+        [$answer] = $this->runClientWithTrust(
+            'kluch@example.com',
+            'пароль-секрет',
+            [
+                'ehlo' => "250-STARTTLS\r\n250 OK",
+                'starttls' => '220 2.0.0 Ready to start TLS',
+                'tls' => 'cert',
+                'auth-pass' => '535 5.7.8 метка-которую-сервер-не-должен-переносить-дальше',
+            ],
+            $this->rawMessage(),
+            true
+        );
+
+        self::assertStringStartsWith('ERR', $answer);
+        self::assertStringContainsString('535', $answer);
+        self::assertStringNotContainsString('метка-которую-сервер-не-должен-переносить-дальше', $answer);
+        self::assertStringNotContainsString(base64_encode('пароль-секрет'), $answer);
+    }
+
+    public function testСертификатСЧужимИменемНеСчитаетсяПровереннымКаналом(): void
+    {
+        // Тому же самому доверию, что принимает предыдущие проверки, сервер подставляет сертификат
+        // на другое имя: канал обязан быть отвергнут, иначе проверка имени сертификата ничего не
+        // стоит и письмо уйдёт посреднику, которым притворится кто угодно.
+        $this->bind(0);
+        [$answer, $received] = $this->runClientWithTrust(
+            'kluch@example.com',
+            'пароль-секрет',
+            [
+                'ehlo' => "250-STARTTLS\r\n250 OK",
+                'starttls' => '220 2.0.0 Ready to start TLS',
+                'tls' => 'other-name-cert',
+            ],
+            $this->rawMessage(),
+            true
+        );
+
+        self::assertStringStartsWith('ERR', $answer);
+        self::assertSame([], $this->commands($received, 'AUTH'), 'канал с чужим именем не считается зашифрованным');
+        self::assertSame([], $this->commands($received, 'MAIL FROM'));
+    }
+
+    public function testНеполнаяЗаписьНеСчитаетсяОтправленнымЗапросом(): void
+    {
+        // Проверяется сама строгость записи: сокет делается неблокирующим и никем не читается,
+        // буфер заполняется, и `fwrite` отдаёт меньше половины запроса. Недописанную строку
+        // сервер ждал бы как часть команды, а письмо ушло бы искажённым.
+        $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0);
+        self::assertIsArray($pair);
+        [$writer, $reader] = $pair;
+        stream_set_blocking($writer, false);
+
+        $socket = new SmtpSocket(self::HOST, 25, '', '', 1.0);
+        $stream = new \ReflectionProperty(SmtpSocket::class, 'stream');
+        $stream->setValue($socket, $writer);
+        $write = new \ReflectionMethod(SmtpSocket::class, 'write');
+
+        $message = '';
+
+        try {
+            $write->invoke($socket, str_repeat('x', 4 * 1024 * 1024));
+        } catch (RuntimeException $error) {
+            $message = $error->getMessage();
+        }
+
+        self::assertStringContainsString('не весь запрос', $message, 'неполная запись не должна считаться отправленным запросом');
+
+        // Закрытая читающая сторона: запись не удаётся вовсе — отказ обязан говорить о соединении.
+        fclose($reader);
+        $message = '';
+
+        try {
+            $write->invoke($socket, 'QUIT');
+        } catch (RuntimeException $error) {
+            $message = $error->getMessage();
+        }
+
+        fclose($writer);
+        self::assertStringContainsString('разорвал соединение', $message, 'оборванная запись не должна выглядеть успехом');
+    }
+
     public function testТочкаВНачалеСтрокиУдваиваетсяАВнутриСтрокиНеТрогается(): void
     {
         $this->bind(0);
@@ -255,6 +407,32 @@ final class SmtpSocketTest extends TestCase
         self::assertStringStartsWith('ERR', $answer);
         self::assertStringContainsString('465', $answer);
         self::assertSame([], $this->commands($received, 'EHLO'), 'открытый SMTP на порту шифрования недопустим');
+    }
+
+    public function testПорт465ПринимаетЗашифрованныйКаналИДоставляетПисьмо(): void
+    {
+        // Порт 465 — единственный, где шифрование начинается до приветствия, и без удачной
+        // доставки он оставался бы проверкой только отказа: клиент обязан согласовать канал сразу,
+        // не отправляя STARTTLS, и пройти вход с доставкой по уже зашифрованному сокету.
+        $this->bind(self::IMPLICIT_TLS_PORT);
+        [$answer, $received] = $this->runClientWithTrust(
+            'kluch@example.com',
+            'пароль-секрет',
+            [
+                'implicit-tls' => 'on',
+                'tls' => 'cert',
+                'ehlo' => "250-подставной сервер\r\n250 HELP",
+            ],
+            $this->rawMessage(),
+            true
+        );
+
+        self::assertSame('OK', $answer);
+        self::assertSame([], $this->commands($received, 'STARTTLS'), 'на порту шифрования STARTTLS не нужен');
+        self::assertContains('AUTH LOGIN', $received);
+        self::assertContains('MAIL FROM:<sender@example.com>', $received);
+        self::assertContains('RCPT TO:<uchenik@example.com>', $received);
+        self::assertStringNotContainsString('mail.plaintext', $this->log());
     }
 
     public function testОбрывСоединенияВоВремяРазговораНеСчитаетсяУспехом(): void
@@ -313,6 +491,16 @@ final class SmtpSocketTest extends TestCase
 
         stream_set_timeout($client, 4);
         $received = [];
+        // Шаг входа состоит из трёх обменов, а два из них — голые строки base64, ни на одну
+        // команду не похожие: сервер ведёт их по состоянию, а не по началу строки.
+        $awaiting = null;
+
+        // Порт 465 шифруется с первой же секунды, поэтому рукопожатие сервер ведёт до
+        // приветствия: клиент, пришедший на «ssl://», ждёт его раньше любой строки.
+        if (($script['implicit-tls'] ?? '') === 'on') {
+            $this->startTls($client, $script);
+        }
+
         $this->reply($client, $script, 'greeting', '220 подставной сервер ESMTP');
 
         while (true) {
@@ -331,7 +519,16 @@ final class SmtpSocketTest extends TestCase
 
             $command = strtoupper($line);
 
-            if (str_starts_with($command, 'EHLO') || str_starts_with($command, 'HELO')) {
+            if ($awaiting === 'user') {
+                $awaiting = 'pass';
+                $this->reply($client, $script, 'auth-user', '334 ' . base64_encode('Password:'));
+            } elseif ($awaiting === 'pass') {
+                $awaiting = null;
+                $this->reply($client, $script, 'auth-pass', '235 2.0.0 Ok: authenticated');
+            } elseif ($command === 'AUTH LOGIN') {
+                $awaiting = 'user';
+                $this->reply($client, $script, 'auth', '334 ' . base64_encode('Username:'));
+            } elseif (str_starts_with($command, 'EHLO') || str_starts_with($command, 'HELO')) {
                 $this->reply($client, $script, 'ehlo', "250 подставной сервер\r\n250 HELP");
             } elseif (str_starts_with($command, 'STARTTLS')) {
                 $this->reply($client, $script, 'starttls', '502 5.5.2 команда не реализована');
@@ -356,13 +553,47 @@ final class SmtpSocketTest extends TestCase
     }
 
     /**
-     * Прогон клиента против готового слушателя. Возвращает ответ дочернего процесса
-     * (`OK` или `ERR <текст отказа>`) и расшифровку разговора.
+     * Публичная часть сертификата, который сервер покажет по скрипту проверки. Она же служит
+     * списком доверия для дочернего процесса: так шагам шифрования и входа находится исполняемое
+     * продолжение, не требующее новых ключей настроек ядра.
+     *
+     * @param array<string, string> $script
+     */
+    private static function servedCertificate(array $script): string
+    {
+        return ($script['tls'] ?? '') === 'other-name-cert' ? self::$otherNameFile : self::$certificateFile;
+    }
+
+    /**
+     * Приватная часть того же сертификата.
+     *
+     * @param array<string, string> $script
+     */
+    private static function servedKey(array $script): string
+    {
+        return ($script['tls'] ?? '') === 'other-name-cert' ? self::$otherNameKeyFile : self::$certificateKeyFile;
+    }
+
+    /**
+     * Прогон клиента против готового слушателя.
      *
      * @param array<string, string> $script
      * @return array{0: string, 1: array<int, string>}
      */
     private function runClient(string $user, string $pass, array $script, string $raw = ''): array
+    {
+        return $this->runClientWithTrust($user, $pass, $script, $raw, false);
+    }
+
+    /**
+     * Тот же прогон с выбором доверия: когда дочерний процесс знает о сертификате подставного
+     * сервера заранее, рукопожатие проходит, и проверяются шаги, до которых без шифрования дело
+     * не доходит, — вход и доставка по защищённому каналу.
+     *
+     * @param array<string, string> $script
+     * @return array{0: string, 1: array<int, string>}
+     */
+    private function runClientWithTrust(string $user, string $pass, array $script, string $raw, bool $trustServedCertificate): array
     {
         $server = $this->server;
 
@@ -377,30 +608,38 @@ final class SmtpSocketTest extends TestCase
             file_put_contents($messageFile, $raw);
         }
 
+        $command = [escapeshellarg(PHP_BINARY)];
+
+        if ($trustServedCertificate) {
+            // Доверие задаётся стартовым ключом дочернего процесса, а не настройкой ядра: ядро не
+            // должно знать про тестовый сертификат, как не должно знать и про собственный `cafile`.
+            $command[] = '-d ' . escapeshellarg('openssl.cafile=' . self::servedCertificate($script));
+        }
+
+        $command = array_merge($command, [
+            escapeshellarg(dirname(__DIR__, 2) . self::WORKER),
+            escapeshellarg(self::HOST),
+            escapeshellarg((string) $this->port),
+            escapeshellarg($user),
+            escapeshellarg($raw === '' ? 'open' : 'deliver'),
+            escapeshellarg($messageFile),
+        ]);
+
         $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-        $process = proc_open(
-            implode(' ', [
-                escapeshellarg(PHP_BINARY),
-                escapeshellarg(dirname(__DIR__, 2) . self::WORKER),
-                escapeshellarg(self::HOST),
-                escapeshellarg((string) $this->port),
-                escapeshellarg($user),
-                escapeshellarg($pass),
-                escapeshellarg($raw === '' ? 'open' : 'deliver'),
-                escapeshellarg($messageFile),
-            ]),
-            $descriptors,
-            $pipes
-        );
+        $process = proc_open(implode(' ', $command), $descriptors, $pipes);
 
         if (!is_resource($process)) {
             self::fail('не удалось запустить дочерний процесс почтового клиента.');
         }
 
+        // Пароль — в стандартный поток ввода: командная строка дочернего процесса видна всем,
+        // кто смотрит список процессов.
+        fwrite($pipes[0], $pass);
+        fclose($pipes[0]);
+
         $received = $this->converse($server, $script);
         $answer = trim($this->readAll($pipes[1]));
         $stderr = trim($this->readAll($pipes[2]));
-        fclose($pipes[0]);
         fclose($pipes[1]);
         fclose($pipes[2]);
 
@@ -428,8 +667,9 @@ final class SmtpSocketTest extends TestCase
 
     /**
      * Серверная половина обещанного `STARTTLS`. Без ключа `tls` в скрипте сервер рукопожатие не
-     * ведёт вовсе (и может напечтать что попало), с ключом `tls` — ведёт его с самоподписанным
-     * сертификатом, а `tls-method` ограничивает версию протокола.
+     * ведёт вовсе (и может напечтать что попало), с `tls` — ведёт его с самоподписанным сертификатом
+     * на имя петлевого адреса, с `other-name-cert` — с сертификатом чужого имени, а `tls-method`
+     * ограничивает версию протокола.
      *
      * @param resource              $client
      * @param array<string, string> $script
@@ -448,8 +688,8 @@ final class SmtpSocketTest extends TestCase
         // stream_socket_enable_crypto — это ключ пира, а не контекст.
         stream_context_set_option($client, [
             'ssl' => [
-                'local_cert' => self::$certificateFile,
-                'local_pk' => self::$certificateKeyFile,
+                'local_cert' => self::servedCertificate($script),
+                'local_pk' => self::servedKey($script),
                 'verify_peer' => false,
             ],
         ]);

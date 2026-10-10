@@ -221,11 +221,12 @@ final class Mailer
 
     public static function addressOf(string $header): string
     {
-        if (preg_match('/<([^>]+)>/', $header, $match) === 1) {
-            return trim($match[1]);
-        }
+        $value = preg_match('/<([^>]+)>/', $header, $match) === 1 ? $match[1] : $header;
 
-        return trim($header);
+        // Конверт письма — одно значение: всё после первого пробела адресом не считается.
+        // Заголовок чистит `headerText()`, но `render()` публичный и может собрать строку с
+        // пробелом внутри, а `deliver()` берёт адрес уже из него.
+        return preg_match('/^\s*([^\s]*)/', $value, $first) === 1 ? $first[1] : trim($value);
     }
 
     /**

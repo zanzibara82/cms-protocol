@@ -253,6 +253,19 @@ final class MailerTest extends TestCase
         self::assertMatchesRegularExpression('/^To: <a@b\.ru +Bcc: vsem@b\.ru>\r$/m', $head);
     }
 
+    public function testКонвертБерётАдресАНеВсёСодержимоеЗаголовка(): void
+    {
+        // `deliver()` строит `MAIL FROM:` и `RCPT TO:` из заголовков собранного письма. Если в
+        // заголовок попала вставленная строка (её чистит `headerText()`, но `render()` публичный),
+        // в конверт обязан уйти только адрес: сервер читает конверт как одно значение, и «адрес
+        // + пробел + что-то ещё» для него — уже чужой адрес.
+        self::assertSame('a@b.ru', Mailer::addressOf('<a@b.ru  Bcc: vsem@b.ru>'));
+        self::assertSame('a@b.ru', Mailer::addressOf('a@b.ru  Bcc: vsem@b.ru'));
+        self::assertSame('a@b.ru', Mailer::addressOf(' Имя <a@b.ru>'));
+        self::assertSame('a@b.ru', Mailer::addressOf('  <a@b.ru>  '));
+        self::assertSame('a@b.ru', Mailer::addressOf('a@b.ru'));
+    }
+
     private function bodyOf(string $raw): string
     {
         return trim(substr($raw, (int) strpos($raw, "\r\n\r\n") + 4));

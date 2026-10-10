@@ -14,11 +14,14 @@ use PHPUnit\Framework\TestCase;
 final class MailFunctionTest extends TestCase
 {
     /**
-     * Формы, которые ищутся по коду с выключенными комментариями и строковыми литералами:
-     * «mail(» внутри текста (тема письма, подпись админки) вызовом не является.
+     * Формы, которые ищутся по коду: «mail(» внутри текста (тема письма, подпись админки)
+     * вызовом не является, и отличает её от вызова дефис перед именем — «e-mail (…)» против
+     * «mail(…)». Поиск идёт дважды: по коду со снятыми литералами и по коду с литералами,
+     * потому что вызов, уложенный в строку, живёт именно в строке (`eval("mail(…)")`, код из
+     * heredoc) и в снятом виде невидим.
      */
     private const FORBIDDEN_CALLS = [
-        '/(?<![a-zA-Z0-9_>:])mail\s*\(/' => 'mail() — письма отправляются только через Cms\Core\Mailer',
+        '/(?<![a-zA-Z0-9_>:-])mail\s*\(/' => 'mail() — письма отправляются только через Cms\Core\Mailer',
         '/\bmb_send_mail\s*\(/' => 'mb_send_mail() — письма отправляются только через Cms\Core\Mailer',
     ];
 
@@ -30,8 +33,15 @@ final class MailFunctionTest extends TestCase
     private const FORBIDDEN_NAMES = [
         '/\bphpmailer\b/i' => 'PHPMailer — рантайм-зависимостей у ядра нет',
         '/\bsymfony\\\\(?:\w+\\\\)*mailer/i' => 'Symfony Mailer — рантайм-зависимостей у ядра нет',
-        '/\bcall_user_func(?:_array)?\s*\(\s*([\'"])\\\\?mail\1\s*,/' =>
-            'call_user_func с именем «mail» — письма отправляются только через Cms\Core\Mailer',
+        '/\bcall_user_func(?:_array)?\s*\(\s*([\'"])\\\\?(?:mb_send_)?mail\1\s*,/' =>
+            'call_user_func с почтовым именем — письма отправляются только через Cms\Core\Mailer',
+        // Имя встроенной функции, уложенное в переменную, вызывается позже как обычная переменная:
+        // `$send = 'mail'; $send(…)` — тот же обход сборщика, и виден он только по литералу.
+        '/\$\w+\s*=\s*([\'"])\\\\?(?:mb_send_)?mail\1\s*;/' =>
+            'переменной присвоено имя встроенной почтовой функции — вызов пойдёт через неё',
+        // Примитивы, исполняющие строку: через них письмо уезжает вызовом, которого в коде нет.
+        // В ядре их быть не должно вовсе, поэтому запрет шире почтовой темы.
+        '/\b(?:eval|create_function)\s*\(/' => 'исполнение кода из строки — почтовый вызов мог бы прийти ею',
     ];
 
     public function testПисьмаОтправляютсяТолькоЧерезСборщикЯдра(): void
@@ -64,6 +74,17 @@ final class MailFunctionTest extends TestCase
             '<?php $mailer = new \\PHPMailer\\PHPMailer\\PHPMailer(true);',
             '<?php use PHPMailer\PHPMailer\PHPMailer;',
             '<?php use Symfony\Component\Mailer\MailerInterface;',
+            // Имя функции, уложенное в переменную, вызывается той же строкой литерала — имя
+            // обязано быть видно до того, как из кода исчезнут строки.
+            "<?php \$send = 'mail'; \$send(\$to, \$subject);",
+            "<?php call_user_func('mb_send_mail', \$subject, \$body);",
+            // Код, собранный в строку и исполненный, обходит все остальные проверки: и строка,
+            // и сам eval не должны проходить незамеченными.
+            '<?php eval("mail($to, $subject, $body)");',
+            "<?php eval('mb_send_mail(\$subject, \$body);');",
+            // Текст письма внутри heredoc — тоже строка исходника: прежний разбор видел в нём
+            // вызов, и терять эту видимость незачем.
+            '<?php $code = <<<Шаблон' . "\n" . 'mail($to, $subject, $body);' . "\n" . 'Шаблон;',
         ];
 
         foreach ($samples as $sample) {
@@ -82,9 +103,14 @@ final class MailFunctionTest extends TestCase
             '<?php $transport = Mailer::smtpTransport();',
             // Комментарии снимаются лексером до поиска.
             "<?php\n// переписка: e-mail (support@example.com)\n\$x = 1;",
-            // Текст внутри строки — не вызов: именно этот случай терял прежний разбор.
+            // Текст внутри строки — не вызов: именно этот случай терял прежний разбор. Дефис
+            // перед именем встроенной функции и есть тот знак, по которому текст отличается
+            // от вызова («e-mail (…)» против «mail(…)»).
             "<?php \$subject = 'e-mail (важно)';",
             "<?php echo 'Напишите на e-mail (';\n\$x = 1;",
+            "<?php \$hint = \"поддержку ищите в разделе 'e-mail (настройки)'\";",
+            // Схема ссылок на почту: имя функции только выглядит как начало вызова.
+            "<?php \$link = 'mailto:hello@example.com';",
         ];
 
         foreach ($samples as $sample) {
@@ -93,19 +119,19 @@ final class MailFunctionTest extends TestCase
     }
 
     /**
-     * Находки в одном исходнике: два прохода по разному виду кода, комментарии и литералы
-     * снимаются здесь же, чтобы тест силы мог передать голый фрагмент.
+     * Находки в одном исходнике: комментарии снимаются всегда, вызовы ищутся и по коду со
+     * снятыми литералами, и по коду с ними (см. комментарий к FORBIDDEN_CALLS), имена — по коду
+     * с литералами. Тест силы передаёт голый фрагмент прямо сюда, поэтому разбор один и тот же.
      *
      * @return list<string>
      */
     private function mailViolations(string $code, string $relative): array
     {
         $body = $this->withoutComments($code);
-        $calls = $this->withoutStrings($body);
         $out = [];
 
         foreach (self::FORBIDDEN_CALLS as $pattern => $reason) {
-            if (preg_match($pattern, $calls) === 1) {
+            if (preg_match($pattern, $this->withoutStrings($body)) === 1 || preg_match($pattern, $body) === 1) {
                 $out[] = $relative . ': ' . $reason;
             }
         }
