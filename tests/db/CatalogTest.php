@@ -155,6 +155,16 @@ final class CatalogTest extends NewsDbTestCase
         self::assertSame('', categoryIdOf('olimpiady'));
     }
 
+    public function testРубрикаСуществуетПоИдентификаторуАПустаяСтрокаНет(): void
+    {
+        // Рубрика из закладки существует по своему идентификатору.
+        self::assertTrue(categoryExists(categoryIdOf('metodika')));
+        // Несуществующего идентификатора рубрики нет.
+        self::assertFalse(categoryExists('net-takoy'));
+        // Пустая строка не уходит в запрос: `categoryExists()` отвечает false сразу.
+        self::assertFalse(categoryExists(''));
+    }
+
     public function testРубрикуСМатериаламиУдалитьНельзя(): void
     {
         createCategory('Олимпиады');
@@ -342,6 +352,34 @@ final class CatalogTest extends NewsDbTestCase
         self::assertFalse($result['ok']);
         self::assertSame('Тег стоит на 1 материале — сначала снимите его в форме новости.', $result['error']);
         self::assertSame(1, tagCountOf($ids[0]));
+    }
+
+    // Черновик обязан остаться в счётчике материалов тега: снятый с публикации материал всё ещё
+    // держит тег, и справочник по такому тегу удалять нельзя — иначе удаление упало бы на внешнем
+    // ключе. Пустой по материалам тег из списка тоже не пропадает.
+    public function testСписокАдминкиПоТегамСчитаетИЧерновикиИПустыеТеги(): void
+    {
+        $categoryId = categoryIdOf('zhizn-shkoly');
+        // Первый тег — «Экзамены», второй — «Абрикос»: список намеренно идёт против алфавита, а
+        // `adminTagRows()` сортирует по надписи, и проверка держит именно этот порядок.
+        $ids = resolveTagIds(['Экзамены', 'Абрикос']);
+
+        $published = self::makeItem($categoryId, 'oh', [
+            'status' => NEWS_STATUS['PUBLISHED'],
+            'published_at' => utcStamp(nowUtc()->sub(new DateInterval('PT1H'))),
+        ]);
+        $draft = self::makeItem($categoryId, 'chernovik', ['status' => NEWS_STATUS['DRAFT']]);
+        self::linkTag($published, $ids[0]);
+        self::linkTag($draft, $ids[0]);
+
+        $rows = adminTagRows();
+
+        self::assertCount(2, $rows);
+        self::assertSame(
+            ['Абрикос', 'Экзамены'],
+            array_map(static fn (array $row): string => $row['label'], $rows)
+        );
+        self::assertSame([0, 2], array_map(static fn (array $row): int => $row['items'], $rows));
     }
 
     public function testПодборкаПоТегуПроверяетСамТегАНеНаличиеМатериалов(): void
