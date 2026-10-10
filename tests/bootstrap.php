@@ -20,3 +20,4 @@ require dirname(__DIR__) . '/core/bootstrap.php';
 // core/db.php больше не подключается здесь: он входит в список core/bootstrap.php (задача 6),
 // а отдельный require привёл бы к «Cannot redeclare db()».
 require dirname(__DIR__) . '/tests/TestDb.php';
+require_once dirname(__DIR__) . '/apps/news/lib/boot.php';

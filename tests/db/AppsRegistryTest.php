@@ -144,7 +144,7 @@ final class AppsRegistryTest extends TestCase
 
     public function testПриватныеПутиСобираютсяИзВсехМанифестов(): void
     {
-        self::assertSame(['/demo/admin', '/future/admin'], appPrivatePaths());
+        self::assertSame(['/demo/admin', '/future/admin', '/news/admin'], appPrivatePaths());
     }
 
     public function testМаршрутыПриложенийРегистрируютсяСМеткойПриложения(): void
