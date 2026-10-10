@@ -44,6 +44,27 @@ final class NewsSchemaTest extends TestCase
         self::assertSame(['20261006_0001_catalog.sql', '20261006_0002_items.sql'], $names);
     }
 
+    // MySQL фиксирует DDL сразу, а журнал установщика пишется после каждого файла: если релиз
+    // оборвётся на полпути, следующий прогон повторит уже применённые операторы по живым таблицам.
+    // Поэтому каждый оператор обоих файлов пропускается второй раз по тому же соединению: отказа
+    // быть не должно, и число строк в таблицах раздела обязано остаться прежним.
+    public function testПовторныйПрогонОбоихРелизовНеОтказывает(): void
+    {
+        $files = glob(dirname(__DIR__, 2) . '/apps/news/sql/*.sql') ?: [];
+        sort($files);
+        self::assertCount(2, $files);
+
+        $before = self::rowCounts();
+
+        foreach ($files as $file) {
+            foreach (splitSql((string) file_get_contents($file)) as $statement) {
+                run($statement);
+            }
+        }
+
+        self::assertSame($before, self::rowCounts());
+    }
+
     public function testРазделЧислитсяУстановленнымИГотовымКРаботе(): void
     {
         $installation = appInstallation('news');
@@ -131,16 +152,14 @@ final class NewsSchemaTest extends TestCase
     public function testНовыйМатериалЭтоЧерновикБезСрокаИБезЗакрепления(): void
     {
         $item = self::makeItem(self::makeCategory('Рубрика для умолчаний'), 'material-s-umolchaniyami');
-        // `lead` в бэктиках: LEAD — зарезервированное слово MySQL 8.0, без кавычек сервер отвергает
-        // запрос, где колонка не обращена через алиас таблицы.
-        $row = one('SELECT status, published_at, pinned, noindex, `lead` FROM ' . t('news_item') . ' WHERE id = ?', [$item]);
+        $row = one('SELECT status, published_at, pinned, noindex, lead_text FROM ' . t('news_item') . ' WHERE id = ?', [$item]);
 
         self::assertIsArray($row);
         self::assertSame(NEWS_STATUS['DRAFT'], (string) $row['status']);
         self::assertNull($row['published_at']);
         self::assertSame(0, (int) $row['pinned']);
         self::assertSame(0, (int) $row['noindex']);
-        self::assertNull($row['lead']);
+        self::assertNull($row['lead_text']);
     }
 
     public function testТаблицыРазделаНаИннодбИВЮникоде(): void
@@ -180,6 +199,18 @@ final class NewsSchemaTest extends TestCase
     private static function tables(): array
     {
         return [t('news_category'), t('news_item'), t('news_item_tag'), t('news_old_slug'), t('news_tag')];
+    }
+
+    /** @return array<string, int> */
+    private static function rowCounts(): array
+    {
+        $counts = [];
+
+        foreach (self::tables() as $table) {
+            $counts[$table] = (int) value('SELECT COUNT(*) FROM ' . $table);
+        }
+
+        return $counts;
     }
 
     /** @return list<string> */
