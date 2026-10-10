@@ -443,28 +443,52 @@ function findByOldSlug(string $slug): ?array
 }
 
 /**
+ * Карточки последней выборки рубрики — общее тело `inCategory()` и `relatedLinks()`.
+ *
+ * Скелет запроса печатается один раз: `visibleWhere()` и `orderNews()` попадают в обе публичные
+ * выборки из одного места, поэтому правка условия видимости не может оставить одну выборку
+ * обновлённой, а вторую — нет (§8.2). Исключение материала — отдельный кусок `WHERE`, который
+ * собирается из литерала и добавляется плейсхолдером, а не второй копией запроса.
+ *
+ * @return list<array<string, mixed>>
+ */
+function categoryFeedRows(string $categorySlug, string $excludeSlug, DateTimeImmutable $now, int $take): array
+{
+    $exclude = $excludeSlug === '' ? '' : ' AND i.slug <> ?';
+
+    $sql = sprintf(
+        'SELECT %s FROM %s WHERE %s AND c.visible = 1 AND c.slug = ?%s ORDER BY %s LIMIT %d',
+        NEWS_CARD_COLUMNS,
+        newsItemFrom(),
+        visibleWhere(),
+        $exclude,
+        orderNews(),
+        takeLimit($take)
+    );
+
+    $args = array_merge(visibleArgs($now), [$categorySlug]);
+
+    if ($excludeSlug !== '') {
+        $args[] = $excludeSlug;
+    }
+
+    $items = [];
+
+    foreach (all($sql, $args) as $row) {
+        $items[] = toCard($row, $now);
+    }
+
+    return $items;
+}
+
+/**
  * Последние материалы рубрики — блоки вывода и «похожие» под карточкой.
  *
  * @return list<array<string, mixed>>
  */
 function inCategory(string $categorySlug, DateTimeImmutable $now, int $take = 5): array
 {
-    $sql = sprintf(
-        'SELECT %s FROM %s WHERE %s AND c.visible = 1 AND c.slug = ? ORDER BY %s LIMIT %d',
-        NEWS_CARD_COLUMNS,
-        newsItemFrom(),
-        visibleWhere(),
-        orderNews(),
-        takeLimit($take)
-    );
-
-    $items = [];
-
-    foreach (all($sql, array_merge(visibleArgs($now), [$categorySlug])) as $row) {
-        $items[] = toCard($row, $now);
-    }
-
-    return $items;
+    return categoryFeedRows($categorySlug, '', $now, $take);
 }
 
 /**
@@ -475,22 +499,7 @@ function inCategory(string $categorySlug, DateTimeImmutable $now, int $take = 5)
  */
 function relatedLinks(string $categorySlug, string $excludeSlug, DateTimeImmutable $now, int $take = 5): array
 {
-    $sql = sprintf(
-        'SELECT %s FROM %s WHERE %s AND c.visible = 1 AND c.slug = ? AND i.slug <> ? ORDER BY %s LIMIT %d',
-        NEWS_CARD_COLUMNS,
-        newsItemFrom(),
-        visibleWhere(),
-        orderNews(),
-        takeLimit($take)
-    );
-
-    $items = [];
-
-    foreach (all($sql, array_merge(visibleArgs($now), [$categorySlug, $excludeSlug])) as $row) {
-        $items[] = toCard($row, $now);
-    }
-
-    return $items;
+    return categoryFeedRows($categorySlug, $excludeSlug, $now, $take);
 }
 
 /**
