@@ -241,13 +241,26 @@ function formPublishedAt(?DateTimeImmutable $date): string
 }
 
 // Обложка и картинка анонса — только путь внутри сайта: чужой адрес не пройдёт ни политику CSP
-// страницы, ни проверку загрузки, а `//host/path` браузер читает как чужой хост.
+// страницы, ни проверку загрузки, а `//host/path` браузер читает как чужой хост. Путь не должен
+// и вести за пределы сайта: `..` и его процент-коды выводят запрос из каталога uploads/.
 function imagePath(string $raw): ?string
 {
     $value = mb_substr(trim($raw), 0, fieldLimit(NEWS_FIELDS, 'image', 'max'));
 
     if ($value === '' || !str_starts_with($value, '/') || str_starts_with($value, '//')) {
         return null;
+    }
+
+    // Управляющие символы и обратный слэш ломают файловые функции, `..` выводит за uploads/,
+    // а браузер раскодирует процент-кодированные точки в тот же `..` уже на своей стороне.
+    if (preg_match('#[\x00-\x1f\x7f\\\\]#', $value) === 1) {
+        return null;
+    }
+
+    foreach (explode('/', $value) as $segment) {
+        if (in_array(strtolower($segment), ['.', '..', '%2e', '%2e%2e'], true)) {
+            return null;
+        }
     }
 
     return $value;
@@ -298,14 +311,15 @@ function newsFormErrors(array $errors): array
  */
 function parseNewsForm(array $raw): array
 {
-    $values = [];
+    // Поле пришло из браузера: вместо строки там бывает массив (`tags[]=a` в запросе). formValues()
+    // из ядра меняет не-строку на пустую строку — иначе форма печатает предупреждение PHP и
+    // сохраняет в поле слово «Array».
+    $values = formValues($raw, NEWS_FORM_FIELDS);
 
     foreach (NEWS_FORM_FIELDS as $field) {
-        $value = (string) ($raw[$field] ?? '');
-
         // `body` не приводится к одной строке и не обрезается: структуру абзацев задают переводы
         // строк, их разбирает parseBody() со своими пределами.
-        $values[$field] = $field === 'body' ? $value : trim($value);
+        $values[$field] = $field === 'body' ? $values[$field] : trim($values[$field]);
     }
 
     // В заголовке и лиде переноса не бывает: они и в карточке, и в поисковике одной строкой.
@@ -342,7 +356,7 @@ function parseNewsForm(array $raw): array
     }
 
     if (in_array($values['slug'], NEWS_RESERVED_SLUGS, true)) {
-        $errors['slug'] = 'Этот адрес занят разделом новостей — выберите другой.';
+        $errors['slug'] = 'Адрес «' . $values['slug'] . '» занят служебной страницей раздела — выберите другой.';
     }
 
     $published = parsePublishedAt($values['publishedAt']);
@@ -363,14 +377,14 @@ function parseNewsForm(array $raw): array
             'cover' => imagePath($values['cover']),
             'categoryId' => $values['categoryId'],
             'body' => parseBody($values['body']),
-            'tags' => parseTagList((string) ($raw['tags'] ?? '')),
+            'tags' => parseTagList($values['tags']),
             'status' => resolveStatus('', $values['status']),
             'publishedAt' => $published['date'] ?? null,
-            'pinned' => isOn((string) ($raw['pinned'] ?? '')),
+            'pinned' => isOn($raw['pinned'] ?? ''),
             'seoTitle' => $values['seoTitle'],
             'seoDescription' => $values['seoDescription'],
             'ogImage' => imagePath($values['ogImage']),
-            'noindex' => isOn((string) ($raw['noindex'] ?? '')),
+            'noindex' => isOn($raw['noindex'] ?? ''),
         ],
     ];
 }

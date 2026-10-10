@@ -161,6 +161,20 @@ final class NewsValidatorsTest extends TestCase
         self::assertNull(imagePath('//chuzhoj.ru/1.jpg'));
         self::assertNull(imagePath('uploads/news/1.jpg'));
         self::assertNull(imagePath('   '));
+        self::assertNull(imagePath('/uploads/../../../etc/passwd'));
+        self::assertNull(imagePath('/../etc/passwd'));
+        self::assertNull(imagePath('/uploads//../../x'));
+        self::assertNull(imagePath('/uploads/./1.jpg'));
+        self::assertNull(imagePath('/uploads/%2e%2e/etc/passwd'));
+        self::assertNull(imagePath('/uploads/%2E%2E/etc/passwd'));
+        self::assertNull(imagePath('/uploads/a\\b.jpg'));
+        self::assertNull(imagePath('/uploads/a' . chr(0) . 'b.jpg'));
+        self::assertNull(imagePath("/uploads/a\nb.jpg"));
+        self::assertNull(imagePath("/uploads/a\tb.jpg"));
+        self::assertNull(imagePath('/uploads/news/../secret.php'));
+        self::assertNull(imagePath('/uploads/..'));
+        self::assertSame('/uploads/news-2026.photo.jpg', imagePath('/uploads/news-2026.photo.jpg'));
+        self::assertSame('/a.b/c.jpg', imagePath('/a.b/c.jpg'));
         self::assertSame(
             fieldLimit(NEWS_FIELDS, 'image', 'max'),
             mb_strlen((string) imagePath('/' . str_repeat('a', 400)))
@@ -231,7 +245,7 @@ final class NewsValidatorsTest extends TestCase
             'Заголовок короче 3 символов — по нему новость находят в ленте и в поиске.',
             $errors['title']
         );
-        self::assertSame('Этот адрес занят разделом новостей — выберите другой.', $errors['slug']);
+        self::assertSame('Адрес «admin» занят служебной страницей раздела — выберите другой.', $errors['slug']);
         self::assertSame('Выберите рубрику: без неё новость не попадёт ни в один раздел.', $errors['categoryId']);
     }
 
@@ -300,6 +314,29 @@ final class NewsValidatorsTest extends TestCase
         self::assertSame('Заголовок длиннее 120 символов.', newsTooLongText('title'));
         self::assertSame('Рубрика выбрана неверно.', newsTooLongText('categoryId'));
         self::assertSame('Значение поля слишком длинное.', newsTooLongText('несуществующее'));
+    }
+
+    public function testНестроковыеПоляФормыСтановятсяПустойСтрокой(): void
+    {
+        $result = parseNewsForm([
+            'title' => 'Заголовок',
+            'slug' => ['zagolovok'],
+            'categoryId' => 'abc',
+            'body' => "Текст\n\nВторой абзац",
+            'tags' => ['выпускник', 'выпуск'],
+            'status' => ['PUBLISHED'],
+            'publishedAt' => '2026-10-04T09:00',
+            'pinned' => ['on'],
+            'noindex' => ['on'],
+        ]);
+
+        self::assertArrayHasKey('data', $result);
+        $data = $result['data'];
+        self::assertSame([], $data['tags'], 'список тегов из массива пуст');
+        self::assertSame('DRAFT', $data['status'], 'статус из массива не публикуется и остаётся черновиком');
+        self::assertFalse($data['pinned']);
+        self::assertFalse($data['noindex']);
+        self::assertSame('', (string) $data['slug'], 'адрес из массива становится пустым, а не словом Array');
     }
 
     /** @return array<string, string> */

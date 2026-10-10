@@ -121,7 +121,7 @@ function rememberOldSlug(array $slugs, string $previous, string $next): array
     $out = [$previous];
 
     foreach ($slugs as $slug) {
-        if ($slug === $next || in_array($slug, $out, true)) {
+        if ($slug === '' || $slug === $next || in_array($slug, $out, true)) {
             continue;
         }
 

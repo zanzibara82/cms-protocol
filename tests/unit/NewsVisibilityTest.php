@@ -69,7 +69,11 @@ final class NewsVisibilityTest extends TestCase
         self::assertStringContainsString("status = 'PUBLISHED'", $where);
         self::assertStringContainsString('published_at IS NOT NULL', $where);
         self::assertSame(['2026-10-06 12:00:00'], visibleArgs($this->moment('2026-10-06 12:00:00')));
-        self::assertSame([utcStamp($this->moment('2026-10-06 12:00:00'))], visibleArgs($this->moment('2026-10-06 12:00:00')));
+        self::assertSame(
+            substr_count($where, '?'),
+            count(visibleArgs($this->moment('2026-10-06 12:00:00'))),
+            'плейсхолдеров в условии ровно столько, сколько значений передаётся в запрос'
+        );
     }
 
     public function testПорядокЛентыОдинНаВсехСтраницах(): void

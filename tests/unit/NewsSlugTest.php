@@ -141,6 +141,7 @@ final class NewsSlugTest extends TestCase
         $slugs = ['novyj', 'a', 'a', 'b'];
 
         self::assertSame(['staryj', 'a', 'b'], rememberOldSlug($slugs, 'staryj', 'novyj'));
+        self::assertSame(['staryj', 'a', 'b'], rememberOldSlug(['a', '', 'a', 'staryj', 'b'], 'staryj', 'novyj'));
     }
 
     public function testСписокПрежнихАдресовОбрезаетсяПоПределу(): void
