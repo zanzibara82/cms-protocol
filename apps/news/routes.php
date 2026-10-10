@@ -1,0 +1,185 @@
+<?php
+
+declare(strict_types=1);
+
+// Правила раздела нужны контроллерам на каждом запросе, а в боевом процессе их не подключает никто:
+// require_once здесь — единственная точка, где `findFeed()` и `parseQuery()` встречаются с маршрутами.
+require_once __DIR__ . '/lib/boot.php';
+
+// Порядок важен: /news/c/{slug} и /news/t/{slug} стоят до /news/{slug}. Сами адреса «c» и «t»
+// заняты в NEWS_RESERVED_SLUGS, поэтому материал не может увести у рубрики её страницу.
+addRoute('GET', '/news', 'newsFeedPage', ['app' => 'news']);
+addRoute('GET', '/news/c/{slug}', 'newsCategoryPage', ['app' => 'news']);
+addRoute('GET', '/news/t/{slug}', 'newsTagPage', ['app' => 'news']);
+addRoute('GET', '/news/{slug}', 'newsSinglePage', ['app' => 'news']);
+
+/** @param array<string, string> $params */
+function newsFeedPage(array $params = []): void
+{
+    $requested = trim((string) queryString('cat', ''));
+    $query = parseQuery((string) queryString('q', ''));
+    $page = pageOf((string) queryString('page', '1'));
+
+    $heading = (string) NEWS_SITE['title'];
+    $intro = (string) NEWS_SITE['description'];
+
+    if ($requested !== '') {
+        // ?cat= достался от прежних ссылок: лента открывается, а каноник ведёт на адрес рубрики,
+        // иначе один и тот же список лежит в индексе по двум адресам.
+        $row = findCategory($requested);
+        if ($row === null) {
+            notFound();
+        }
+
+        $heading = newsTitle((string) $row['title']);
+        $intro = categoryIntro($row);
+    } elseif ($query !== '') {
+        $heading = newsTitle('Поиск: ' . $query);
+        $intro = sprintf('Материалы раздела по запросу «%s».', $query);
+    }
+
+    $feed = findFeed(['category' => $requested, 'q' => $query], $page);
+    $path = $requested !== '' ? newsHref(['category' => $requested]) : newsHref();
+
+    listHead($heading, $intro, $path);
+
+    render('news/feed', [
+        'feed' => $feed,
+        'heading' => $heading,
+        'intro' => $intro,
+        'categories' => visibleCategories(),
+        'current' => $requested,
+        'empty' => $query !== '' ? 'По такому запросу материалов нет.' : 'В разделе пока нет материалов.',
+    ], [
+        'title' => $heading,
+        'description' => $intro,
+        'noindex' => $query !== '' || $feed['current'] > 1,
+    ]);
+}
+
+/** @param array<string, string> $params */
+function newsCategoryPage(array $params = []): void
+{
+    $slug = trim((string) ($params['slug'] ?? ''));
+    $row = findCategory($slug);
+
+    // Скрытая рубрика отвечает как несуществующая: иначе адрес, который редактор снял с публикации,
+    // продолжает открываться по прямой ссылке (§8.2).
+    if ($row === null) {
+        notFound();
+    }
+
+    $page = pageOf((string) queryString('page', '1'));
+    $feed = findFeed(['category' => $slug], $page);
+    $heading = newsTitle((string) $row['title']);
+    $intro = categoryIntro($row);
+
+    listHead($heading, $intro, newsHref(['category' => $slug]));
+
+    render('news/category', [
+        'feed' => $feed,
+        'heading' => (string) $row['title'],
+        'intro' => $intro,
+        'categories' => visibleCategories(),
+        'current' => $slug,
+        'empty' => 'В этой рубрике пока нет материалов.',
+    ], [
+        'title' => $heading,
+        'description' => $intro,
+        'noindex' => $feed['current'] > 1,
+    ]);
+}
+
+/** @param array<string, string> $params */
+function newsTagPage(array $params = []): void
+{
+    $slug = trim((string) ($params['slug'] ?? ''));
+    $tag = findTag($slug);
+
+    if ($tag === null) {
+        notFound();
+    }
+
+    $page = pageOf((string) queryString('page', '1'));
+    $feed = findFeed(['tag' => $slug], $page);
+    $heading = sprintf('Материалы по тегу «%s»', (string) $tag['label']);
+    $title = newsTitle($heading);
+    $intro = sprintf('Подборка материалов раздела по тегу «%s».', (string) $tag['label']);
+
+    listHead($title, $intro, newsHref(['tag' => $slug]));
+
+    // Подборка по тегу не индексируется целиком: это бесконечный набор дублей ленты (§8.5).
+    render('news/tag', [
+        'feed' => $feed,
+        'heading' => $heading,
+        'intro' => $intro,
+        'categories' => visibleCategories(),
+        'current' => '',
+        'empty' => 'По этому тегу материалов пока нет.',
+    ], [
+        'title' => $title,
+        'description' => $intro,
+        'noindex' => true,
+    ]);
+}
+
+/** @param array<string, string> $params */
+function newsSinglePage(array $params = []): void
+{
+    $slug = trim((string) ($params['slug'] ?? ''));
+    $now = nowUtc();
+
+    // Предпросмотр открывает только редактор и только по явной ссылке ?draft=1: без этого адрес
+    // будущей публикации становится известным по ответу сервера (§8.2).
+    $access = getEditorAccess();
+    $editor = $access['kind'] === 'granted';
+    $preview = $editor && queryString('draft') === '1';
+
+    $item = $preview ? findAny($slug) : findPublished($slug, $now);
+
+    if ($item === null) {
+        $alias = findByOldSlug($slug);
+
+        if ($alias === null) {
+            notFound();
+        }
+
+        // Прежний адрес переносит на новый навсегда, а у закрытого материала сохраняет ?draft=1:
+        // редактор, который держал ссылку на черновик, не должен увидеть 404 после смены адреса.
+        $target = newsHref(['slug' => (string) $alias['slug']]);
+
+        redirect($alias['open'] === true ? $target : $target . '?draft=1', 301);
+    }
+
+    $path = newsHref(['slug' => (string) $item['slug']]);
+    $open = $item['open'] === true;
+    $seo = seoOf($item, (string) NEWS_SITE['description']);
+    $updated = momentOf($item['updatedAt']);
+
+    articleHead($item, $path, $open);
+
+    render('news/single', [
+        'item' => $item,
+        'open' => $open,
+        'preview' => $preview && !$open,
+        'scheduled' => $open === false && $item['status'] === NEWS_STATUS['PUBLISHED'],
+        'showUpdated' => $updated !== null && formatRuDate($updated) !== formatRuDate(momentOf($item['publishedAt'])),
+        'related' => $open ? relatedLinks((string) $item['categorySlug'], (string) $item['slug'], $now) : [],
+    ], [
+        'title' => $seo['title'],
+        'description' => $seo['description'],
+        'noindex' => !$open || $item['noindex'] === true,
+    ]);
+}
+
+/**
+ * Короткое описание рубрики: своё, если редактор его заполнил, и типовое, если нет.
+ *
+ * @param array{id: string, slug: string, title: string, description: ?string} $row
+ */
+function categoryIntro(array $row): string
+{
+    $text = trim((string) $row['description']);
+
+    return $text !== '' ? $text : sprintf('%s: материалы рубрики «%s».', (string) NEWS_SITE['name'], (string) $row['title']);
+}
