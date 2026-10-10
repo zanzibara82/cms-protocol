@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 
 use function preg_match;
 use function preg_match_all;
+use function splitSql;
 
 final class AppSqlTest extends TestCase
 {
@@ -77,18 +78,34 @@ final class AppSqlTest extends TestCase
 
         foreach ($this->sqlFiles() as $file) {
             $sql = (string) file_get_contents($file);
-            preg_match_all(
-                '/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?\S+\s*\((.*?)\)\s*ENGINE/is',
-                $sql,
-                $blocks,
-                PREG_SET_ORDER
-            );
 
-            foreach ($blocks as $block) {
-                foreach ($this->columnNames((string) ($block[1] ?? '')) as $column) {
+            foreach ($this->createTableBodies($sql) as $body) {
+                foreach ($this->columnNames($body) as $column) {
                     if (in_array(strtoupper($column), self::MYSQL_WINDOW_AND_INTERNAL_NAMES, true)) {
                         $violations[] = $file . ' — колонка ' . $column . ' названа зарезервированным именем MySQL 8.0';
                     }
+                }
+            }
+        }
+
+        self::assertSame([], $violations);
+    }
+
+    // Таблица без клаузы `ENGINE=InnoDB` создаётся движком по умолчанию всё равно на InnoDB, поэтому
+    // information_schema-проверка набора `db` её не поймает. Явная клауза в каждом релизе обязана
+    // быть: иначе следующий релиз мог бы уйти от проверки имён колонок, просто убрав слово ENGINE.
+    public function testКаждоеСозданиеТаблицыПишетДвижокИКодировку(): void
+    {
+        $violations = [];
+
+        foreach ($this->sqlFiles() as $file) {
+            $sql = (string) file_get_contents($file);
+
+            foreach ($this->createTableStatements($sql) as $statement) {
+                if (strpos($statement, 'ENGINE=InnoDB') === false
+                    || strpos($statement, 'DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci') === false
+                ) {
+                    $violations[] = $file . ' — CREATE TABLE без клаузы ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci (регистр — как в релизах раздела)';
                 }
             }
         }
@@ -111,16 +128,51 @@ final class AppSqlTest extends TestCase
         return $files;
     }
 
-    // Имя столбца — первое слово строки определения; строки регистраций (`KEY`, `UNIQUE KEY`,
-    // `CONSTRAINT`, `FOREIGN KEY`, `PRIMARY KEY`, `CHECK`) отсекаются по первому слову:
-    // под проверкой только имена колонок.
+    // Утверждения CREATE TABLE читаются из тех же утверждений, что строит установщик: splitSql()
+    // из `core/db.php` — единственный канал «файл → утверждения», поэтому страж видит ровно то,
+    // что исполнится, включая таблицы без клаузы ENGINE и тела, записанные одной строкой.
+    /** @return list<string> */
+    private function createTableStatements(string $sql): array
+    {
+        $statements = [];
+
+        foreach (splitSql($sql) as $statement) {
+            if (preg_match('/^\s*CREATE\s+TABLE/i', $statement) === 1) {
+                $statements[] = $statement;
+            }
+        }
+
+        return $statements;
+    }
+
+    // Тело таблицы — между первой открывающей и последней закрывающей скобкой утверждения:
+    // границей служит конец самого утверждения (после splitSql() служебные клаузы ENGINE идут
+    // без скобок), а не слово ENGINE.
+    /** @return list<string> */
+    private function createTableBodies(string $sql): array
+    {
+        $bodies = [];
+
+        foreach ($this->createTableStatements($sql) as $statement) {
+            if (preg_match('/\((.*)\)/s', $statement, $match) === 1) {
+                $bodies[] = $match[1];
+            }
+        }
+
+        return $bodies;
+    }
+
+    // Имя столбца — первое слово определения; бэктики вокруг имени не спасают: ядро собирает
+    // `insert()` без кавычек, и сервер отвергает то же слово в обеих формах. Строки регистраций
+    // (`PRIMARY`, `UNIQUE`, `KEY`, `CONSTRAINT`, `FOREIGN`, `INDEX`, `CHECK`) отсекаются по
+    // первому слову: под проверкой только имена колонок.
     /** @return list<string> */
     private function columnNames(string $tableBody): array
     {
         $names = [];
 
-        foreach (explode("\n", $tableBody) as $line) {
-            if (preg_match('/^\s*([a-z][a-z0-9_]*)\s+[a-z]/i', $line, $match) !== 1) {
+        foreach ($this->splitDefinitions($tableBody) as $definition) {
+            if (preg_match('/^\s*`?([a-z][a-z0-9_]*)`?\s+[a-z]/i', $definition, $match) !== 1) {
                 continue;
             }
 
@@ -132,5 +184,62 @@ final class AppSqlTest extends TestCase
         }
 
         return $names;
+    }
+
+    // Разбор тела по запятым на глубине 0, а не по переносам строк: однострочное тело вида
+    // `a INT, lead VARCHAR(10)` даёт все имена, скобки регистраций (`PRIMARY KEY (id)`,
+    // `FOREIGN KEY (…) REFERENCES … (…)`) определение не режут, содержимое строковых литералов
+    // (`DEFAULT 'DRAFT'`) — тоже.
+    /** @return list<string> */
+    private function splitDefinitions(string $tableBody): array
+    {
+        $definitions = [];
+        $current = '';
+        $depth = 0;
+        $inString = false;
+        $length = strlen($tableBody);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $tableBody[$i];
+
+            if ($inString) {
+                $current .= $char;
+
+                if ($char === "'") {
+                    // Двойная одинарная кавычка — экранированный символ внутри литерала, тот же
+                    // приём, что узнаёт `sqlWithTablePrefix()` в канале установщика.
+                    if ($i + 1 < $length && $tableBody[$i + 1] === "'") {
+                        $current .= "'";
+                        $i++;
+                    } else {
+                        $inString = false;
+                    }
+                }
+
+                continue;
+            }
+
+            if ($char === "'") {
+                $inString = true;
+                $current .= $char;
+                continue;
+            }
+
+            if ($char === '(') {
+                $depth++;
+            } elseif ($char === ')') {
+                $depth--;
+            } elseif ($char === ',' && $depth === 0) {
+                $definitions[] = $current;
+                $current = '';
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        $definitions[] = $current;
+
+        return $definitions;
     }
 }

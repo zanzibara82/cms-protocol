@@ -48,8 +48,19 @@ final class NewsRegistryTest extends TestCase
 
     public function testВерсияЯдраПодходитРазделу(): void
     {
-        self::assertTrue(coreVersionSatisfies('1.1.0'));
-        self::assertFalse(coreVersionSatisfies('99.0.0'));
+        $manifest = appManifest('news');
+        self::assertIsArray($manifest);
+
+        // Контракт манифеста: с CORE_VERSION сверяется requiresCore из `apps/news/manifest.php`,
+        // а не литерал из теста.
+        self::assertTrue(
+            coreVersionSatisfies((string) $manifest['requiresCore']),
+            'Ядру ' . CORE_VERSION . ' не удовлетворяет requiresCore ' . (string) $manifest['requiresCore'] . '.'
+        );
+
+        // При текущей версии ядра установка раздела разрешена: appState() прогоняет ровно тот
+        // гейт версии, который смотрит installApp(), а состояние «incompatible» означало бы отказ.
+        self::assertNotSame('incompatible', appState('news')['state']);
     }
 
     public function testПланУстановкиСодержитОбаРелиза(): void
