@@ -1,0 +1,56 @@
+# Запасная раскладка (§11.1 пункт 1, риск §13): хостинг не даёт перенести документ-корень на
+# каталог public/. Тогда в документ-корень кладется вся структура, и этот файл делает две вещи:
+# закрывает служебные каталоги и переправляет остальное в public/.
+#
+# В основной раскладке (документ-корень = public/) файл лежит НАД корнем, Apache его не читает и
+# не мешает. Поэтому он в репозитории постоянно, а не в отдельной ветке «для плохого хостинга».
+#
+# Порядок важен: блокировка идёт ДО переписывания. Apache идёт по списку правил и останавливается
+# на [F]; если первым поставить переписывание, запрос /core/bootstrap.php совпадёт с
+# существующим файлом, условие !-f его пропустит, и наружу уйдёт исходник ядра — а при mod_php
+# ещё и исполнится.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    RewriteRule ^(admin|apps|core|docker|scripts|sql|tests|docs|theme|vendor|node_modules)(/|$) - [F,L]
+    RewriteRule ^config(\.sample)?\.php$ - [F,L]
+    RewriteRule ^(composer\.(json|lock)|package(-lock)?\.json|phpunit\.xml|phpstan\.neon)$ - [F,L]
+    RewriteRule (^|/)\.(git|env|superpowers) - [F,L]
+
+    # Существующий файл или каталог внутри public/ отдаём как есть: стили, картинки из загрузок,
+    # setup.php. Ссылка `$1` берётся из шаблона правила, а не из %{REQUEST_URI}: во втором
+    # сидит строка запроса, и `/assets/app.css?v=2` не совпал бы ни с каким файлом — стилям
+    # вместо выдачи достался бы index.php.
+    RewriteCond $1 !^public/
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -f
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    RewriteCond $1 !^public/
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -d
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Всё остальное — в единственную точку входа. Публичные адреса (/news, /sitemap.xml,
+    # /news/c/zadachi) файлов не имеют, поэтому до index.php доходят ровно один раз.
+    #
+    # Тормозом повторного прохода служит именно `$1 !^public/`, а не проверка %{REQUEST_URI}:
+    # после [L] Apache проходит список правил ещё раз, уже с переписанным путём, но REQUEST_URI
+    # при внутреннем переписывании не меняется — и условие на него второй проход не остановило бы.
+    # Цена этой ошибки — не цикл, а подмена: запрос /assets/app.css в первом проходе находится как
+    # файл и переписывается в public/assets/app.css, во втором проходе без условия `$1` попал бы на
+    # это правило и стал бы public/index.php — вместо стилей человек получил бы разметку.
+    #
+    # Благодаря тому же неизменному REQUEST_URI маршрутизатор видит исходный адрес (/news), а не
+    # /public/index.php — на этом держится requestPath() из задачи 4.
+    RewriteCond $1 !^public/
+    RewriteRule ^(.*)$ public/index.php [L,QSA]
+</IfModule>
+
+# Служебные заголовки дублируют public/.htaccess: в этой раскладке запрос идёт от корня, и
+# заголовки public/.htaccess к нему не применятся, если ответ собрал public/index.php после
+# переписывания.
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set X-Frame-Options "SAMEORIGIN"
+</IfModule>

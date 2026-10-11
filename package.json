@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "tailwindcss -i ./src-css/app.css -o ./public/assets/app.css --minify",
-    "watch": "tailwindcss -i ./src-css/app.css -o ./public/assets/app.css --watch"
+    "watch": "tailwindcss -i ./src-css/app.css -o ./public/assets/app.css --watch",
+    "responsive": "node scripts/responsive-check.mjs"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
