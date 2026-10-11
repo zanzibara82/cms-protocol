@@ -1,22 +1,25 @@
 ### Задача 21: Выкладка на хостинг — зонд, деплой, запасная раскладка, адаптивность и приёмка
 
-**Files:**
-- Create: `tests/guard/DeploySafetyTest.php`
-- Create: `scripts/deploy.sh`
-- Create: `.htaccess` (корневой — запасной вариант раскладки, §11.1 пункт 1 и §13)
-- Create: `scripts/hosting-probe.php`
-- Create: `scripts/responsive-check.mjs`
-- Create: `docs/deploy-checklist.md`
-- Modify: `package.json` (devDependency `playwright-core` + npm-скрипт `responsive`)
-- Modify: `docs/superpowers/plans/part1.md` (в карте файлов появляются два новых пути)
+**Файлы:**
+- Создать: `tests/guard/DeploySafetyTest.php`
+- Создать: `scripts/deploy.sh`
+- Создать: `.htaccess` (корневой — запасной вариант раскладки, §11.1 пункт 1 и §13)
+- Создать: `scripts/hosting-probe.php`
+- Создать: `scripts/responsive-check.mjs`
+- Создать: `docs/deploy-checklist.md`
+- Изменить: `package.json` (один npm-скрипт `responsive`; новых зависимостей нет — см. шаг 6)
+
+Карта файлов в `docs/superpowers/plans/part1.md` пополняется двумя новыми путями отдельным
+коммитом контроллера: тексты планов правит только он (Global Constraints), поэтому исполнителю
+задачи этот файл не трогать.
 
 **Порт:** `english-portal/scripts/responsive-check.mjs` (270 строк, уже обкатан на портале).
 Источник истины по приёму — спецификация §11 (деплой, шесть шагов) и §12 (двадцать критериев
 готовности). Чужой код переносится с заменой двух вещей: вход NextAuth на вход через куку
 сессии PHP и список страниц портала на список страниц этой CMS.
 
-**Interfaces:**
-- Consumes:
+**Интерфейсы:**
+- Потребляет:
   - `core/session.php`: имя куки `cms_session` (задача 6); `core/csrf.php`: поле `_token` в форме
     входа и в `$_SESSION` (задача 7); `theme/login.php`: поля `email` и `password`
   - `core/routes.php`: `GET/POST /login`, успешный вход — 302 на `/admin`
@@ -27,7 +30,9 @@
     правилами
   - `scripts/gate.sh`, `scripts/db-reset`, `bash scripts/css` (задачи 1 и 5) — прогон ворот и
     сборка стилей перед выкладкой
-- Produces:
+  - системный Chrome и протокол его отладки через порт — проверка адаптивности работает без
+    внешних пакетов Node, поэтому `npm install` не нужен (шаг 6)
+- Даёт:
   - `bash scripts/deploy.sh [--dry-run]` — выкладка одним `rsync` из переменных `CMS_DEPLOY_USER`,
     `CMS_DEPLOY_HOST`, `CMS_DEPLOY_PATH`, `CMS_DEPLOY_MODE` (`public` | `root`), с проверкой
     раскладки по `CMS_DEPLOY_URL`;
@@ -557,11 +562,11 @@ Expected: PASS — 4 проверки.
 Если падает `testЗапаснаяРаскладкаЗакрываетСлужебноеДоПереписывания`, смотреть не на регистр
 правил, а на порядок: `[F` обязан встретиться в файле раньше строки с `public/index.php`.
 
-- [ ] **Шаг 6: npm — зависимость и скрипт**
+- [ ] **Шаг 6: npm — скрипт без новой зависимости**
 
-Заменить `package.json` целиком (файл создан задачей 4 — в `part2.md` он в её границах: перечень
-файлов строки 718, содержимое строки 1423; `devDependencies` читаются только
-разработчиком, на сервере Node нет):
+В `package.json` добавить один скрипт `responsive` и больше ничего не менять (файл создан
+задачей 4 — в `part2.md` он в её границах: перечень файлов строки 718, содержимое строки 1423;
+`devDependencies` читаются только разработчиком, на сервере Node нет):
 
 ```json
 {
@@ -575,17 +580,23 @@ Expected: PASS — 4 проверки.
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
-    "playwright-core": "^1.49.1",
     "tailwindcss": "^4.1.0"
   }
 }
 ```
 
-Run: `npm install --no-audit --no-fund`
-Expected: появились `node_modules/playwright-core`; скачивания браузера **не произошло** — это
-`playwright-core`, а не `playwright`: пакет не тянет Chromium и не знает о его существовании.
-Скрипт запускает тот Chrome, который стоит у разработчика, через `executablePath` — поэтому
-`npx playwright install` делать не нужно, и лишние 300 МБ в проекте не появляются.
+Новых пакетов нет, и `npm install` не запускается. Проверка адаптивности говорит с тем Chrome,
+который уже стоит у разработчика, по протоколу отладки через порт (шаг 7): библиотека-драйвер для
+этого не нужна, а установка пакетов из реестра на машине исполнителя может быть запрещена
+политикой окружения — тогда предписанный `npm install` сделал бы шаг непроходимым.
+`package-lock.json` остаётся таким, каким его оставила задача 4, и в коммит не добавляется:
+меняться в нём нечему.
+
+Run: `npm pkg get scripts`
+Expected: три ключа — `build`, `watch`, `responsive`.
+
+Run: `npm pkg get devDependencies`
+Expected: только `@tailwindcss/cli` и `tailwindcss` — новых пакетов не появилось.
 
 - [ ] **Шаг 7: Проверка адаптивности**
 
@@ -593,10 +604,11 @@ Expected: появились `node_modules/playwright-core`; скачивани�
 
 ```js
 // Проверка адаптивности 360…1440 (критерий §12.18, требование Global Constraints).
-// Переполнение ищет на собранном стенде: открывает страницы в headless Chrome на шести экранах,
-// ищет горизонтальное переполнение и пишет отчёт во временный каталог.
+// Переполнение ищет на собранном стенде: поднимает headless Chrome с портом отладки, открывает
+// страницы по протоколу отладки Chrome на шести экранах, ищет горизонтальное переполнение и
+// пишет отчёт во временный каталог.
 //
-// Запуск (Node нужен только разработчику):
+// Запуск (Node нужен только разработчику, внешних пакетов нет):
 //   1) поднять стенд на тестовой базе — команды шага 8 этой задачи
 //   2) npm run responsive -- --base=http://localhost:8080 --shots
 //
@@ -606,7 +618,7 @@ Expected: появились `node_modules/playwright-core`; скачивани�
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { chromium } from 'playwright-core'
+import { spawn } from 'node:child_process'
 
 const args = process.argv.slice(2)
 const BASE = (args.find((a) => a.startsWith('--base=')) ?? '--base=http://localhost:8080').split('=')[1]
@@ -614,11 +626,14 @@ const SHOTS = args.includes('--shots')
 const OUT = join(tmpdir(), 'cms-resp-check')
 
 // Системный Chrome. Переменная CHROME_PATH перекрывает путь — на другой машине или Linux.
-const EXECUTABLE =
+const CHROME =
   process.env.CHROME_PATH ??
   (process.platform === 'win32'
     ? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
     : '/usr/bin/google-chrome')
+
+// Порт отладки занят только на время прогона: Chrome поднимается здесь же и здесь же убивается.
+const PORT = 9333
 
 const VIEWPORTS = [
   { name: '360', w: 360, h: 640 },
@@ -634,38 +649,52 @@ const EMAIL = process.env.RESP_EMAIL ?? 'admin@school.dev'
 const PASSWORD = process.env.RESP_PASSWORD ?? 'длинный-тестовый-пароль'
 const SESSION_COOKIE = 'cms_session'
 
-// Возвращает куку для контекстов или null: если вход не вышел, проверка не обрывается, а говорит
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Возвращает значение куки сессии или null: если вход не вышел, проверка не обрывается, а говорит
 // об этом и берёт публичные адреса. Молчаливый пропуск админки — это «проверено 30 комбинаций»,
 // когда надо было 78.
 //
-// Вход идёт через request того же браузера, а не через fetch: loginUser() вызывает
-// session_regenerate_id(true) (задача 6), поэтому настоящая кука сессии приезжает только в ответе
-// на POST, а редирект fetch с `redirect: 'manual'` закрывает заголовки такого ответа. Playwright
-// сам кладёт куку в jar контекста, поэтому статус ответа нас не интересует — решение принимает
-// наличие куки.
-async function loginCookie(browser) {
-  const ctx = await browser.newContext({ baseURL: BASE })
-  try {
-    const form = await ctx.request.get('/login')
-    const token = /name="_token" value="([^"]+)"/.exec(await form.text())?.[1]
-    if (!token) {
-      console.error('на /login нет поля _token — вход невозможен')
-      return null
+// Куки переносятся вручную: вход делается двумя запросами, а не страницей браузера, потому что
+// Chrome поднимается позже и живёт в своём профиле. Токен CSRF лежит в `$_SESSION` (задача 7),
+// поэтому кука из ответа на GET обязана уйти в POST. loginUser() вызывает
+// session_regenerate_id(true) (задача 6), значит настоящая кука сессии приезжает в ответе на
+// POST; это 302, и при `redirect: 'manual'` Node отдаёт его заголовки как есть — Set-Cookie
+// читается. Решение принимает наличие куки, а не статус ответа.
+async function loginCookie() {
+  const jar = new Map()
+  const keep = (res) => {
+    for (const c of res.headers.getSetCookie() ?? []) {
+      const [pair] = c.split(';')
+      const i = pair.indexOf('=')
+      jar.set(pair.slice(0, i).trim(), pair.slice(i + 1))
     }
-    // maxRedirects: 0 — не уходить на /admin после входа. При таком значении Playwright вправе
-    // вернуть 3xx или бросить; оба случая закрыты чтением jar ниже.
-    await ctx.request
-      .post('/login', { form: { email: EMAIL, password: PASSWORD, _token: token }, maxRedirects: 0 })
-      .catch(() => null)
-    const found = (await ctx.cookies()).find((c) => c.name === SESSION_COOKIE)
-    if (!found) {
-      console.error(`не удалось войти как ${EMAIL}: куки ${SESSION_COOKIE} нет — проверяются только публичные адреса`)
-      return null
-    }
-    return { name: found.name, value: found.value, url: BASE }
-  } finally {
-    await ctx.close()
   }
+  const form = await fetch(`${BASE}/login`)
+  keep(form)
+  const token = /name="_token" value="([^"]+)"/.exec(await form.text())?.[1]
+  if (!token) {
+    console.error('на /login нет поля _token — вход невозможен, проверяются только публичные адреса')
+    return null
+  }
+  const sent = await fetch(`${BASE}/login`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; '),
+    },
+    body: new URLSearchParams({ email: EMAIL, password: PASSWORD, _token: token }),
+  })
+  keep(sent)
+  const value = jar.get(SESSION_COOKIE)
+  if (!value) {
+    console.error(
+      `не удалось войти как ${EMAIL}: куки ${SESSION_COOKIE} нет — проверяются только публичные адреса`,
+    )
+    return null
+  }
+  return value
 }
 
 // Публичные адреса раздела берём из карты сайтов: материалы живут в базе, и выписать их руками
@@ -714,7 +743,64 @@ const ADMIN_PAGES = [
   { name: 'новости: теги', href: '/news/admin/tags' },
 ]
 
-// Проба измеряет то, что посетитель действительно видит.
+// Chrome поднимается отдельным процессом и открывает порт отладки не мгновенно: адрес сокета
+// берётся из его же списка целей, с попытками первые тридцать секунд.
+async function findWsUrl() {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const list = await fetch(`http://127.0.0.1:${PORT}/json/list`).then((r) => r.json())
+      const page = list.find((t) => t.type === 'page')
+      if (page) return page.webSocketDebuggerUrl
+    } catch {
+      // Chrome ещё поднимается
+    }
+    await sleep(500)
+  }
+  throw new Error('Chrome не поднялся на порту ' + PORT)
+}
+
+// Обёртка над сокетом протокола отладки: счётчик сообщений, таблица ожидающих ответов и ожидание
+// события загрузки страницы. Встроенный в Node `WebSocket` подходит как есть — пакет не нужен.
+function connect(url) {
+  const ws = new WebSocket(url)
+  let id = 0
+  const pending = new Map()
+  const loadWaiters = []
+  ws.addEventListener('message', (ev) => {
+    const msg = JSON.parse(ev.data)
+    if (msg.id && pending.has(msg.id)) {
+      const { resolve, reject } = pending.get(msg.id)
+      pending.delete(msg.id)
+      if (msg.error) reject(new Error(JSON.stringify(msg.error)))
+      else resolve(msg.result)
+    } else if (msg.method === 'Page.loadEventFired') {
+      loadWaiters.forEach((fn) => fn())
+    }
+  })
+  const open = new Promise((resolve) => ws.addEventListener('open', resolve, { once: true }))
+  return {
+    ws,
+    open,
+    send(method, params = {}) {
+      return new Promise((resolve, reject) => {
+        const n = ++id
+        pending.set(n, { resolve, reject })
+        ws.send(JSON.stringify({ id: n, method, params }))
+      })
+    },
+    // Пятнадцать секунд — потолок ожидания загрузки одного экрана: дальше проба мерит то, что
+    // успело построиться, и страница попадает в отчёт как есть.
+    onLoad() {
+      return new Promise((resolve) => {
+        loadWaiters.push(resolve)
+        setTimeout(resolve, 15000)
+      })
+    },
+  }
+}
+
+// Проба измеряет то, что посетитель действительно видит. Выражение — строка: его исполняет
+// Runtime.evaluate внутри страницы, а не Node.
 //
 // Свёрнутый <details> Chrome раскладывает, но не показывает (content-visibility: hidden): его
 // строки оказываются за экраном там, где прокладки нет, и проба посчитала бы их лишними. Перед
@@ -723,7 +809,7 @@ const ADMIN_PAGES = [
 // Переполнение — это не только scrollWidth документа: элемент правее экрана внутри
 // [overflow-x: auto] прокручивается и не ломает страницу, поэтому такие места считаются
 // правильными (таблицы справочников в админке живут именно так, §8.5).
-function probe() {
+const PROBE = `(() => {
   const vw = window.innerWidth
   const scrollable = (el) => {
     for (let p = el.parentElement; p; p = p.parentElement) {
@@ -742,16 +828,14 @@ function probe() {
     if (!r.width) return
     if (r.right > vw + 1.5) {
       if (scrollable(el) || hiddenInClosedDetails(el)) return
-      const cls = typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/)[0] : ''
+      const cls = typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\\s+/)[0] : ''
       bad.push({ sel: el.tagName.toLowerCase() + cls, right: Math.round(r.right), w: Math.round(r.width) })
     }
   })
   const uniq = []
-  bad
-    .sort((a, b) => b.right - a.right)
-    .forEach((b) => {
-      if (uniq.length < 6 && !uniq.some((u) => u.sel === b.sel)) uniq.push(b)
-    })
+  bad.sort((a, b) => b.right - a.right).forEach((b) => {
+    if (uniq.length < 6 && !uniq.some((u) => u.sel === b.sel)) uniq.push(b)
+  })
   return {
     scrollWidth: document.documentElement.scrollWidth,
     vw,
@@ -759,7 +843,7 @@ function probe() {
     title: document.title,
     offenders: uniq,
   }
-}
+})()`
 
 // Имя файла под скриншот: адреса из карты сайтов дают имена вида «карта:/news/osennij-bal», а
 // двоеточие и слэш Windows в имени не принимает — прогон на машине разработчика падал бы на
@@ -770,40 +854,68 @@ function safeName(name) {
 
 async function main() {
   mkdirSync(OUT, { recursive: true })
-  const browser = await chromium.launch({ headless: true, executablePath: EXECUTABLE })
-  // Вход идёт через тот же браузер, что и проверка: кука нужна как объект контекста, а не
-  // как строка заголовка, поэтому она получается до создания контекстов и живёт в переменной.
-  const cookie = await loginCookie(browser)
+  // Кука получается до подъёма Chrome: она кладётся в браузер командой протокола, а не ответом
+  // сервера, поэтому её значение должно быть известно к моменту подключения.
+  const cookie = await loginCookie()
+  const proc = spawn(
+    CHROME,
+    [
+      '--headless=new',
+      `--remote-debugging-port=${PORT}`,
+      '--remote-allow-origins=*',
+      `--user-data-dir=${join(OUT, 'profile')}`,
+      '--no-first-run',
+      '--disable-gpu',
+      'about:blank',
+    ],
+    { stdio: 'ignore' },
+  )
   const report = []
+  const ws = connect(await findWsUrl())
   try {
+    await ws.open
+    await ws.send('Page.enable')
+    await ws.send('Network.enable')
+    if (cookie) {
+      await ws.send('Network.setCookie', {
+        name: SESSION_COOKIE,
+        value: cookie,
+        domain: new URL(BASE).hostname,
+        path: '/',
+        httpOnly: true,
+        sameSite: 'Lax',
+      })
+    }
+
     const pages = process.env.RESP_PAGES
       ? JSON.parse(process.env.RESP_PAGES)
       : [...(await publicPages()), ...(cookie ? ADMIN_PAGES : [])]
     if (!pages.length) throw new Error('RESP_PAGES задан, но пуст: проверять нечего')
 
-    // Контекст на каждый экран, страницы внутри: кука добавляется в контекст, а `isMobile`
-    // меняет метку Chrome — на узких экранах часть раскладок живёт в media-запросах, и их надо
-    // просить именно как мобильный вьюпорт, а не сжимать десктопный.
     for (const vp of VIEWPORTS) {
-      const ctx = await browser.newContext({
-        viewport: { width: vp.w, height: vp.h },
+      // Метка mobile меняет то, как Chrome применяет media-запросы: на узких экранах часть
+      // раскладок живёт именно в них, и их надо просить как мобильный вьюпорт, а не сжимать
+      // десктопный.
+      await ws.send('Emulation.setDeviceMetricsOverride', {
+        width: vp.w,
+        height: vp.h,
         deviceScaleFactor: 1,
-        isMobile: vp.w < 500,
-        hasTouch: vp.w < 500,
+        mobile: vp.w < 500,
       })
-      if (cookie) await ctx.addCookies([cookie])
       for (const item of pages) {
-        const page = await ctx.newPage()
-        try {
-          await page.goto(BASE + item.href, { waitUntil: 'load', timeout: 20000 })
-        } catch (e) {
-          console.error(`  ${item.name}: страница не открылась (${e.message})`)
-        }
-        await page.evaluate(`document.querySelectorAll('details').forEach((d) => { d.open = true })`)
-        const data = await page.evaluate(probe)
-        const row = { page: item.name, href: item.href, vp: vp.name, ...data }
+        const wait = ws.onLoad()
+        await ws.send('Page.navigate', { url: BASE + item.href })
+        await wait
+        await sleep(900)
+        await ws.send('Runtime.evaluate', {
+          expression: `document.querySelectorAll('details').forEach((d) => { d.open = true })`,
+        })
+        await sleep(200)
+        const { result } = await ws.send('Runtime.evaluate', { expression: PROBE, returnByValue: true })
+        const row = { page: item.name, href: item.href, vp: vp.name, ...result.value }
         if (SHOTS && (vp.name === '360' || vp.name === '1440')) {
-          await page.screenshot({ path: join(OUT, `${safeName(item.name)}-${vp.name}.png`), fullPage: true })
+          const shot = await ws.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
+          writeFileSync(join(OUT, `${safeName(item.name)}-${vp.name}.png`), Buffer.from(shot.data, 'base64'))
         }
         report.push(row)
         const ok = row.offenders.length === 0 && row.scrollWidth <= row.vw + 1
@@ -812,12 +924,13 @@ async function main() {
           `${ok ? 'OK  ' : 'FAIL'} ${item.name.padEnd(24)} ${vp.name.padStart(4)}  scroll=${row.scrollWidth}${redirected}  ` +
             row.offenders.map((o) => `${o.sel}→${o.right}`).join(' | ').slice(0, 200),
         )
-        await page.close()
       }
-      await ctx.close()
     }
   } finally {
-    await browser.close()
+    // Chrome обязан умереть даже при падении прогона: живой процесс держит порт и профиль, и
+    // следующий запуск начнётся с ошибки.
+    ws.ws.close()
+    proc.kill()
   }
 
   writeFileSync(join(OUT, 'report.json'), JSON.stringify(report, null, 2))
@@ -871,6 +984,11 @@ docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php
 и проверка на нём всегда зелёная. Строка таблицы справочника с длинным текстом — ровно то, что
 критерий §12.18 обязан застать на узком экране, и адрес карточки появляется в карте сайтов только
 после публикации (задача 20).
+
+Прогону нужен системный Chrome: по умолчанию берётся путь Windows
+`C:/Program Files/Google/Chrome/Application/chrome.exe`, на другой машине или в Linux его
+перекрывает переменная `CHROME_PATH`. Порт отладки 9333 обязан быть свободен: живой Chrome от
+прошлого прогона держит и порт, и профиль, и новый запуск начнётся с ошибки.
 
 В другом окне, пока стенд поднят:
 
@@ -1021,12 +1139,17 @@ curl -sS https://домен/sitemap.xml | head -20
 Проверить документ глазами: в нём нет ни одного адреса и ни одного пароля боевого сервера, только
 имена переменных и заглушки `домен-школы.рф`, `логин SSH`.
 
-- [ ] **Шаг 10: Обновить карту файлов плана**
+- [ ] **Шаг 10: Карта файлов плана — правка контроллера**
 
-Изменить `docs/superpowers/plans/part1.md` — в карте файлов (раздел «Структура файлов», строка 155)
-добавить то, чего в карте нет, потому что она писалась до задачи 21. Три скрипта выкладки
-(`deploy.sh`, `hosting-probe.php`, `responsive-check.mjs`) там уже перечислены (строки 257…259),
-поэтому карта расходится с планом ровно в трёх строках: две новые и одна устаревшая.
+Карту файлов в `docs/superpowers/plans/part1.md` правит контроллер своим отдельным коммитом:
+тексты планов исполнителю задачи не принадлежат (Global Constraints). Исполнитель этот файл на
+запись не открывает и в коммит задачи не кладёт; вместо этого он перечисляет в отчёте
+расхождения карты с собранным деревом, а контроллер сверяет их со списком ниже и вносит правку.
+
+В карте файлов (раздел «Структура файлов», строка 155) не хватает того, что появилось в задаче 21.
+Три скрипта выкладки (`deploy.sh`, `hosting-probe.php`, `responsive-check.mjs`) там уже
+перечислены (строки 257…259), поэтому карта расходится с деревом ровно в трёх строках: две новые
+и одна устаревшая.
 
 После строки `.gitignore` (строка 165):
 
@@ -1078,16 +1201,16 @@ Run:
 GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \
 GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.com' \
 git add scripts/deploy.sh scripts/hosting-probe.php scripts/responsive-check.mjs .htaccess \
-  docs/deploy-checklist.md package.json package-lock.json tests/guard/DeploySafetyTest.php \
-  docs/superpowers/plans/part1.md docs/superpowers/plans/part10.md
+  docs/deploy-checklist.md package.json tests/guard/DeploySafetyTest.php
 git status --short
 git commit -m "Выкладка пилота: зонд хостинга, rsync со защитой данных, проверка адаптивности и чек-лист приёмки"
 ```
 
-`package-lock.json` в коммите обязателен: `npm install` без него на другой машине тянет другие
-версии `playwright-core`, и прогон адаптивности начинает отличаться от прогона разработчика.
-`node_modules/` в `.gitignore` (задача 1), поэтому из Node-артефактов в коммит попадает только
-файл фиксации версий.
+`package-lock.json` в коммите не нужен: новых пакетов задача не добавляет (шаг 6), и файл фиксации
+версий остаётся таким, каким его оставила задача 4. `node_modules/` в `.gitignore` (задача 1),
+поэтому из Node-артефактов в коммит не попадает ничего. Тексты планов (`docs/superpowers/plans/**`)
+в коммит задачи тоже не кладут: их правит контроллер своим отдельным коммитом — см. шаг 10.
+Перед `git add` список путей сверяется с `git status --short`: в индекс обязан попасть ровно он.
 
 ---
 
