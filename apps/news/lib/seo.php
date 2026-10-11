@@ -310,3 +310,33 @@ function modifiedTimeOf(array $item): ?string
 
     return $moment === null ? null : moscowIso($moment);
 }
+
+/**
+ * Адреса карты сайта этого раздела (§8.6): лента, открытые материалы и страницы видимых рубрик.
+ *
+ * У ленты и у списков даты нет: они меняются на каждом материале, и `<lastmod>` у них показывал
+ * бы дату правки последней строки вместо даты правки списка. Ядро при этом всё равно отбракует
+ * дубликат и приватный путь (core/seo.php), поэтому раздел не повторяет эту проверку.
+ *
+ * Страниц тегов в карте нет, и это уточнение к §8.6: задача 17 закрыла их от индекса
+ * (`noindex, nofollow` — подборки повторяют ленту и не самостоятельный контент), а обещать
+ * адрес поиску и тут же говорить «не индексируй» — значит давать противоречивый сигнал. Рубрика
+ * же индексируется (задача 17 снимает `noindex` с первой страницы), поэтому её адрес в карте
+ * законен.
+ *
+ * @return list<array{loc: string, lastmod?: string}>
+ */
+function newsSitemapUrls(): array
+{
+    $urls = [['loc' => newsHref()]];
+
+    foreach (publishedForSitemap() as $entry) {
+        $urls[] = $entry;
+    }
+
+    foreach (visibleCategories() as $category) {
+        $urls[] = ['loc' => newsHref(['category' => (string) $category['slug']])];
+    }
+
+    return $urls;
+}

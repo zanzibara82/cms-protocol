@@ -371,7 +371,8 @@ TAG_FIELDS       label min 2 max 40, на материал не больше 10 
 Карточка отдаёт `title`, `description`, `robots` (`noindex` по флагу материала), OG-теги
 (`og:title`, `og:description`, `og:image`, `og:type=article`) и JSON-LD `NewsArticle`.
 OG-картинка — 1200×630. `sitemap.xml` собирается из хука `sitemap_urls`: видимые материалы,
-страницы рубрик и тегов; скрытые рубрики и материалы с `noindex` в карту не попадают.
+страницы рубрик; скрытые рубрики, материалы с `noindex` и подборки тегов (они несут
+`noindex, nofollow` — задача 17) в карту не попадают.
 `robots.txt` — из хука `robots_lines`, включает `Disallow` приватных путей из манифестов.
 
 ## 9. Почта

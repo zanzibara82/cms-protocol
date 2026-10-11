@@ -40,6 +40,19 @@ addRoute('POST', '/news/admin/categories', 'newsCategoriesAction', ['app' => 'ne
 addRoute('GET', '/news/admin/tags', 'newsAdminTags', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/news/admin/tags', 'newsTagsAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 
+// Карта сайтов: раздел добавляет свои адреса фильтром, а не правкой ядра (§5.4). Порядок
+// фиксирован — ядро кладёт главную первым, раздел дописывает свои следом.
+//
+// Проверка установки обязательна: таблицы раздела есть не в каждой сборке, и запрос к
+// несуществующей таблице — это ошибка, а не пустой список.
+addFilter('sitemap_urls', static function (array $urls): array {
+    if (!isAppActive('news')) {
+        return $urls;
+    }
+
+    return array_merge($urls, newsSitemapUrls());
+}, 10);
+
 /** @param array<string, string> $params */
 function newsFeedPage(array $params = []): void
 {
