@@ -1225,12 +1225,22 @@ GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \
 GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.com' \
 git add apps/news/lib/admin.php apps/news/admin.php apps/news/actions/catalog.php \
   apps/news/routes.php apps/news/templates/admin/categories.php apps/news/templates/admin/tags.php \
-  apps/news/templates/admin/summary.php \
+  apps/news/templates/admin/summary.php public/assets/app.css \
   tests/unit/NewsCatalogRulesTest.php tests/unit/NewsAdminRulesTest.php \
   tests/http/NewsCatalogTest.php
 git status --short
 git commit -m "Новости: экраны справочников — рубрики и теги"
 ```
+
+Позиция `public/assets/app.css` в этом списке обязательна, а не повтор пояснения к задаче 18. Разметка
+шага 5 приносит три класса, которых в собранном артефакте нет: `contents` на обёртке формы строки,
+`grow` на метках полей и `bg-ink/5` без вариативной приставки на плашке адреса (в дереве встречается
+только `hover:bg-ink/5`, это другой селектор). Ни одного из трёх не приносит разметка задачи 18,
+поэтому её пересборка артефакта здесь не помогает: без `bash scripts/css` на хосте первый шаг ворот
+покраснеет сразу после этого коммита. Тот же порядок, что в задачах 16, 17 и 18: артефакт и разметка,
+которая его породила, уезжают одним коммитом. Разметка экранов названа образцом, и это не снимает
+обязанности: шаг свежести сравнивает побайтово собранное с закоммиченным, поэтому какие классы в итоге
+оказались нужными — решает он, а исполнитель обязан пересобрать и положить артефакт в этот же коммит.
 
 # Этап C. Стражи, приёмка и выкладка
 
