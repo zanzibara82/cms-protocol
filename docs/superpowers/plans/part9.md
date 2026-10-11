@@ -8,7 +8,11 @@
 - Изменить: `apps/news/routes.php` (четыре адреса: GET и POST на каждый экран)
 - Создать: `apps/news/templates/admin/categories.php`, `apps/news/templates/admin/tags.php`
 - Изменить: `apps/news/templates/admin/summary.php` (панели «Рубрики» и «Теги»)
-- Изменить: `tests/unit/NewsAdminRulesTest.php` (`assertCount(2, NEWS_ADMIN_TABS)` → 4)
+- Изменить: `tests/unit/NewsAdminRulesTest.php` (`assertCount(2, NEWS_ADMIN_TABS)` → 4, имя того же
+  теста `testПолосаВкладокЗнаетДваЭкрана` → `testПолосаВкладокЗнаетЧетыреЭкрана`; цикл внутри,
+  сверяющий адрес и подпись каждой вкладки, остаётся дословно — проверок убавлять нельзя)
+- Изменить: `tests/http/NewsAdminTest.php` (два негативных утверждения «адреса рубрик на экране
+  нет» переворачиваются — см. пояснение после шага 5)
 - Тест: `tests/unit/NewsCatalogRulesTest.php`, `tests/http/NewsCatalogTest.php`
 
 **Порт:** `english-portal/src/app/news/admin/categories/page.tsx`, `admin/tags/page.tsx` и
@@ -1167,6 +1171,16 @@ Expected: PASS — 19 проверок.
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter "NewsAdminTest|NewsItemFormTest|NewsPublicTest"`
 Expected: PASS — панели сводки и четыре вкладки ничего из прежних экранов не сломали.
+
+Что именно правится в чужом наборе и почему это не расширение области задачи: в
+`tests/http/NewsAdminTest.php` два утверждения проверяли, что адреса рубрик на экране нет, —
+`assertStringNotContainsString('/news/admin/categories', …)` в тесте сводки (с пояснением
+«Панели справочников появляются в задаче 19») и в тесте списка. С этого экрана адрес стоит и в
+полосе вкладок, и панелями на сводке, поэтому оба утверждения переворачиваются на
+`assertStringContainsString` с текстом, что именно ожидается. Прежний негатив был закладкой на
+эту задачу, а не правилом, которое задача 19 ломает. Ослабления нет: переворот двух утверждений
+не убирает проверок, а добавляет их — адрес после переворота обязан печататься. Никаких других
+правок в прежних тестах задача 19 не делает.
 
 - [ ] **Шаг 6: Прогнать ворота целиком**
 
