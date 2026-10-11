@@ -25,9 +25,9 @@ final class NewsItemFormTest extends TestCase
 
         installApp('news');
 
-        // Адрес seeded-строки совпадает с тем, что даёт `slugify()` по таблице `NEWS_TRANSLIT`
+        // Адрес заготовленной строки совпадает с тем, что даёт `slugify()` по таблице `NEWS_TRANSLIT`
         // (`й` → `y`), и только поэтому проверка «занятый адрес» ниже остаётся проверкой: форма
-        // translитирует вписанный кириллицей адрес и обязана увидеть занятой строку.
+        // транслитерирует вписанный кириллицей адрес и обязана увидеть занятой адрес.
         $bal = createItem(self::data('Осенний бал', 'osenniy-bal'), self::EDITOR);
         $draft = createItem(self::data('Черновик экскурсии', 'chernovik-ekskursii', [
             'status' => NEWS_STATUS['DRAFT'],
