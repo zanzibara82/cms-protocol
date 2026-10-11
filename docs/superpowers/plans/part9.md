@@ -973,12 +973,12 @@ $create = '<form class="space-y-3 rounded-lg border border-ink/10 bg-white p-4" 
     . '<p class="text-sm text-ink/60">Адрес складывается из названия один раз и больше не меняется — '
     . 'ссылки, карточки и карта сайтов остаются целыми при любом переименовании.</p>'
     . '<label class="block text-sm">Название'
-    . '<input class="' . $input . '" type="text" name="title" required maxlength="' . e((string) $titleMax) . '">'
+    . '<input class="min-h-[44px] ' . $input . '" type="text" name="title" required maxlength="' . e((string) $titleMax) . '">'
     . '</label>'
     . '<label class="block text-sm">Описание страницы рубрики (необязательно)'
-    . '<textarea class="' . $input . '" name="description" rows="2" maxlength="' . e((string) $descriptionMax) . '"></textarea>'
+    . '<textarea class="min-h-[44px] ' . $input . '" name="description" rows="2" maxlength="' . e((string) $descriptionMax) . '"></textarea>'
     . '</label>'
-    . '<button class="' . $primary . '" type="submit">' . e(NEWS_CATEGORY_OP_LABEL['create']) . '</button>'
+    . '<button class="min-h-[44px] ' . $primary . '" type="submit">' . e(NEWS_CATEGORY_OP_LABEL['create']) . '</button>'
     . '</form>';
 
 $rowsHtml = '';
@@ -1002,7 +1002,7 @@ foreach ($rows as $row) {
             . csrfField()
             . '<input type="hidden" name="op" value="' . e($action['op']) . '">'
             . '<input type="hidden" name="id" value="' . e($id) . '">'
-            . '<button class="' . $class . '" type="submit">' . e($action['label']) . '</button>'
+            . '<button class="min-h-[44px] ' . $class . '" type="submit">' . e($action['label']) . '</button>'
             . '</form>';
     }
 
@@ -1013,15 +1013,15 @@ foreach ($rows as $row) {
         . e((string) $row['slug']) . '</code></p></div>'
         . '<p class="text-sm">' . $state . ' · ' . e($counts) . '</p>'
         . '<p class="flex flex-wrap items-center gap-2">'
-        . '<a class="text-sm underline underline-offset-4 hover:text-accent" href="'
+        . '<a class="inline-flex min-h-[44px] items-center text-sm underline underline-offset-4 hover:text-accent" href="'
         . e(newsHref(['category' => (string) $row['slug']])) . '">Открыть на сайте</a></p>'
         . '<form class="flex flex-wrap items-end gap-2" method="post" action="' . e(NEWS_ADMIN_CATEGORIES_PATH) . '">'
         . csrfField() . '<input type="hidden" name="op" value="rename">'
         . '<input type="hidden" name="id" value="' . e($id) . '">'
-        . '<label class="grow text-sm">Название<input class="' . $input
+        . '<label class="grow text-sm">Название<input class="min-h-[44px] ' . $input
         . '" type="text" name="title" value="' . e((string) $row['title']) . '" required maxlength="'
         . e((string) $titleMax) . '"></label>'
-        . '<button class="' . $button . '" type="submit">' . e(NEWS_CATEGORY_OP_LABEL['rename']) . '</button></form>'
+        . '<button class="min-h-[44px] ' . $button . '" type="submit">' . e(NEWS_CATEGORY_OP_LABEL['rename']) . '</button></form>'
         . '<form class="flex flex-wrap items-end gap-2" method="post" action="' . e(NEWS_ADMIN_CATEGORIES_PATH) . '">'
         . csrfField() . '<input type="hidden" name="op" value="describe">'
         . '<input type="hidden" name="id" value="' . e($id) . '">'
@@ -1029,9 +1029,9 @@ foreach ($rows as $row) {
         // описание» целиком, и без него сохранение описания стало бы отказом «название слишком
         // короткое». Правит название форма переименования выше.
         . '<input type="hidden" name="title" value="' . e((string) $row['title']) . '">'
-        . '<label class="grow text-sm">Описание страницы<textarea class="' . $input . '" name="description" rows="2" maxlength="'
+        . '<label class="grow text-sm">Описание страницы<textarea class="min-h-[44px] ' . $input . '" name="description" rows="2" maxlength="'
         . e((string) $descriptionMax) . '">' . e((string) ($row['description'] ?? '')) . '</textarea></label>'
-        . '<button class="' . $button . '" type="submit">' . e(NEWS_CATEGORY_OP_LABEL['describe']) . '</button></form>'
+        . '<button class="min-h-[44px] ' . $button . '" type="submit">' . e(NEWS_CATEGORY_OP_LABEL['describe']) . '</button></form>'
         . '<p class="flex flex-wrap gap-2">' . $buttons . '</p>'
         . '</li>';
 }
@@ -1088,7 +1088,7 @@ foreach ($rows as $row) {
         $delete .= '<form class="flex flex-wrap gap-2" method="post" action="' . e(NEWS_ADMIN_TAGS_PATH) . '">'
             . csrfField() . '<input type="hidden" name="op" value="' . e((string) $action['op']) . '">'
             . '<input type="hidden" name="id" value="' . e($id) . '">'
-            . '<button class="' . $danger . '" type="submit">' . e((string) $action['label']) . '</button></form>';
+            . '<button class="min-h-[44px] ' . $danger . '" type="submit">' . e((string) $action['label']) . '</button></form>';
     }
 
     $rowsHtml .= '<li class="space-y-3 rounded-lg border border-ink/10 bg-white p-4">'
@@ -1097,14 +1097,14 @@ foreach ($rows as $row) {
         . '<p class="text-sm text-ink/60">адрес: <code class="rounded bg-ink/5 px-1.5 py-0.5">'
         . e((string) $row['slug']) . '</code></p></div>'
         . '<p class="text-sm">' . e(sprintf('%1$d %2$s с этим тегом.', $items, plural($items, $itemForms))) . '</p>'
-        . '<p><a class="text-sm underline underline-offset-4 hover:text-accent" href="'
+        . '<p><a class="inline-flex min-h-[44px] items-center text-sm underline underline-offset-4 hover:text-accent" href="'
         . e(newsHref(['tag' => (string) $row['slug']])) . '">Открыть на сайте</a></p>'
         . '<form class="flex flex-wrap items-end gap-2" method="post" action="' . e(NEWS_ADMIN_TAGS_PATH) . '">'
         . csrfField() . '<input type="hidden" name="op" value="rename">'
         . '<input type="hidden" name="id" value="' . e($id) . '">'
-        . '<label class="grow text-sm">Надпись<input class="' . $input . '" type="text" name="label" value="'
+        . '<label class="grow text-sm">Надпись<input class="min-h-[44px] ' . $input . '" type="text" name="label" value="'
         . e((string) $row['label']) . '" required maxlength="' . e((string) $labelMax) . '"></label>'
-        . '<button class="' . $button . '" type="submit">' . e(NEWS_TAG_OP_LABEL['rename']) . '</button></form>'
+        . '<button class="min-h-[44px] ' . $button . '" type="submit">' . e(NEWS_TAG_OP_LABEL['rename']) . '</button></form>'
         . $delete
         . '</li>';
 }
@@ -1146,7 +1146,7 @@ foreach ([
     ['Теги', NEWS_ADMIN_TAGS_PATH, $tags, ['тег', 'тега', 'тегов']],
 ] as [$heading, $href, $count, $forms]) {
     $catalogPanels .= '<section class="rounded-lg border border-ink/10 bg-white p-4">'
-        . '<h2 class="font-semibold"><a class="underline underline-offset-4 hover:text-accent" href="'
+        . '<h2 class="font-semibold"><a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-accent" href="'
         . e($href) . '">' . e($heading) . '</a></h2>'
         . '<p class="mt-2 text-sm text-ink/60">' . e((string) $count) . ' ' . e(plural($count, $forms)) . '</p>'
         . '</section>';

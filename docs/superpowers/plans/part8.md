@@ -1555,9 +1555,9 @@ $foot = '<p class="text-sm text-ink/60">Выход по сроку работа�
 $content = $nav . '<p class="text-sm text-ink/70">' . e($waitingText) . '</p>'
     . $alert
     . '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">' . $panel . '</div>'
-    . '<p class="flex flex-wrap items-center gap-3"><a class="rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '
+    . '<p class="flex flex-wrap items-center gap-3"><a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '
     . 'href="' . e(NEWS_ADMIN_ITEMS_PATH) . '">Открыть список</a>'
-    . '<a class="text-sm text-ink/70 underline underline-offset-4 hover:text-ink" href="/news">Посмотреть ленту</a></p>'
+    . '<a class="inline-flex min-h-[44px] items-center text-sm text-ink/70 underline underline-offset-4 hover:text-ink" href="/news">Посмотреть ленту</a></p>'
     . $foot;
 
 $notice = $notice === '' ? null : $notice;
@@ -2005,7 +2005,9 @@ use PHPUnit\Framework\TestCase;
 // файл приходит настоящим multipart-запросом и `is_uploaded_file()` отвечает правду.
 final class NewsFormRulesTest extends TestCase
 {
-    private const ROOT = dirname(__DIR__, 2);
+    // Корень проекта берётся вызовом `dirname()` на месте, а не константой класса: PHP не вычисляет
+    // функцию в выражении константы (`Fatal error: Constant expression contains invalid operations`),
+    // а остальные наборы этого проекта пишут `dirname(__DIR__, 2)` прямо в коде проверки.
 
     // ── Кнопки ────────────────────────────────────────────
 
@@ -2092,7 +2094,7 @@ final class NewsFormRulesTest extends TestCase
         $dir = str_replace('\\', '/', newsUploadDir());
 
         self::assertStringEndsWith('/public/uploads/news', $dir);
-        self::assertStringStartsWith(str_replace('\\', '/', self::ROOT), $dir, 'За пределами проекта писать некуда');
+        self::assertStringStartsWith(str_replace('\\', '/', dirname(__DIR__, 2)), $dir, 'За пределами проекта писать некуда');
     }
 
     public function testОтказПоКодуЗагрузкиЧеловеческий(): void
@@ -2110,7 +2112,7 @@ final class NewsFormRulesTest extends TestCase
         $check = newsImageInspect([
             'name' => 'bal.png',
             'type' => 'image/png',
-            'tmp_name' => self::ROOT . '/public/assets/og-default.png',
+            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/og-default.png',
             'error' => UPLOAD_ERR_OK,
             'size' => NEWS_IMAGE_MAX_BYTES + 1,
         ]);
@@ -2125,7 +2127,7 @@ final class NewsFormRulesTest extends TestCase
         $check = newsImageInspect([
             'name' => 'bal.jpg',
             'type' => 'image/jpeg',
-            'tmp_name' => self::ROOT . '/public/assets/og-default.png',
+            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/og-default.png',
             'error' => UPLOAD_ERR_OK,
             'size' => 2048,
         ]);
@@ -2139,7 +2141,7 @@ final class NewsFormRulesTest extends TestCase
         $check = newsImageInspect([
             'name' => 'podrobnyj.php.png',
             'type' => 'image/png',
-            'tmp_name' => self::ROOT . '/config.sample.php',
+            'tmp_name' => dirname(__DIR__, 2) . '/config.sample.php',
             'error' => UPLOAD_ERR_OK,
             'size' => 512,
         ]);
@@ -2150,7 +2152,7 @@ final class NewsFormRulesTest extends TestCase
 
     public function testУдалениеТрогаетТолькоКаталогЗагрузок(): void
     {
-        $foreign = self::ROOT . '/config.sample.php';
+        $foreign = dirname(__DIR__, 2) . '/config.sample.php';
         newsImageDelete('/uploads/../config.sample.php');
         newsImageDelete('');
         newsImageDelete('/uploads/news/takogo-fajla-net.png');
@@ -2441,7 +2443,10 @@ final class NewsItemFormTest extends TestCase
 
         installApp('news');
 
-        $bal = createItem(self::data('Осенний бал', 'osennij-bal'), self::EDITOR);
+        // Адрес заготовленной строки совпадает с тем, что даёт `slugify()` по таблице `NEWS_TRANSLIT`
+        // (`й` → `y`), и только поэтому проверка «занятый адрес» ниже остаётся проверкой: форма
+        // транслитерирует вписанный кириллицей адрес и обязана увидеть занятой адрес.
+        $bal = createItem(self::data('Осенний бал', 'osenniy-bal'), self::EDITOR);
         $draft = createItem(self::data('Черновик экскурсии', 'chernovik-ekskursii', [
             'status' => NEWS_STATUS['DRAFT'],
             'body' => [],
@@ -3377,7 +3382,7 @@ Expected: `No syntax errors detected`.
 Изменить `apps/news/templates/admin/summary.php` — в строку со ссылками после панели добавить создание:
 
 ```php
-    . '<a class="rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '
+    . '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '
     . 'href="' . e(NEWS_ITEM_NEW_PATH) . '">Новый материал</a>'
 ```
 
@@ -3390,7 +3395,7 @@ Expected: `No syntax errors detected`.
 ```php
     // Ссылка «Править» ведёт на форму задачи 18 и несёт обратный адрес: вернувшись из сохранения,
     // человек попадает в тот же список — с той же вкладкой, рубрикой и страницей.
-    $buttons .= '<a class="rounded-lg border border-ink/20 px-2.5 py-1 text-sm hover:bg-ink/5" href="'
+    $buttons .= '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-2.5 py-1 text-sm hover:bg-ink/5" href="'
         . e(queryAppend((string) $item['editHref'], 'back', $listing['href'])) . '">Править</a>';
 ```
 
@@ -3487,14 +3492,22 @@ Options -Indexes
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter WebServerConfigTest`
 Expected: PASS — четыре метода (три корневых + каталог загрузок).
 
-Изменить `.gitignore` — в блок каталога загрузок, сразу после `!/public/uploads/.htaccess` из задачи 1, добавить две:
+Изменить `.gitignore` — в блок каталога загрузок, сразу после `!/public/uploads/.htaccess` из задачи 1, добавить три строки правила:
 
 ```
-# Каталог обложек «Новостей» обязан быть в репозитории пустым: без него первая же загрузка падает,
-# а загруженные картинки git показал бы как изменения рабочего дерева.
+# Каталог обложек «Новостей» обязан быть в репозитории пустым: без него первая же загрузка падает.
+# Маска `/public/uploads/*` до содержимого этого каталога не достреливает (`*` не переходит через
+# `/`), а разрешение каталога возвращает git внутрь него — поэтому содержимое запрещено своей
+# маской, и только потом `.gitkeep` включён обратно по имени.
 !/public/uploads/news/
+/public/uploads/news/*
 !/public/uploads/news/.gitkeep
 ```
+
+Порядок этих трёх строк значим: решает последнее совпадение, поэтому `!/public/uploads/news/.gitkeep`
+обязан идти после маски содержимого, иначе пустой каталог исчезнет из репозитория. Проверка —
+страж `tests/guard/UploadsIgnoreTest.php`, он перечитывает правила `.gitignore` и отвечает на вопрос
+«что git считает игнорируемым», а не «есть ли нужная строка в файле».
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'require "config.php"; require "core/bootstrap.php"; echo is_dir("public/uploads/news") ? "есть" : "нет", PHP_EOL;'`
 Expected: `есть` (после `git add` каталога с `.gitkeep`).
@@ -3578,6 +3591,7 @@ git add apps/news/lib/form.php apps/news/lib/upload.php apps/news/lib/boot.php \
   apps/news/templates/admin/items.php public/uploads/.htaccess public/uploads/news/.gitkeep \
   public/assets/app.css \
   .gitignore tests/http/Kernel.php tests/guard/WebServerConfigTest.php \
+  tests/guard/UploadsIgnoreTest.php \
   tests/unit/NewsFormRulesTest.php tests/http/NewsItemFormTest.php
 git commit -m "Форма материала «Новостей»: создание, правка и загрузка обложки"
 ```
@@ -3586,7 +3600,7 @@ git commit -m "Форма материала «Новостей»: создан�
 `public/uploads/news/.gitkeep` и `.gitignore`. Все три — следствия приёма файлов, и разносить их по
 разным коммитам нельзя. `public/uploads/.htaccess` выключает исполнение PHP в каталоге загрузок: если
 он попадёт в репозиторий позже загруженного файла, между ними на боевом хостинге лежит каталог, куда
-редактор уже может записать исходник. `.gitkeep` и две строки в `.gitignore` нужны, чтобы каталог
+редактор уже может записать исходник. `.gitkeep` и три строки правила в `.gitignore` нужны, чтобы каталог
 загрузок не пропал из репозитория при правиле `/public/uploads/*` — пустой каталог git не хранит, а без
 каталога `move_uploaded_file()` падает на ровном месте.
 
