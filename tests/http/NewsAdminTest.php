@@ -237,11 +237,24 @@ final class NewsAdminTest extends TestCase
 
         self::assertSame(200, $page['status']);
         self::assertStringContainsString('<title>Материалы — админка</title>', $page['body']);
+        self::assertStringContainsString('noindex, nofollow', $page['body'], 'Список закрыт от индексирования, как и сводка');
         self::assertStringContainsString('24 материала', $page['body'], 'Число согласуется с русским plural()');
         self::assertStringContainsString('Закреплённый материал 1', $page['body']);
         self::assertStringContainsString('Материал 11', $page['body'], 'Двадцатая строка первой страницы');
         self::assertStringNotContainsString('Материал 12', $page['body'], 'Одиннадцатая строка уже на второй странице');
         self::assertStringNotContainsString('/news/admin/categories', $page['body']);
+    }
+
+    public function testСписокПредупреждаетОПерекосеТемЖеТекстом(): void
+    {
+        // Оповещение собирает одна функция (newsPinnedSkewAlert), а экранов у него два. Проверка
+        // держится именно на списке: пока текст был переписан в оба шаблона, второй экземпляр
+        // не проверялся ни одним тестом и мог расходиться со сводкой.
+        $this->login();
+        $page = Kernel::get(NEWS_ADMIN_ITEMS_PATH);
+
+        self::assertStringContainsString('Закреплено 6 материалов — это больше 5', $page['body']);
+        self::assertStringContainsString('role="alert"', $page['body'], 'Предупреждение обязан прочесть скринридер');
     }
 
     public function testСтрокаСпискаНесётДанныеИКнопки(): void
@@ -268,6 +281,15 @@ final class NewsAdminTest extends TestCase
         self::assertStringNotContainsString('Закреплённый материал 1', $page['body']);
         self::assertStringContainsString('>На печать</button>', $page['body']);
         self::assertStringNotContainsString('>Снять с сайта</button>', $page['body'], 'Черновику снятие не предлагается');
+
+        // Скрытое поле возврата несёт адрес списка вместе с фильтром вкладки: «На печать» из
+        // «Черновиков» возвращает в те же «Черновики», а не на полный список. Без этой проверки
+        // ветка плана про возврат с фильтрами не закреплена ни одним тестом.
+        self::assertStringContainsString(
+            'name="back" value="/news/admin/items?status=DRAFT"',
+            $page['body'],
+            'Действие возвращает в тот же список с той же вкладкой'
+        );
     }
 
     public function testЖдущиеСрокаПоказываютСрокИНеПредлагаютЗакрепление(): void

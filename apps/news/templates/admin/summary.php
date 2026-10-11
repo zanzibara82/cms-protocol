@@ -38,17 +38,7 @@ $waitingText = $waiting === 0
     ? 'Материалов, которые ждут своего срока, нет.'
     : sprintf('По сроку выйдут сами: %1$d %2$s.', $waiting, plural($waiting, $itemForms));
 
-$alert = '';
-if (tooManyPinned($pinned)) {
-    $alert = '<p class="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">'
-        . sprintf(
-            'Закреплено %1$d %2$s — это больше %3$d: закреплённые идут первыми в ленте, в рубриках '
-                . 'и в каждом блоке и вытесняют обычную ленту с первой страницы.',
-            $pinned,
-            plural($pinned, $itemForms),
-            PINNED_WARN_LIMIT
-        ) . '</p>';
-}
+$alert = newsPinnedSkewAlert($pinned);
 
 $foot = '<p class="text-sm text-ink/60">Выход по сроку работает без задания: строка уже опубликована, '
     . 'а лента, блоки и карта сайтов показывают её, когда наступит срок. Проверить её можно по ссылке '

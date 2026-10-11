@@ -119,3 +119,27 @@ function newsAdminBackHref(string $raw): string
 
     return ($rest === '' || str_starts_with($rest, '?')) ? $value : NEWS_ADMIN_ITEMS_PATH;
 }
+
+/**
+ * Оповещение о перекосе закрепления — одна функция на два экрана.
+ *
+ * Сводка и список печатают его буквально одним текстом: пока он был переписан в оба шаблона,
+ * правка формулировки расходилась, а второй экземпляр не проверялся ни одним тестом. Здесь
+ * правило (`tooManyPinned()`) и разметка живут вместе, а шаблоны только вставляют значение —
+ * пустая строка значит «предупреждать не о чем».
+ */
+function newsPinnedSkewAlert(int $pinned): string
+{
+    if (!tooManyPinned($pinned)) {
+        return '';
+    }
+
+    return '<p class="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">'
+        . sprintf(
+            'Закреплено %1$d %2$s — это больше %3$d: закреплённые идут первыми в ленте, в рубриках '
+                . 'и в каждом блоке и вытесняют обычную ленту с первой страницы.',
+            $pinned,
+            plural($pinned, ['материал', 'материала', 'материалов']),
+            PINNED_WARN_LIMIT
+        ) . '</p>';
+}

@@ -74,16 +74,19 @@ $filtersHtml = '<nav aria-label="Материалы по состоянию" cla
 // Кнопка строки — своя форма с скрытыми `op`, `id` и `back`: имя кнопки не доходит до сервера,
 // если человек отправил форму клавишей Enter, а `back` держит фильтр и страницу.
 $opClass = static function (string $op): string {
+    // Сплошная кнопка одна — «На печать»; снятие с сайта, закрепление и открепление остаются
+    // контурными. Отдельная ветка на каждый контурный случай в точности повторила бы `default`,
+    // и правка цвета размечалась бы в двух местах.
     return match ($op) {
         'publish' => 'bg-ink text-cream hover:opacity-90',
-        'unpublish' => 'border border-ink/20 hover:bg-ink/5',
         default => 'border border-ink/20 hover:bg-ink/5',
     };
 };
 
-$buttons = '';
 $rows = '';
 foreach ($listing['items'] as $item) {
+    // Кнопки пересобираются для каждой строки: переменная обнуляется здесь, и внешний ноль
+    // перед циклом был бы мёртвой записью.
     $buttons = '';
     $id = (string) $item['id'];
 
@@ -165,14 +168,7 @@ $heading = '<div class="flex flex-wrap items-end justify-between gap-3"><div cla
     . ' · на сайте ' . e((string) $onSite) . ', ждут срока ' . e((string) $counts['scheduled'])
     . ', черновиков ' . e((string) $counts['DRAFT']) . '</p></div></div>';
 
-$alert = '';
-if (tooManyPinned($pinned)) {
-    $alert = '<p class="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">'
-        . sprintf(
-            'Закреплённых материалов на сайте больше %d: они вытесняют обычную ленту с первой страницы.',
-            PINNED_WARN_LIMIT
-        ) . '</p>';
-}
+$alert = newsPinnedSkewAlert($pinned);
 
 $foot = '<p class="text-sm text-ink/60">На странице ' . e((string) ADMIN_NEWS_PER_PAGE) . ' материалов. '
     . 'Текст, рубрику и теги правят в форме материала; «На печать» выходит с тем сроком, что стоит в поле, '

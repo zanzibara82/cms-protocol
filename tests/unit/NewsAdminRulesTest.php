@@ -121,6 +121,20 @@ final class NewsAdminRulesTest extends TestCase
         self::assertSame(300, mb_strlen(newsAdminBackHref($long)));
     }
 
+    public function testОповещениеОПерекосеСобираетсяВОдномМесте(): void
+    {
+        // Оповещение печатают два экрана, и текст у них обязан быть дословно один: пока он был
+        // переписан в оба шаблона, правка формулировки расходилась между экранами.
+        self::assertSame('', newsPinnedSkewAlert(0), 'Нет закреплённых — не о чем предупреждать');
+        self::assertSame('', newsPinnedSkewAlert(PINNED_WARN_LIMIT), 'Ровно предел — ещё не перекос');
+
+        $alert = newsPinnedSkewAlert(PINNED_WARN_LIMIT + 1);
+
+        self::assertStringStartsWith('<p class="rounded-lg border border-bad/30 bg-bad/10', $alert);
+        self::assertStringContainsString('role="alert"', $alert, 'Оповещение обязан прочесть скринридер');
+        self::assertStringContainsString('Закреплено 6 материалов — это больше 5', $alert);
+    }
+
     public function testКаждаяКнопкаВедётКИзвестномуУведомлению(): void
     {
         self::assertSame(['publish', 'unpublish', 'pin', 'unpin'], array_keys(NEWS_ROW_OP_LABEL));
