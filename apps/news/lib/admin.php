@@ -9,12 +9,23 @@ declare(strict_types=1);
 // Сводка раздела — её адрес читают манифест (adminNav), вкладки и ссылка «на главный экран».
 const NEWS_ADMIN_PATH = '/news/admin';
 
+// Адреса экранов справочников. Их читают вкладки, действия, шаблоны и HTTP-тесты — один раз
+// здесь, а не шестью строками в четырёх файлах. Константы объявлены выше вкладок: PHP вычисляет
+// значение константы по строкам файла, и ссылка вперёд на ещё не объявленную константу упала бы
+// «Undefined constant» прямо при подключении файла, чего `php -l` не видит.
+const NEWS_ADMIN_CATEGORIES_PATH = '/news/admin/categories';
+const NEWS_ADMIN_TAGS_PATH = '/news/admin/tags';
+
 // Вкладки самого раздела. Ядро показывает свои вкладки плюс одну — «Новости» из манифеста;
-// эта полоса живёт внутри экрана и ведёт по экранам раздела.
+// эта полоса живёт внутри экрана и ведёт по экранам раздела. NEWS_ADMIN_ITEMS_PATH объявлена в
+// lib/items.php, который boot.php подключает раньше этого файла, поэтому к моменту вычисления
+// вкладок она уже определена. Порядок вкладок — порядок экрана: справочники стоят после материалов.
 /** @var list<array{href: string, label: string}> */
 const NEWS_ADMIN_TABS = [
-    ['href' => '/news/admin', 'label' => 'Сводка'],
-    ['href' => '/news/admin/items', 'label' => 'Материалы'],
+    ['href' => NEWS_ADMIN_PATH, 'label' => 'Сводка'],
+    ['href' => NEWS_ADMIN_ITEMS_PATH, 'label' => 'Материалы'],
+    ['href' => NEWS_ADMIN_CATEGORIES_PATH, 'label' => 'Рубрики'],
+    ['href' => NEWS_ADMIN_TAGS_PATH, 'label' => 'Теги'],
 ];
 
 // Подписи кнопок строки списка. Это именно подписи: право на переход проверяет сервер
@@ -29,6 +40,44 @@ const NEWS_ROW_OP_LABEL = [
 
 // Потолок адреса возврата: значение приходит из поля формы и уходит в заголовок Location.
 const NEWS_ADMIN_BACK_MAX = 300;
+
+// ── Справочники ──────────────────────────────────────────
+
+// Адреса экранов объявлены в начале файла, рядом с NEWS_ADMIN_PATH: их вычисляют вкладки.
+// Здесь — договор действий двух справочников: что вообще возможно и как это называется.
+// Константы стоят выше функций вместе с остальными: их читают шаблоны, действия и тесты через
+// другие файлы, а PHPStan 6 разбирает константу этого файла, только если она объявлена до
+// функций. Кнопки строки (`newsCategoryRowActions()` и `newsTagRowActions()`) остались внизу.
+
+// Действия рубрики ровно в том порядке, в котором их разбирает match в actions/catalog.php.
+// Страж задачи 20 сверяет этот список с обработчиком: новое действие без ветки match не пройдёт.
+/** @var list<string> */
+const NEWS_CATEGORY_OPS = ['create', 'rename', 'describe', 'show', 'hide', 'up', 'down', 'delete'];
+
+/** @var array<string, string> */
+const NEWS_CATEGORY_OP_LABEL = [
+    'create' => 'Добавить рубрику',
+    'rename' => 'Переименовать',
+    'describe' => 'Сохранить описание',
+    'show' => 'Показать',
+    'hide' => 'Скрыть',
+    'up' => 'Вверх',
+    'down' => 'Вниз',
+    'delete' => 'Удалить',
+];
+
+/** @var list<string> */
+const NEWS_TAG_OPS = ['rename', 'delete'];
+
+/** @var array<string, string> */
+const NEWS_TAG_OP_LABEL = [
+    'rename' => 'Переименовать',
+    'delete' => 'Удалить',
+];
+
+// Потолок подписи отказа: текст печатается на экране и ложится в журнал, поэтому это короткое имя
+// действия, а не содержимое запроса.
+const NEWS_UNKNOWN_ACTION_MAX = 80;
 
 /**
  * Кнопки одной строки списка.
@@ -142,4 +191,54 @@ function newsPinnedSkewAlert(int $pinned): string
             plural($pinned, ['материал', 'материала', 'материалов']),
             PINNED_WARN_LIMIT
         ) . '</p>';
+}
+
+// ── Справочники: кнопки строк ────────────────────────────
+
+// Константы действий двух справочников объявлены в начале файла, рядом с остальными: их читают
+// другие файлы, и PHPStan 6 разбирает их только до функций. Здесь остаются сами кнопки строки.
+
+/**
+ * Кнопки строки справочника рубрик.
+ *
+ * `show` и `hide` — два намерения одного переключения: экран печатает ту подпись, что
+ * соответствует состоянию строки, а toggleCategoryVisibility() делает ровно то, что обещает
+ * следующая за кнопкой плашка.
+ *
+ * @param array{id: string, slug: string, title: string, description: ?string, order: int, visible: bool, items: array{total: int, visible: int}} $row
+ *
+ * @return list<array{op: string, label: string}>
+ */
+function newsCategoryRowActions(array $row): array
+{
+    $toggle = $row['visible'] === true ? 'hide' : 'show';
+
+    $ops = [$toggle, 'up', 'down', 'delete'];
+    $out = [];
+
+    foreach ($ops as $op) {
+        $out[] = ['op' => $op, 'label' => NEWS_CATEGORY_OP_LABEL[$op]];
+    }
+
+    return $out;
+}
+
+/**
+ * Кнопки строки тегов. Переименование — поле с формой, а не кнопка строки: его подпись читает
+ * шаблон прямо из NEWS_TAG_OP_LABEL. Удаление, наоборот, кнопка: шаблон собирает её тем же
+ * циклом, что и кнопки строки рубрики.
+ *
+ * @param array{id: string, slug: string, label: string, items: int} $row
+ *
+ * @return list<array{op: string, label: string}>
+ */
+function newsTagRowActions(array $row): array
+{
+    return [['op' => 'delete', 'label' => NEWS_TAG_OP_LABEL['delete']]];
+}
+
+/** @return array{ok: false, notice: string, error: string} */
+function catalogFailure(string $error): array
+{
+    return ['ok' => false, 'notice' => '', 'error' => $error];
 }

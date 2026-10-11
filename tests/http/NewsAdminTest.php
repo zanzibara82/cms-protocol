@@ -225,7 +225,7 @@ final class NewsAdminTest extends TestCase
         self::assertStringContainsString('href="/news/admin" aria-current="page"', $page['body']);
         self::assertStringContainsString('>Материалы</a>', $page['body']);
         self::assertStringContainsString('href="/news"', $page['body'], 'Ссылка на ленту с админки — единственный путь посмотреть результат');
-        self::assertStringNotContainsString('/news/admin/categories', $page['body'], 'Панели справочников появляются в задаче 19');
+        self::assertStringContainsString('/news/admin/categories', $page['body'], 'С задачи 19 справочники стоят и в полосе вкладок, и панелями на сводке');
     }
 
     // ── Список ────────────────────────────────────────────
@@ -242,7 +242,7 @@ final class NewsAdminTest extends TestCase
         self::assertStringContainsString('Закреплённый материал 1', $page['body']);
         self::assertStringContainsString('Материал 11', $page['body'], 'Двадцатая строка первой страницы');
         self::assertStringNotContainsString('Материал 12', $page['body'], 'Одиннадцатая строка уже на второй странице');
-        self::assertStringNotContainsString('/news/admin/categories', $page['body']);
+        self::assertStringContainsString('/news/admin/categories', $page['body']);
     }
 
     public function testСписокПредупреждаетОПерекосеТемЖеТекстом(): void

@@ -72,7 +72,7 @@ final class NewsAdminRulesTest extends TestCase
 
     public function testПолосаВкладокЗнаетДваЭкрана(): void
     {
-        self::assertCount(2, NEWS_ADMIN_TABS);
+        self::assertCount(4, NEWS_ADMIN_TABS);
 
         foreach (NEWS_ADMIN_TABS as $tab) {
             self::assertStringStartsWith('/news/admin', (string) $tab['href'], (string) $tab['label']);

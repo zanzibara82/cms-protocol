@@ -11,6 +11,8 @@ declare(strict_types=1);
  * @var int $onSite
  * @var int $pinned
  * @var int $waiting
+ * @var int $categories
+ * @var int $tags
  */
 $itemForms = ['материал', 'материала', 'материалов'];
 
@@ -34,6 +36,19 @@ $panel = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . e(NEWS_ADMIN_ITEMS_PATH) . '">Материалы</a></h2>'
     . '<dl class="mt-2">' . $lines . '</dl></section>';
 
+// Панели справочников. Числа посчитаны контроллером: экран их только печатает.
+$catalogPanels = '';
+foreach ([
+    ['Рубрики', NEWS_ADMIN_CATEGORIES_PATH, $categories, ['рубрика', 'рубрики', 'рубрик']],
+    ['Теги', NEWS_ADMIN_TAGS_PATH, $tags, ['тег', 'тега', 'тегов']],
+] as [$heading, $href, $count, $forms]) {
+    $catalogPanels .= '<section class="rounded-lg border border-ink/10 bg-white p-4">'
+        . '<h2 class="font-semibold"><a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-accent" href="'
+        . e($href) . '">' . e($heading) . '</a></h2>'
+        . '<p class="mt-2 text-sm text-ink/60">' . e((string) $count) . ' ' . e(plural($count, $forms)) . '</p>'
+        . '</section>';
+}
+
 $waitingText = $waiting === 0
     ? 'Материалов, которые ждут своего срока, нет.'
     : sprintf('По сроку выйдут сами: %1$d %2$s.', $waiting, plural($waiting, $itemForms));
@@ -46,7 +61,7 @@ $foot = '<p class="text-sm text-ink/60">Выход по сроку работа�
 
 $content = $nav . '<p class="text-sm text-ink/70">' . e($waitingText) . '</p>'
     . $alert
-    . '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">' . $panel . '</div>'
+    . '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">' . $panel . $catalogPanels . '</div>'
     . '<p class="flex flex-wrap items-center gap-3"><a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '
     . 'href="' . e(NEWS_ITEM_NEW_PATH) . '">Новый материал</a>'
     . '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '

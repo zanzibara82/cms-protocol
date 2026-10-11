@@ -29,6 +29,8 @@ function newsAdminSummary(array $params = []): void
         'onSite' => onSiteItemCount($now),
         'pinned' => $pinned,
         'waiting' => $counts['scheduled'],
+        'categories' => count(adminCategoryRows()),
+        'tags' => count(adminTagRows()),
     ], ['title' => 'Новости — админка', 'noindex' => true]);
 }
 
@@ -122,4 +124,39 @@ function renderNewsItemForm(array $item, array $raw, array $errors, string $back
         'title' => ($isNew ? 'Новый материал' : 'Правка материала') . ' — админка',
         'noindex' => true,
     ]);
+}
+
+// Справочники: экран показывает ровно то, что посчитал lib/catalog.php. Права на вход здесь
+// не проверяются — гейт маршрута (permission => 'login') делает это раньше, и вторая проверка
+// была бы вторым описанием того же правила.
+
+/** @param array<string, string> $params */
+function newsAdminCategories(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+
+    render('news/admin/categories', [
+        'nav' => newsAdminNav(requestPath()),
+        'notice' => noticeForAdminScreen(CATALOG_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => adminCategoryRows(),
+        'titleMax' => fieldLimit(CATEGORY_FIELDS, 'title', 'max'),
+        'descriptionMax' => fieldLimit(CATEGORY_FIELDS, 'description', 'max'),
+    ], ['title' => 'Рубрики — админка', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function newsAdminTags(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+
+    render('news/admin/tags', [
+        'nav' => newsAdminNav(requestPath()),
+        'notice' => noticeForAdminScreen(CATALOG_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => adminTagRows(),
+        'labelMax' => fieldLimit(TAG_FIELDS, 'label', 'max'),
+    ], ['title' => 'Теги — админка', 'noindex' => true]);
 }

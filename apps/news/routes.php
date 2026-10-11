@@ -8,6 +8,7 @@ require_once __DIR__ . '/lib/boot.php';
 require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/actions/items.php';
 require_once __DIR__ . '/actions/item.php';
+require_once __DIR__ . '/actions/catalog.php';
 
 // Порядок важен: /news/c/{slug} и /news/t/{slug} стоят до /news/{slug}. Сами адреса «c» и «t»
 // заняты в NEWS_RESERVED_SLUGS, поэтому материал не может увести у рубрики её страницу.
@@ -31,6 +32,13 @@ addRoute('GET', '/news/admin/items/new', 'newsItemNew', ['app' => 'news', 'priva
 addRoute('POST', '/news/admin/items/new', 'newsItemSaveAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/news/admin/items/{id}', 'newsItemEdit', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/news/admin/items/{id}', 'newsItemSaveAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+
+// Экраны справочников: GET открывает экран, POST выполняет действие. Пути писаны литералами —
+// адрес рубрик и тегов читают вкладки lib/admin.php, а эти строки держатся на том же значении.
+addRoute('GET', '/news/admin/categories', 'newsAdminCategories', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/news/admin/categories', 'newsCategoriesAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/news/admin/tags', 'newsAdminTags', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/news/admin/tags', 'newsTagsAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 
 /** @param array<string, string> $params */
 function newsFeedPage(array $params = []): void
