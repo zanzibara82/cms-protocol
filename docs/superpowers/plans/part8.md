@@ -390,7 +390,7 @@ function newsPinnedSkewAlert(int $pinned): string
     return '<p class="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">'
         . sprintf(
             'Закреплено %1$d %2$s — это больше %3$d: закреплённые идут первыми в ленте, в рубриках '
-                . 'и в подборках тегов, поэтому вытесняют обычную ленту с первой страницы.',
+                . 'и в подборке тегов и вытесняют обычную ленту с первой страницы.',
             $pinned,
             plural($pinned, ['материал', 'материала', 'материалов']),
             PINNED_WARN_LIMIT
