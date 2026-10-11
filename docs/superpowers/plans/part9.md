@@ -1191,13 +1191,16 @@ Run:
 docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T --service-ports -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+# следующим окном, когда стенд отвечает: ядро ставится формой http://localhost:8080/setup.php
 docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
-Команды те же, что в шаге 9 задачи 17: `db-reset` — на хосте, замок снять вручную, база тестовая,
-`-P` обязателен, у `php -S` — скрипт-роутер.
+Команды те же, что в шаге 9 задачи 17, и там разобраны подробно: `db-reset` — на хосте, замок снять
+вручную, база тестовая, `run` публикует порты сервиса флагом `--service-ports` (`-P` — флаг `up`),
+у `php -S` обязателен скрипт-роутер `public/index.php`. Ядро ставится только формой в браузере:
+у `public/setup.php` нет ветки разбора аргументов команды, он знает POST, и строка вида
+`php public/setup.php --admin-email=…` из прежнего текста плана базу не заполняла.
 
 Открыть `http://localhost:8080/news/admin/categories`, войти и пройти путь руками:
 

@@ -48,6 +48,7 @@ const NEWS_ROW_OP_LABEL = ['publish' => 'На печать', 'unpublish' => 'С�
 newsRowActions(array $item): list<array{op: string, label: string}>
 newsAdminNav(string $current): string
 newsAdminBackHref(string $raw): string
+newsPinnedSkewAlert(int $pinned): string
 newsAdminSummary(array $params = []): void
 newsAdminItems(array $params = []): void
 newsItemsAction(array $params = []): void
@@ -219,6 +220,20 @@ final class NewsAdminRulesTest extends TestCase
         self::assertSame(300, mb_strlen(newsAdminBackHref($long)));
     }
 
+    public function testОповещениеОПерекосеСобираетсяВОдномМесте(): void
+    {
+        // Оповещение печатают два экрана, и текст у них обязан быть дословно один: пока он был
+        // переписан в оба шаблона, правка формулировки расходилась между экранами.
+        self::assertSame('', newsPinnedSkewAlert(0), 'Нет закреплённых — не о чем предупреждать');
+        self::assertSame('', newsPinnedSkewAlert(PINNED_WARN_LIMIT), 'Ровно предел — ещё не перекос');
+
+        $alert = newsPinnedSkewAlert(PINNED_WARN_LIMIT + 1);
+
+        self::assertStringStartsWith('<p class="rounded-lg border border-bad/30 bg-bad/10', $alert);
+        self::assertStringContainsString('role="alert"', $alert, 'Оповещение обязан прочесть скринридер');
+        self::assertStringContainsString('Закреплено 6 материалов — это больше 5', $alert);
+    }
+
     public function testКаждаяКнопкаВедётКИзвестномуУведомлению(): void
     {
         self::assertSame(['publish', 'unpublish', 'pin', 'unpin'], array_keys(NEWS_ROW_OP_LABEL));
@@ -357,6 +372,30 @@ function newsAdminBackHref(string $raw): string
 
     return ($rest === '' || str_starts_with($rest, '?')) ? $value : NEWS_ADMIN_ITEMS_PATH;
 }
+
+/**
+ * Оповещение о перекосе закрепления — одна функция на два экрана.
+ *
+ * Сводка и список печатают его буквально одним текстом: пока он был переписан в оба шаблона,
+ * правка формулировки расходилась, а второй экземпляр не проверялся ни одним тестом. Здесь
+ * правило (`tooManyPinned()`) и разметка живут вместе, а шаблоны только вставляют значение —
+ * пустая строка значит «предупреждать не о чем».
+ */
+function newsPinnedSkewAlert(int $pinned): string
+{
+    if (!tooManyPinned($pinned)) {
+        return '';
+    }
+
+    return '<p class="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">'
+        . sprintf(
+            'Закреплено %1$d %2$s — это больше %3$d: закреплённые идут первыми в ленте, в рубриках '
+                . 'и в каждом блоке и вытесняют обычную ленту с первой страницы.',
+            $pinned,
+            plural($pinned, ['материал', 'материала', 'материалов']),
+            PINNED_WARN_LIMIT
+        ) . '</p>';
+}
 ```
 
 Изменить `apps/news/lib/boot.php` — добавить девятую строку:
@@ -372,7 +411,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l a
 Expected: `No syntax errors detected`.
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsAdminRulesTest`
-Expected: PASS — 9 проверок.
+Expected: PASS — 10 проверок.
 
 - [ ] **Шаг 3: Починить повторную регистрацию маршрутов раздела**
 
@@ -401,13 +440,18 @@ Expected: PASS — 9 проверок.
             $paths[] = (string) $route['method'] . ' ' . (string) $route['pattern'];
         }
 
-        self::assertContains('GET /news', $paths, 'Публичные маршруты раздела после сброса');
+        self::assertContains('GET /news', $paths, 'Маршруты «Новостей» после сброса');
         self::assertContains('GET /news/{slug}', $paths, 'Карточка материала после сброса');
     }
 ```
 
+Сообщение у первой проверки намеренно отличается от «Публичные маршруты раздела после сброса»,
+которое уже стоит в этом файле на фикстурном `GET /demo`: два разных утверждения с одним текстом
+читаются как одна проверка, а падать они обязаны по разным причинам. Тот же повод не дублировать
+комментарий про `require_once` — он объясняется один раз, в начале метода.
+
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter RouteHandlersTest`
-Expected: FAIL — `Публичные маршруты раздела после сброса` (в таблице только маршруты ядра).
+Expected: FAIL — `Маршруты «Новостей» после сброса` (в таблице только маршруты ядра).
 
 Заменить `registerAppRoutes()` в `core/apps.php` целиком и добавить рядом снимок:
 
@@ -1039,11 +1083,24 @@ final class NewsAdminTest extends TestCase
 
         self::assertSame(200, $page['status']);
         self::assertStringContainsString('<title>Материалы — админка</title>', $page['body']);
+        self::assertStringContainsString('noindex, nofollow', $page['body'], 'Список закрыт от индексирования, как и сводка');
         self::assertStringContainsString('24 материала', $page['body'], 'Число согласуется с русским plural()');
         self::assertStringContainsString('Закреплённый материал 1', $page['body']);
         self::assertStringContainsString('Материал 11', $page['body'], 'Двадцатая строка первой страницы');
         self::assertStringNotContainsString('Материал 12', $page['body'], 'Одиннадцатая строка уже на второй странице');
         self::assertStringNotContainsString('/news/admin/categories', $page['body']);
+    }
+
+    public function testСписокПредупреждаетОПерекосеТемЖеТекстом(): void
+    {
+        // Оповещение собирает одна функция (newsPinnedSkewAlert), а экранов у него два. Проверка
+        // держится именно на списке: пока текст был переписан в оба шаблона, второй экземпляр
+        // не проверялся ни одним тестом и мог расходиться со сводкой.
+        $this->login();
+        $page = Kernel::get(NEWS_ADMIN_ITEMS_PATH);
+
+        self::assertStringContainsString('Закреплено 6 материалов — это больше 5', $page['body']);
+        self::assertStringContainsString('role="alert"', $page['body'], 'Предупреждение обязан прочесть скринридер');
     }
 
     public function testСтрокаСпискаНесётДанныеИКнопки(): void
@@ -1070,6 +1127,15 @@ final class NewsAdminTest extends TestCase
         self::assertStringNotContainsString('Закреплённый материал 1', $page['body']);
         self::assertStringContainsString('>На печать</button>', $page['body']);
         self::assertStringNotContainsString('>Снять с сайта</button>', $page['body'], 'Черновику снятие не предлагается');
+
+        // Скрытое поле возврата несёт адрес списка вместе с фильтром вкладки: «На печать» из
+        // «Черновиков» возвращает в те же «Черновики», а не на полный список. Без этой проверки
+        // ветка плана про возврат с фильтрами не закреплена ни одним тестом.
+        self::assertStringContainsString(
+            'name="back" value="/news/admin/items?status=DRAFT"',
+            $page['body'],
+            'Действие возвращает в тот же список с той же вкладкой'
+        );
     }
 
     public function testЖдущиеСрокаПоказываютСрокИНеПредлагаютЗакрепление(): void
@@ -1480,17 +1546,7 @@ $waitingText = $waiting === 0
     ? 'Материалов, которые ждут своего срока, нет.'
     : sprintf('По сроку выйдут сами: %1$d %2$s.', $waiting, plural($waiting, $itemForms));
 
-$alert = '';
-if (tooManyPinned($pinned)) {
-    $alert = '<p class="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">'
-        . sprintf(
-            'Закреплено %1$d %2$s — это больше %3$d: закреплённые идут первыми в ленте, в рубриках '
-                . 'и в каждом блоке и вытесняют обычную ленту с первой страницы.',
-            $pinned,
-            plural($pinned, $itemForms),
-            PINNED_WARN_LIMIT
-        ) . '</p>';
-}
+$alert = newsPinnedSkewAlert($pinned);
 
 $foot = '<p class="text-sm text-ink/60">Выход по сроку работает без задания: строка уже опубликована, '
     . 'а лента, блоки и карта сайтов показывают её, когда наступит срок. Проверить её можно по ссылке '
@@ -1583,16 +1639,19 @@ $filtersHtml = '<nav aria-label="Материалы по состоянию" cla
 // Кнопка строки — своя форма с скрытыми `op`, `id` и `back`: имя кнопки не доходит до сервера,
 // если человек отправил форму клавишей Enter, а `back` держит фильтр и страницу.
 $opClass = static function (string $op): string {
+    // Сплошная кнопка одна — «На печать»; снятие с сайта, закрепление и открепление остаются
+    // контурными. Отдельная ветка на каждый контурный случай в точности повторила бы `default`,
+    // и правка цвета размечалась бы в двух местах.
     return match ($op) {
         'publish' => 'bg-ink text-cream hover:opacity-90',
-        'unpublish' => 'border border-ink/20 hover:bg-ink/5',
         default => 'border border-ink/20 hover:bg-ink/5',
     };
 };
 
-$buttons = '';
 $rows = '';
 foreach ($listing['items'] as $item) {
+    // Кнопки пересобираются для каждой строки: переменная обнуляется здесь, и внешний ноль
+    // перед циклом был бы мёртвой записью.
     $buttons = '';
     $id = (string) $item['id'];
 
@@ -1671,14 +1730,7 @@ $heading = '<div class="flex flex-wrap items-end justify-between gap-3"><div cla
     . ' · на сайте ' . e((string) $onSite) . ', ждут срока ' . e((string) $counts['scheduled'])
     . ', черновиков ' . e((string) $counts['DRAFT']) . '</p></div></div>';
 
-$alert = '';
-if (tooManyPinned($pinned)) {
-    $alert = '<p class="rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">'
-        . sprintf(
-            'Закреплённых материалов на сайте больше %d: они вытесняют обычную ленту с первой страницы.',
-            PINNED_WARN_LIMIT
-        ) . '</p>';
-}
+$alert = newsPinnedSkewAlert($pinned);
 
 $foot = '<p class="text-sm text-ink/60">На странице ' . e((string) ADMIN_NEWS_PER_PAGE) . ' материалов. '
     . 'Текст, рубрику и теги правят в форме материала; «На печать» выходит с тем сроком, что стоит в поле, '
@@ -1706,7 +1758,7 @@ $notice = $notice === '' ? null : $notice;
   срок, который ещё не наступил, выглядит опубликованным по подписи, и человек решает по цвету.
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
-Expected: PASS — 23 проверки.
+Expected: PASS — 24 проверки.
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/templates/admin/summary.php && php -l apps/news/templates/admin/items.php"`
 Expected: `No syntax errors detected` дважды.
@@ -3464,7 +3516,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — 23 проверки, все новые: форма создаёт, правит и принимает файл.
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsAdminTest`
-Expected: PASS — 23 проверки. Одна из них утверждает, что в списке **нет** ссылки на справочники
+Expected: PASS — 24 проверки. Одна из них утверждает, что в списке **нет** ссылки на справочники
 задачи 19; кнопки этой задачи её не ломают.
 
 - [ ] **Шаг 9: Прогнать ворота целиком**
