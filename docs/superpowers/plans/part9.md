@@ -16,6 +16,11 @@
 visibility, up, down, delete, tagRename, tagDelete`). Источник истины по правилам — задачи 12–13,
 где эти функции уже написаны и проверены; здесь только экраны, которые их вызывают.
 
+**Разметка и зона нажатия.** Разметка экранов в этой задаче — образец, а не готовое предписание:
+каждый контроль обязан нести класс `min-h-[44px]` (страж `tests/guard/TapTargetTest.php`), а строки
+предписанного размеченного кода без него — ошибка текста плана, а не повод убрать класс. Так сделаны
+экраны задачи 17: в `apps/news/templates/admin/items.php` класс стоит на каждом контроле.
+
 **Интерфейсы:**
 - Потребляет:
   - `core/template.php`: `render()`; `core/escape.php`: `e()`; `admin/layout.php`: `adminShell()`
@@ -1236,6 +1241,10 @@ git commit -m "Новости: экраны справочников — руб�
   `tests/db/NewsNoticeCoverageTest.php`
 - Изменить: `docs/superpowers/specs/2026-10-06-php-cms-pilot-design.md` (§8.6 — страницы тегов
   исключены из карты сайтов, правка формулировки, а не кода)
+- Изменить: `docs/superpowers/specs/2026-10-10-cms-final-specification.md` (строка 336: та же
+  формулировка про «видимые материалы, страницы рубрик и тегов»). Правка обязательна в обоих
+  документах: итоговая спецификация новее пилотной, и читатель, который откроет только её,
+  восстановит адреса тегов в карте по более новому документу и будет чинить то, что сделано верно.
 - Тест: перечисленные файлы сами и есть проверка
 
 **Интерфейсы:**
@@ -1247,7 +1256,8 @@ git commit -m "Новости: экраны справочников — руб�
   - `apps/news/lib/feed.php`: `publishedForSitemap()`; `apps/news/lib/catalog.php`:
     `visibleCategories()`, `categoryIdOf()`, `createCategory()`, `renameCategory()`,
     `updateCategoryDescription()`, `toggleCategoryVisibility()`, `deleteCategory()`, `moveCategory()`,
-    `renameTag()`, `deleteTag()`, `createItem()`, `updateItem()`, `setItemStatus()`, `setItemPinned()`
+    `renameTag()`, `deleteTag()`; `apps/news/lib/items.php`:
+    `createItem()`, `updateItem()`, `setItemStatus()`, `setItemPinned()`
   - `apps/news/lib/constants.php`: `NEWS_NOTICE_TEXT`, `CATALOG_NOTICE_TEXT`
   - `apps/news/lib/admin.php` (задачи 17 и 19): `NEWS_ROW_OP_LABEL`, `NEWS_CATEGORY_OPS`,
     `NEWS_CATEGORY_OP_LABEL`, `NEWS_TAG_OPS`, `NEWS_TAG_OP_LABEL`
@@ -1408,8 +1418,12 @@ final class NewsSitemapTest extends NewsDbTestCase
         $xml = sitemapXml();
         hooksReset();
 
-        self::assertStringContainsString('<loc>/news/na-sajte</loc>', $xml);
-        self::assertStringNotContainsString('<loc>/news/chernovik</loc>', $xml);
+        // `sitemapXml()` печатает `<loc>` через `absoluteUrl()`, а `config.sample.php` даёт
+        // `SITE_URL = http://localhost:8080`: в ответе адрес абсолютный, относительной формы в
+        // разметке не бывает ни при каком содержимом. Отрицательная проверка потому берёт голый
+        // путь материала, а не тег с префиксом — по образцу `tests/http/SitemapTest.php`.
+        self::assertStringContainsString('<loc>http://localhost:8080/news/na-sajte</loc>', $xml);
+        self::assertStringNotContainsString('/news/chernovik', $xml);
     }
 
     public function testБезУстановленногоРазделаФильтрМолчит(): void
@@ -2191,7 +2205,9 @@ final class NewsAssemblyTest extends TestCase
         self::assertStringContainsString('Осенний бал', Kernel::get('/news/t/vypusknik')['body']);
 
         $sitemap = Kernel::get('/sitemap.xml')['body'];
-        self::assertStringContainsString('<loc>/news/osennij-bal</loc>', $sitemap);
+        // Тот же порядок, что в шаге карты сайтов выше: `sitemapXml()` печатает `<loc>` абсолютным
+        // адресом через `absoluteUrl()`, поэтому проверка берёт полный адрес с `SITE_URL`.
+        self::assertStringContainsString('<loc>http://localhost:8080/news/osennij-bal</loc>', $sitemap);
     }
 
     public function testАдминкаЗакрытаИндексироватьНечего(): void

@@ -6,6 +6,7 @@
 - Create: `apps/news/templates/admin/summary.php`, `apps/news/templates/admin/items.php`
 - Modify: `apps/news/routes.php` (три адреса админки + подключение файлов раздела)
 - Modify: `apps/news/lib/boot.php` (девятая строка)
+- Modify: `apps/news/lib/items.php` (`onSiteItemCount()` — счётчик «на сайте» по правилу ленты)
 - Modify: `core/apps.php` (`registerAppRoutes()` — снимок маршрутов)
 - Modify: `core/response.php` (`queryAppend()`), `core/routes.php` (`finishAppAction()` — склейка параметров)
 - Modify: `core/notice.php` (помощники отказа), `core/templates/admin/apps.php` (плашка на общий шаблон)
@@ -1336,6 +1337,7 @@ function newsAdminSummary(array $params = []): void
         'alertTitle' => adminFailureTitle($alertReason),
         'alertReason' => $alertReason,
         'counts' => $counts,
+        'onSite' => onSiteItemCount($now),
         'pinned' => $pinned,
         'waiting' => $counts['scheduled'],
     ], ['title' => 'Новости — админка', 'noindex' => true]);
@@ -1362,6 +1364,7 @@ function newsAdminItems(array $params = []): void
         'filters' => $filters,
         'listing' => adminItemPage($filters, $now),
         'counts' => adminItemCounts($now),
+        'onSite' => onSiteItemCount($now),
         'pinned' => pinnedVisibleCount($now),
         'categories' => categoryOptions(),
     ], ['title' => 'Материалы — админка', 'noindex' => true]);
@@ -1449,6 +1452,7 @@ declare(strict_types=1);
  * @var string $alertReason
  * @var string $nav
  * @var array<string, int> $counts
+ * @var int $onSite
  * @var int $pinned
  * @var int $waiting
  */
@@ -1459,7 +1463,7 @@ foreach ([
     ['всего материалов', $counts['all']],
     ['черновиков', $counts['DRAFT']],
     ['ждут срока', $counts['scheduled']],
-    ['на сайте', $counts['PUBLISHED']],
+    ['на сайте', $onSite],
     ['закреплено из ' . $counts['all'] . ' ' . plural($counts['all'], $itemForms), $pinned],
 ] as [$label, $value]) {
     $lines .= '<div class="flex items-baseline justify-between gap-2 border-b border-ink/10 py-1 last:border-0">'
@@ -1520,6 +1524,7 @@ declare(strict_types=1);
  * @var array{status: string, categoryId: string, query: string, page: int} $filters
  * @var array{items: list<array<string, mixed>>, total: int, pages: int, current: int, window: list<int>, perPage: int, href: string} $listing
  * @var array<string, int> $counts
+ * @var int $onSite
  * @var int $pinned
  * @var list<array{id: string, title: string, visible: bool}> $categories
  */
@@ -1663,7 +1668,7 @@ $empty = '<div class="rounded-lg border border-ink/10 bg-white py-10 text-center
 
 $heading = '<div class="flex flex-wrap items-end justify-between gap-3"><div class="space-y-1">'
     . '<p class="text-sm text-ink/70">' . e((string) $listing['total']) . ' ' . e(plural((int) $listing['total'], $itemForms))
-    . ' · на сайте ' . e((string) $counts['PUBLISHED']) . ', ждут срока ' . e((string) $counts['scheduled'])
+    . ' · на сайте ' . e((string) $onSite) . ', ждут срока ' . e((string) $counts['scheduled'])
     . ', черновиков ' . e((string) $counts['DRAFT']) . '</p></div></div>';
 
 $alert = '';
@@ -1744,23 +1749,33 @@ Run:
 docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T --service-ports -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+# следующим окном, когда стенд отвечает: ядро ставится формой http://localhost:8080/setup.php
 docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
-Три вещи в этом блоке — не оформление, а условие, чтобы он запустился:
+Ядро ставится только формой в браузере: у `public/setup.php` нет ветки разбора аргументов команды, он
+знает POST. Строка вида `php public/setup.php --admin-email=… --admin-password=…` из прежнего текста
+плана ничего не устанавливала — в терминале печатается форма, база остаётся пустой, замок не пишется.
+Открытым нужно держать и стенд: `php -S` в `docker compose run` работает на переднем плане, поэтому
+установка формы и команда раздела идут вторым окном, пока первый не закрыт.
+
+Четыре вещи в этом блоке — не оформление, а условие, чтобы он запустился:
 
 - `bash scripts/db-reset` выполняется на хосте: скрипт сам зовёт `docker compose exec db`, а внутри
   контейнера `php` docker-клиента нет. Пересоздаёт он только `cms_test`.
 - `rm -f public/install.lock`: замок лежит в рабочем каталоге и про базу ничего не знает, поэтому
   после любого прогона установщика — вручную или набором `http` — его надо снять, иначе повторный
   обход получит отказ вместо формы.
-- `-e CMS_DB_NAME=cms_test` во всех трёх командах: экраны руками проверяются на сброшенной тестовой
+- `-e CMS_DB_NAME=cms_test` в обеих командах блока: экраны руками проверяются на сброшенной тестовой
   базе, а `cms_dev` остаётся разработчику. Без этой строки установщик напишет замок и администратора
-  в `cms_dev`, и повторный обход придётся начинать с ручной чистки.
-- `run` не публикует порты сервиса, поэтому нужен `-P`, а `php -S` обязан получить скрипт-роутер
-  `public/index.php`: без него статика и `/setup.php` под встроенным сервером не отвечают.
+  в `cms_dev`, и повторный обход придётся начинать с ручной чистки — форма ставит ядро в ту базу,
+  которую видит контейнер стенда.
+- `run` не публикует порты сервиса — в отличие от `up`, где за это отвечает `-P`. Здесь нужен
+  `--service-ports`, иначе контейнер поднимется, а `http://localhost:8080` останется без ответа:
+  обход в браузере упрётся в пустой порт, и непонятно, экран виноват или команда. Отдельно
+  `php -S` обязан получить скрипт-роутер `public/index.php`: без него статика и `/setup.php`
+  под встроенным сервером не отвечают.
 
 Открыть в браузере `http://localhost:8080/news/admin`, войти `admin@school.dev`, убедиться:
 
@@ -1775,16 +1790,38 @@ Run:
 GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \
 GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.com' \
 git add apps/news/admin.php apps/news/actions/items.php apps/news/lib/admin.php apps/news/lib/boot.php \
-  apps/news/routes.php apps/news/templates/admin core/apps.php core/response.php core/routes.php \
-  core/notice.php core/templates/admin tests/guard/FailureChannelTest.php \
+  apps/news/lib/items.php apps/news/routes.php apps/news/templates/admin core/apps.php core/response.php \
+  core/routes.php core/notice.php core/templates/admin public/assets/app.css \
+  tests/guard/FailureChannelTest.php \
   tests/unit/NewsAdminRulesTest.php tests/unit/QueryAppendTest.php \
   tests/guard/RouteHandlersTest.php tests/http/NewsAdminTest.php
 git commit -m "Экраны админки «Новостей»: сводка, список с фильтрами и кнопки строки"
 ```
 
-Коммит включает два исправления ядра, без которых раздел не работает: снимок маршрутов в `core/apps.php`
-(шаг 3) и `queryAppend()` с подключением `lib/boot.php` (шаг 4). Оба — последствия задач 8 и 16, и
-оставлять их в «следующем коммите про мелочи» нельзя: раздел на них держится.
+Коммит забирает правки ядра, без которых раздел не работает: `queryAppend()` вместе с
+`redirectWithNotice()` в `core/response.php` (шаг 4), склейку параметров в `finishAppAction()`
+(`core/routes.php`) и помощники отказа в `core/notice.php` с общей плашкой
+`core/templates/admin/alert.php`. Позиция `core/apps.php` в списке — страховка: снимок маршрутов уехал
+в дерево ещё фикс-раундом задач 8 и 16, поэтому в этом коммите у файла изменений нет; если шаг 3
+придётся делать заново, он уедет в этот же коммит, а не в «следующий коммит про мелочи».
+
+В этом списке легко пропустить позицию `public/assets/app.css`, и зря: разметка новых экранов принесла
+правила, которых в собранном файле ещё нет. `tabular-nums`, `gap-x-3`, `items-baseline`,
+`sm:max-w-xs` и `underline-offset-4` в исходниках встречаются только в `apps/news/templates/admin/`,
+а в артефакте из коммита задачи 16 у каждого из них ноль вхождений. Если оставить пересборку
+незакоммиченной, первый шаг ворот на чистой копии сравнит свежую сборку с устаревшим артефактом
+из репозитория и покраснеет — а экраны у разработчика при этом выглядят целыми, потому что его
+рабочий файл стилей новый. Порядок тот же, что в задаче 16: `bash scripts/css` на хосте, артефакт
+в тот же коммит, что и разметка, которая его породила.
+
+Вторая позиция, которую легко потерять, — `apps/news/lib/items.php`. Счётчик «на сайте» взялся не из
+статуса строки в базе, а из правила самой ленты: материал опубликован, но стоит в снятой с показа
+рубрике — и читатель его не видит. Поэтому `onSiteItemCount()` вызывается из `apps/news/admin.php`
+(оба экрана — сводка и список), а живёт в `lib/items.php`, рядом с `feedScope()`. Если оставить этот
+файл за коммитом, на чистой копии первый же заход в админку раздела упрётся в отсутствующую функцию,
+а у исполнителя всё продолжит работать, потому что его рабочий файл на месте. Проверка та же, что и
+со стилями: `git diff --stat apps/news/lib/items.php` обязан показать свои строки в индексе до
+коммита, а не после.
 
 ---
 
@@ -3459,13 +3496,14 @@ docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
 docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php scripts/make-og-default.php
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T --service-ports -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+# следующим окном, когда стенд отвечает: ядро ставится формой http://localhost:8080/setup.php
 docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
 Команды те же, что в шаге 9 задачи 17, и правила те же: `db-reset` — на хосте, замок снять вручную,
-`-e CMS_DB_NAME=cms_test` и `-P` обязательны, у `php -S` — скрипт-роутер.
+установщик ядра — только форма (у `public/setup.php` нет ветки разбора аргументов),
+`-e CMS_DB_NAME=cms_test` и `--service-ports` обязательны, у `php -S` — скрипт-роутер.
 
 Открыть `http://localhost:8080/news/admin/items`, войти `admin@school.dev` и пройти путь руками:
 

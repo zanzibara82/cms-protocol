@@ -537,9 +537,12 @@ echo implode("\n", $lines) . "\n";
 ```
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -l scripts/hosting-probe.php`
-Expected: `No syntax errors detected`. PHPStan этот файл не смотрит (`phpstan.neon` перечисляет
-`core`, `admin`, `theme`, `apps`, `public`, `tests`), а `php -l` в воротах идёт `find`-ом по всему
-дереву и до `scripts/` доходит.
+Expected: `No syntax errors detected`. Проверка синтаксиса здесь — не единственная: `phpstan.neon`
+включает путь `scripts` (строка 13, там же объяснение — хостеровые скрипты исполняют разрушительные
+действия на выкладке), поэтому зонд проходит и анализ ошибок типов уровня 6. Значит, в его тексте
+запрещены вызовы неопределённых функций, работа с неопределёнными индексами массива и любые
+нетипизированные возвраты — как в коде сайта. `php -l` в воротах идёт `find`-ом по всему дереву и
+до `scripts/` доходит тоже.
 
 **Как зонд ставят и снимают** (полный текст — шаг 1 `docs/deploy-checklist.md`): копия файла с
 ключом кладётся в `public/` под именем `probe.php`, ответ читается по HTTPS, файл удаляется сам.
@@ -556,7 +559,8 @@ Expected: PASS — 4 проверки.
 
 - [ ] **Шаг 6: npm — зависимость и скрипт**
 
-Заменить `package.json` целиком (файл создан задачей 5; `devDependencies` читаются только
+Заменить `package.json` целиком (файл создан задачей 4 — в `part2.md` он в её границах: перечень
+файлов строки 718, содержимое строки 1423; `devDependencies` читаются только
 разработчиком, на сервере Node нет):
 
 ```json
@@ -840,9 +844,9 @@ bash scripts/css
 docker compose -f docker-compose.dev.yml up -d db
 bash scripts/db-reset
 rm -f public/install.lock
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php public/setup.php --admin-email=admin@school.dev --admin-password=длинный-тестовый-пароль
+docker compose -f docker-compose.dev.yml run --rm -T --service-ports -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
+# следующим окном, когда стенд отвечает: ядро ставится формой http://localhost:8080/setup.php
 docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -r 'require "config.php"; require "core/bootstrap.php"; installApp("news");'
-docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php php -S 0.0.0.0:8080 -t public public/index.php
 ```
 
 Четыре вещи в этом блоке — условие, чтобы он запустился (повторяют шаг 9 задачи 17, отличаются
@@ -853,8 +857,12 @@ docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php
   коварный зелёный прогон из всех, что есть в плане.
 - `rm -f public/install.lock`: замок остаётся от предыдущего прогона установщика, и без снятия
   второй заход получил бы 404 вместо формы.
-- `-e CMS_DB_NAME=cms_test` во всех трёх командах: боевая и dev базы не трогаются.
-- `-P` у `run`: без публикации портов стенд с хоста не виден, а `php -S` обязан получить
+- `-e CMS_DB_NAME=cms_test` в обеих командах блока: боевая и dev базы не трогаются — форма ставит
+  ядро в ту базу, которую видит контейнер стенда.
+- `--service-ports` у `run`: `run` не публикует порты сам, за это отвечает именно этот флаг
+  (`-P` — флаг `up`, и `run` его не понимает). У сервиса `php` в `docker-compose.dev.yml`
+  заявлен `127.0.0.1:8080:8080`, поэтому без флага стенд с хоста не виден: браузер упрётся
+  в пустой порт, и непонятно, код виноват или команда. `php -S` обязан получить
   скрипт-роутер `public/index.php` — иначе статика и `/setup.php` не отвечают.
 
 После того как стенд поднят, но до прогона — два материала через экран `/news/admin/items/new` и
@@ -992,7 +1000,7 @@ curl -sS https://домен/sitemap.xml | head -20
 | 8 | занятый адрес — отказ с возвратом набранного | экран правки; `tests/unit/NewsFormRulesTest.php` |
 | 9 | публикация → материал в ленте, в рубрике, на странице тега и в карте сайтов | экран + `curl /sitemap.xml`; `tests/db/NewsSitemapTest.php` |
 | 10 | снятие с публикации убирает материал, срок сохраняет | экран; `tests/db/NewsItemsTest.php` |
-| 11 | закреплённый — первым в ленте и в рубрике | экран; `tests/db/FeedReadTest.php` |
+| 11 | закреплённый — первым в ленте и в рубрике | экран; `tests/db/NewsFeedTest.php` |
 | 12 | смена адреса → 301 со старого, старый помнится, лимит 10 | экран + `curl -I`; `tests/db/NewsItemsTest.php` |
 | 13 | материал «ждёт срока» не виден до срока и виден во вкладке | экран; `tests/unit/NewsPublishRulesTest.php` |
 | 14 | рубрика: переименование не меняет адрес, описание видно, скрытие убирает из ленты, удаление непустой отказывает, порядок кнопками | экран `/news/admin/categories`; `tests/db/CatalogTest.php` |
@@ -1015,23 +1023,28 @@ curl -sS https://домен/sitemap.xml | head -20
 
 - [ ] **Шаг 10: Обновить карту файлов плана**
 
-Изменить `docs/superpowers/plans/part1.md` — в карте файлов («Структура файлов», строка 118)
-добавить два пути, которых в карте нет, потому что она писалась до задачи 21. Три скрипты выкладки
-(`deploy.sh`, `hosting-probe.php`, `responsive-check.mjs`) там уже перечислены задачей 1, поэтому
-карта расходится с планом ровно в двух строках.
+Изменить `docs/superpowers/plans/part1.md` — в карте файлов (раздел «Структура файлов», строка 155)
+добавить то, чего в карте нет, потому что она писалась до задачи 21. Три скрипта выкладки
+(`deploy.sh`, `hosting-probe.php`, `responsive-check.mjs`) там уже перечислены (строки 257…259),
+поэтому карта расходится с планом ровно в трёх строках: две новые и одна устаревшая.
 
-После строки `.gitignore` (строка 124):
+После строки `.gitignore` (строка 165):
 
 ```
   .htaccess                        запасная раскладка: закрытие служебных каталогов, rewrite в public/
 ```
 
-Перед строкой `  tests/` (строка 218) — новый блок каталога документации:
+Перед строкой `  tests/` (строка 260) — новый блок каталога документации:
 
 ```
   docs/
     deploy-checklist.md            шаги §11 и приёмка §12 на хостинге
 ```
+
+Третья расходящаяся строка — `phpstan.neon` (строка 163): в карте перечислены пути
+`core/ admin/ theme/ apps/ public/ tests/`, а конфиг с фикс-раунда задач 8 и 16 включает ещё
+`scripts`. Дописать этот путь в строку карты: читатель, который по карте решит, что хостеровые
+скрипты никто не анализирует, напишет зонд без типов.
 
 Карта в начале плана — обещание, что появится; расхождение с ней означает, что рецензент задачи
 искал файл не там.
@@ -1042,9 +1055,11 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — четыре набора; в `guard` добавился `DeploySafetyTest`.
 
 Run: `bash scripts/gate.sh`
-Expected: зелёные все четыре проверки. `scripts/hosting-probe.php` попадает в `php -l` и в
-PHP-CS-Fixer (finder включает `scripts/`): файл написан по PSR-12, одиночные кавычки и
-`declare(strict_types=1)` уже в нём, поэтому фиксер не должен найти что переформатировать.
+Expected: зелёные все четыре проверки. `scripts/hosting-probe.php` попадает в `php -l`, в PHPStan
+(`phpstan.neon` включает путь `scripts`) и в PHP-CS-Fixer (finder включает `scripts/`): файл написан
+по PSR-12, одиночные кавычки и `declare(strict_types=1)` уже в нём, поэтому фиксер не должен найти
+что переформатировать. Если уровень 6 найдёт в зонде нетипизированное чтение из `$_SERVER` или
+неопределённый индекс — это правка текста зонда, а не основание вычёркивать `scripts` из анализа.
 
 Run: `node --check scripts/responsive-check.mjs && npm run responsive -- --base=http://localhost:8080`
 Expected: `проблем: 0`.
