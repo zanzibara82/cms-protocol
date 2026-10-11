@@ -9,6 +9,6 @@ declare(strict_types=1);
         <?php if ((string) $paragraph['title'] !== ''): ?>
             <h2 class="text-xl font-semibold"><?= e((string) $paragraph['title']) ?></h2>
         <?php endif; ?>
-        <p class="leading-relaxed"><?= richText((string) $paragraph['text']) /* @safe html */ ?></p>
+        <p class="leading-relaxed break-words"><?= richText((string) $paragraph['text']) /* @safe html */ ?></p>
     <?php endforeach; ?>
 </div>
