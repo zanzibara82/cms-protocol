@@ -163,9 +163,10 @@ Tailwind собирается локально Node'ом, в репозитор�
 cms/
   composer.json                  require-dev: phpunit, phpstan, php-cs-fixer
   phpunit.xml                    четыре набора тестов: unit, db, guard, http
-  phpstan.neon                   уровень 6, пути core/ admin/ theme/ apps/ public/ tests/
+  phpstan.neon                   уровень 6, пути core/ admin/ theme/ apps/ public/ tests/ scripts/
   .php-cs-fixer.dist.php         PSR-12 + declare_strict_types
   .gitignore                     config.php, vendor/, кэш инструментов, содержимое каталога загрузок
+  .htaccess                      запасная раскладка: закрытие служебных каталогов, rewrite в public/
   .gitattributes                 переносы строк LF: без них клон под core.autocrlf даёт CRLF в shebang
   docker-compose.dev.yml         php (8080), db (3307), mailpit (8025/1025)
   docker/php-dev.Dockerfile      php:8.3-cli + pdo_mysql, mbstring, gd, openssl, fileinfo, procps + composer
@@ -257,9 +258,11 @@ cms/
     db-reset                     пересоздаёт ТОЛЬКО cms_test
     css                          сборка Tailwind (Node у разработчика)
     make-og-default.php          одноразовая заготовка public/assets/og-default.png (нужен GD)
-    responsive-check.mjs         360…1440 через Playwright
+    responsive-check.mjs         360…1440 через системный Chrome и протокол отладки, без пакетов
     deploy.sh                    rsync по SSH, два варианта раскладки
     hosting-probe.php            одноразовый зонд хостинга (удаляется после проверки)
+  docs/
+    deploy-checklist.md          шаги §11 и приёмка §12 на хостинге
   tests/
     bootstrap.php                окружение cms_test, подключение ядра
     http/Kernel.php              поднимает php -S и ходит curl-ом

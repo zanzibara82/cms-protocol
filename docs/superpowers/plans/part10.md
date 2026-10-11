@@ -91,6 +91,15 @@ final class DeploySafetyTest extends TestCase
                 $var . ' обязан читаться через `:?` — запуск без него должен упасть, а не выложить в пустоту'
             );
         }
+
+        // `:?` ловит пустое значение и пропускает относительное, а его rsync считает от домашнего
+        // каталога входа: --delete уйдёт чистить соседнее дерево. Проверка ведущего слэша обязана
+        // стоять до вызова rsync.
+        self::assertMatchesRegularExpression(
+            '/case "\$CMS_DEPLOY_PATH" in\s*\n\s*\/\*\)/',
+            $sh,
+            'deploy.sh обязан отвергать относительный CMS_DEPLOY_PATH до вызова rsync'
+        );
     }
 
     public function testТриКаталогаНаСервереНеУдаляются(): void
@@ -204,6 +213,14 @@ set -euo pipefail
 : "${CMS_DEPLOY_USER:?не задан CMS_DEPLOY_USER — логин SSH}"
 : "${CMS_DEPLOY_HOST:?не задан CMS_DEPLOY_HOST — адрес сервера}"
 : "${CMS_DEPLOY_PATH:?не задан CMS_DEPLOY_PATH — абсолютный каталог проекта на сервере}"
+
+# `:?` ловит пустое значение, но не ловит относительное: rsync считает его от домашнего каталога
+# входа, и --delete уезжает чистить не тот каталог. Опечатка без ведущего слэша дороже любого
+# другого сбоя выкладки — она молча ломает соседнее дерево на сервере.
+case "$CMS_DEPLOY_PATH" in
+  /*) ;;
+  *) echo "CMS_DEPLOY_PATH ждёт абсолютный каталог, получено: ${CMS_DEPLOY_PATH}" >&2; exit 1 ;;
+esac
 
 # public — документ-корень перенесён на каталог public/ (предпочтительный вариант, §11.1).
 # root   — перенести нельзя: заливается вся структура, служебное закрывает корневой .htaccess.
@@ -876,8 +893,13 @@ async function main() {
     await ws.open
     await ws.send('Page.enable')
     await ws.send('Network.enable')
-    if (cookie) {
-      await ws.send('Network.setCookie', {
+
+    // Кука кладётся в браузер командой протокола, а не ответом сервера, поэтому поставить её
+    // можно в любой момент прогона. Ставится она ПОСЛЕ замера публичных адресов: под живой
+    // сессией маршрут /login редиректит в /admin, и форма входа — экран, с которого начинается
+    // путь любого посетителя, — осталась бы без замера раскладки вообще.
+    const setSessionCookie = () =>
+      ws.send('Network.setCookie', {
         name: SESSION_COOKIE,
         value: cookie,
         domain: new URL(BASE).hostname,
@@ -885,45 +907,61 @@ async function main() {
         httpOnly: true,
         sameSite: 'Lax',
       })
+
+    const measure = async (list) => {
+      for (const vp of VIEWPORTS) {
+        // Метка mobile меняет то, как Chrome применяет media-запросы: на узких экранах часть
+        // раскладок живёт именно в них, и их надо просить как мобильный вьюпорт, а не сжимать
+        // десктопный.
+        await ws.send('Emulation.setDeviceMetricsOverride', {
+          width: vp.w,
+          height: vp.h,
+          deviceScaleFactor: 1,
+          mobile: vp.w < 500,
+        })
+        for (const item of list) {
+          const wait = ws.onLoad()
+          await ws.send('Page.navigate', { url: BASE + item.href })
+          await wait
+          await sleep(900)
+          await ws.send('Runtime.evaluate', {
+            expression: `document.querySelectorAll('details').forEach((d) => { d.open = true })`,
+          })
+          await sleep(200)
+          const { result } = await ws.send('Runtime.evaluate', { expression: PROBE, returnByValue: true })
+          const row = { page: item.name, href: item.href, vp: vp.name, ...result.value }
+          if (SHOTS && (vp.name === '360' || vp.name === '1440')) {
+            const shot = await ws.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
+            writeFileSync(join(OUT, `${safeName(item.name)}-${vp.name}.png`), Buffer.from(shot.data, 'base64'))
+          }
+          report.push(row)
+          const ok = row.offenders.length === 0 && row.scrollWidth <= row.vw + 1
+          const redirected = row.url !== item.href.split('?')[0] ? ` → ${row.url}` : ''
+          console.log(
+            `${ok ? 'OK  ' : 'FAIL'} ${item.name.padEnd(24)} ${vp.name.padStart(4)}  scroll=${row.scrollWidth}${redirected}  ` +
+              row.offenders.map((o) => `${o.sel}→${o.right}`).join(' | ').slice(0, 200),
+          )
+        }
+      }
     }
 
-    const pages = process.env.RESP_PAGES
-      ? JSON.parse(process.env.RESP_PAGES)
-      : [...(await publicPages()), ...(cookie ? ADMIN_PAGES : [])]
-    if (!pages.length) throw new Error('RESP_PAGES задан, но пуст: проверять нечего')
-
-    for (const vp of VIEWPORTS) {
-      // Метка mobile меняет то, как Chrome применяет media-запросы: на узких экранах часть
-      // раскладок живёт именно в них, и их надо просить как мобильный вьюпорт, а не сжимать
-      // десктопный.
-      await ws.send('Emulation.setDeviceMetricsOverride', {
-        width: vp.w,
-        height: vp.h,
-        deviceScaleFactor: 1,
-        mobile: vp.w < 500,
-      })
-      for (const item of pages) {
-        const wait = ws.onLoad()
-        await ws.send('Page.navigate', { url: BASE + item.href })
-        await wait
-        await sleep(900)
-        await ws.send('Runtime.evaluate', {
-          expression: `document.querySelectorAll('details').forEach((d) => { d.open = true })`,
-        })
-        await sleep(200)
-        const { result } = await ws.send('Runtime.evaluate', { expression: PROBE, returnByValue: true })
-        const row = { page: item.name, href: item.href, vp: vp.name, ...result.value }
-        if (SHOTS && (vp.name === '360' || vp.name === '1440')) {
-          const shot = await ws.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
-          writeFileSync(join(OUT, `${safeName(item.name)}-${vp.name}.png`), Buffer.from(shot.data, 'base64'))
-        }
-        report.push(row)
-        const ok = row.offenders.length === 0 && row.scrollWidth <= row.vw + 1
-        const redirected = row.url !== item.href.split('?')[0] ? ` → ${row.url}` : ''
-        console.log(
-          `${ok ? 'OK  ' : 'FAIL'} ${item.name.padEnd(24)} ${vp.name.padStart(4)}  scroll=${row.scrollWidth}${redirected}  ` +
-            row.offenders.map((o) => `${o.sel}→${o.right}`).join(' | ').slice(0, 200),
-        )
+    // RESP_PAGES задаёт список вручную — так проверяют адреса с id из базы (форма правки
+    // материала, заявка): их скрипт сам выдумать не может. В этом режиме кука ставится сразу,
+    // потому что список явно просит экраны под входом.
+    const explicit = process.env.RESP_PAGES ? JSON.parse(process.env.RESP_PAGES) : null
+    if (explicit !== null) {
+      if (!Array.isArray(explicit) || explicit.length === 0) {
+        throw new Error('RESP_PAGES задан, но пуст: проверять нечего')
+      }
+      if (cookie) await setSessionCookie()
+      await measure(explicit)
+    } else {
+      const guest = await publicPages()
+      if (!guest.length) throw new Error('публичных адресов нет: карта сайтов пуста — проверять нечего')
+      await measure(guest)
+      if (cookie) {
+        await setSessionCookie()
+        await measure(ADMIN_PAGES)
       }
     }
   } finally {
@@ -979,7 +1017,11 @@ docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php
   скрипт-роутер `public/index.php` — иначе статика и `/setup.php` не отвечают.
 
 После того как стенд поднят, но до прогона — два материала через экран `/news/admin/items/new` и
-«На печать»: один с заголовком в двести символов, второй с длинным именем рубрики и закреплённый.
+«На печать»: один с заголовком на пределе длины, второй с длинным именем рубрики и закреплённый.
+Предел берётся из `NEWS_FORM_MAX['title']` в `apps/news/lib/validators.php` — сейчас это 120
+символов; материал с более длинным заголовком форма не сохранит, и попытка взять число «с запасом»
+кончается отказом, который легко принять за дефект проверки. Смысл не в конкретном числе, а в том,
+что текст доходит до предела поля.
 Это не наполнение демо-контентом: пустой список на экране 360 px ничего не ломает по построению,
 и проверка на нём всегда зелёная. Строка таблицы справочника с длинным текстом — ровно то, что
 критерий §12.18 обязан застать на узком экране, и адрес карточки появляется в карте сайтов только
@@ -1004,6 +1046,11 @@ Expected: строка `OK`/`FAIL` на каждую комбинацию адр
 чинят в шаблонах (`max-w-full`, `min-w-0`, `overflow-x-auto` на таблице справочника, перенос
 вкладок) и повторяют прогон. Без зелёного прогона критерий §12.18 не закрыт, а задача 21 — ровно
 он.
+
+Отдельно смотреть на строку адреса «вход»: она обязана показывать `/login` без стрелки редиректа.
+Публичные адреса меряются до установки куки именно для этого — под живой сессией маршрут входа
+редиректит в `/admin`, и раскладка формы входа осталась бы непроверенной ни на одном вьюпорте, а
+прогон всё равно был бы зелёным. Строка `вход … → /admin` означает, что порядок замера сломан.
 
 Два места, где прогон обязан честно сказать про себя:
 
@@ -1054,6 +1101,13 @@ rm -rf "$BUILD"
 
 Зонд отвечает один раз и удаляет себя. Последняя строка ответа — удалился ли; если `нет`, файл
 снимают руками (`ssh … rm public/probe.php`) и не оставляют: он отвечает на запросы о сервере.
+
+У ключа два источника, и это надо знать до пробега: вписанное в копию файла значение перекрывается
+переменной окружения хостинга `CMS_PROBE_KEY`, если она задана и не пуста. Переменная нужна там,
+где панель не даёт подставить значение в файл перед загрузкой. Если же она задана случайно или
+осталась от прошлой проверки, `curl` получит 403 при формально верном ключе — выглядит как поломка
+зонда, а на деле ключ просто другой. Поэтому перед пробегом проверяют, что в окружении сайта такой
+переменной нет, либо берут ключ из неё и не правят файл.
 
 Что должно быть в ответе: `[+]` напротив PHP ≥ 8.1, шести расширений, `stream_socket_client` и
 `session.save_path`; `[!]` напротив document-корня — ожидаемо, если корень ещё не переносили, и
@@ -1146,28 +1200,35 @@ curl -sS https://домен/sitemap.xml | head -20
 запись не открывает и в коммит задачи не кладёт; вместо этого он перечисляет в отчёте
 расхождения карты с собранным деревом, а контроллер сверяет их со списком ниже и вносит правку.
 
-В карте файлов (раздел «Структура файлов», строка 155) не хватает того, что появилось в задаче 21.
-Три скрипта выкладки (`deploy.sh`, `hosting-probe.php`, `responsive-check.mjs`) там уже
-перечислены (строки 257…259), поэтому карта расходится с деревом ровно в трёх строках: две новые
-и одна устаревшая.
+В карте файлов (раздел «Структура файлов») не хватает того, что появилось в задаче 21. Три скрипта
+выкладки (`deploy.sh`, `hosting-probe.php`, `responsive-check.mjs`) там уже перечислены в блоке
+`scripts/`, поэтому карта расходится с деревом в четырёх строках: две новые и две устаревшие.
 
-После строки `.gitignore` (строка 165):
+Номера строк карты здесь сознательно не пишутся: карта растёт с каждой задачей, и номер устаревает
+к моменту чтения — в первом варианте этого шага все четыре номера уехали на три строки вниз, и
+исполнитель искал не то место. Якорь — текст строки.
+
+Первое. После строки `.gitignore` — новая строка запасной раскладки (описание выравнивается в ту
+же колонку, что и у соседних строк карты):
 
 ```
-  .htaccess                        запасная раскладка: закрытие служебных каталогов, rewrite в public/
+  .htaccess                      запасная раскладка: закрытие служебных каталогов, rewrite в public/
 ```
 
-Перед строкой `  tests/` (строка 260) — новый блок каталога документации:
+Второе. Перед строкой `  tests/` — новый блок каталога документации:
 
 ```
   docs/
-    deploy-checklist.md            шаги §11 и приёмка §12 на хостинге
+    deploy-checklist.md          шаги §11 и приёмка §12 на хостинге
 ```
 
-Третья расходящаяся строка — `phpstan.neon` (строка 163): в карте перечислены пути
-`core/ admin/ theme/ apps/ public/ tests/`, а конфиг с фикс-раунда задач 8 и 16 включает ещё
-`scripts`. Дописать этот путь в строку карты: читатель, который по карте решит, что хостеровые
-скрипты никто не анализирует, напишет зонд без типов.
+Третье. Строка `phpstan.neon`: в карте перечислены пути `core/ admin/ theme/ apps/ public/ tests/`,
+а конфиг с фикс-раунда задач 8 и 16 включает ещё `scripts`. Дописать этот путь: читатель, который
+по карте решит, что хостеровые скрипты никто не анализирует, напишет зонд без типов.
+
+Четвёртое. Строка `responsive-check.mjs` описана как «360…1440 через Playwright». Внешнего пакета
+нет (шаг 6), проверку гоняет системный Chrome через протокол его отладки — описание заменить, иначе
+карта противоречит шагам 6 и 7 этого же плана.
 
 Карта в начале плана — обещание, что появится; расхождение с ней означает, что рецензент задачи
 искал файл не там.
