@@ -322,6 +322,22 @@ function pinnedVisibleCount(DateTimeImmutable $now): int
     );
 }
 
+/**
+ * Материалы, которые читатель видит сейчас. Правило берётся у самой ленты (`feedScope()`):
+ * счётчик «на сайте» обязан сходиться с первой страницей публичного раздела, а не со статусом
+ * строки в базе. Вкладка «Опубликованные» считает иначе — материал снятой с показа рубрики
+ * остаётся в списке администратора помеченным, и на сайте его нет.
+ */
+function onSiteItemCount(DateTimeImmutable $now): int
+{
+    $scope = feedScope(['now' => $now]);
+
+    return (int) value(
+        sprintf('SELECT COUNT(*) FROM %s WHERE %s', $scope['from'], $scope['where']),
+        $scope['args']
+    );
+}
+
 // ── Форма ────────────────────────────────────────────────
 
 /** @return list<string> */

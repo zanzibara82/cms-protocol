@@ -63,3 +63,27 @@ function noticeForAdminScreen(array $dictionary): string
 
     return (string) (noticeOfRequest($dictionary) ?? '');
 }
+
+/**
+ * Причина отказа живёт в сессионном flash и показывается ровно один раз: второй показ означал бы,
+ * что человек увидел старую причину свежего действия.
+ */
+function takeAdminFlashReason(): string
+{
+    startSession();
+    $flashed = $_SESSION['admin_error'] ?? '';
+    unset($_SESSION['admin_error']);
+
+    return is_string($flashed) ? $flashed : '';
+}
+
+// Заголовок отказа — из словаря ядра по ключу 'migration-failed'. Пустая строка означает «отказа нет»:
+// ни один экран не должен выдумывать свою формулировку сбоя.
+function adminFailureTitle(string $reason): string
+{
+    if ($reason === '' && !requestNoticeIsFailure()) {
+        return '';
+    }
+
+    return (string) (noticeText('migration-failed', CORE_NOTICE_TEXT) ?? '');
+}

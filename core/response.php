@@ -27,11 +27,21 @@ function redirect(string $to, int $status = 302): never
     respond($status, '', ['Location' => $to]);
 }
 
+/**
+ * Дописывает в адрес параметр: «?» перед первым и «&» после него. Возвращает строку, а не редиректит,
+ * поэтому проверять склейку можно без выхода из процесса.
+ */
+function queryAppend(string $to, string $key, string $value): string
+{
+    $separator = str_contains($to, '?') ? '&' : '?';
+
+    return $to . $separator . rawurlencode($key) . '=' . rawurlencode($value);
+}
+
 // PRG: после действия человек видит GET-страницу, а не повторную отправку формы при обновлении.
 function redirectWithNotice(string $to, string $notice): never
 {
-    $separator = str_contains($to, '?') ? '&' : '?';
-    redirect($to . $separator . 'notice=' . rawurlencode($notice));
+    redirect(queryAppend($to, 'notice', $notice));
 }
 
 function notFound(string $message = ''): never

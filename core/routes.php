@@ -140,18 +140,10 @@ function coreAdminApps(array $params = []): void
     }
 
     // Причина сбоя приезжает из сессионного flash, а не из адресной строки: текст драйвера не должен
-    // светиться в URL, истории браузера и access-логах. Flash показывается ровно один раз.
-    startSession();
-    $flashed = $_SESSION['admin_error'] ?? '';
-    unset($_SESSION['admin_error']);
-    $alertReason = is_string($flashed) ? $flashed : '';
-
-    // Заголовок отказа — из словаря по ключу migration-failed: свободный текст из адреса не печатается.
-    // Зелёной плашкой этот ключ показывать нельзя — за это отвечает общий хелпер noticeForAdminScreen().
-    $failureRequested = requestNoticeIsFailure();
-    $alertTitle = ($alertReason !== '' || $failureRequested)
-        ? (string) (noticeText('migration-failed', CORE_NOTICE_TEXT) ?? '')
-        : '';
+    // светиться в URL, истории браузера и access-логах. Где причина лежит и как называется — знает
+    // только пара помощников core/notice.php, экраны раздела пользуются теми же.
+    $alertReason = takeAdminFlashReason();
+    $alertTitle = adminFailureTitle($alertReason);
     $notice = noticeForAdminScreen(CORE_NOTICE_TEXT);
 
     render('admin/apps', [

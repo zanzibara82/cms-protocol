@@ -117,6 +117,12 @@ final class RouteHandlersTest extends TestCase
         self::assertContains('GET /demo', $paths, 'Публичные маршруты раздела после сброса');
         self::assertContains('GET /future', $paths, 'Маршрут раздела из будущего после сброса');
 
+        // Первый registerAppRoutes() уже исполнил apps/news/routes.php в этом процессе.
+        // require_once файл повторно не выполнит, поэтому маршруты настоящего раздела
+        // возвращаются из снимка: без него страж молча проверял бы только фикстуры.
+        self::assertContains('GET /news', $paths, 'Публичные маршруты раздела после сброса');
+        self::assertContains('GET /news/{slug}', $paths, 'Карточка материала после сброса');
+
         foreach (routeTable() as $route) {
             if (($route['meta']['app'] ?? '') === '') {
                 continue;

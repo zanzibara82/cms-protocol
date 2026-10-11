@@ -5,6 +5,8 @@ declare(strict_types=1);
 // Правила раздела нужны контроллерам на каждом запросе, а в боевом процессе их не подключает никто:
 // require_once здесь — единственная точка, где `findFeed()` и `parseQuery()` встречаются с маршрутами.
 require_once __DIR__ . '/lib/boot.php';
+require_once __DIR__ . '/admin.php';
+require_once __DIR__ . '/actions/items.php';
 
 // Порядок важен: /news/c/{slug} и /news/t/{slug} стоят до /news/{slug}. Сами адреса «c» и «t»
 // заняты в NEWS_RESERVED_SLUGS, поэтому материал не может увести у рубрики её страницу.
@@ -12,6 +14,13 @@ addRoute('GET', '/news', 'newsFeedPage', ['app' => 'news']);
 addRoute('GET', '/news/c/{slug}', 'newsCategoryPage', ['app' => 'news']);
 addRoute('GET', '/news/t/{slug}', 'newsTagPage', ['app' => 'news']);
 addRoute('GET', '/news/{slug}', 'newsSinglePage', ['app' => 'news']);
+
+// Экраны админки раздела. Статические пути идут раньше параметрических по правилу маршрутизатора
+// (core/router.php сортирует таблицу по признаку `static`), поэтому /news/admin не перехватывается
+// адресом материала — даже если кто-то опубликует новость с адресом «admin».
+addRoute('GET', '/news/admin', 'newsAdminSummary', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/news/admin/items', 'newsAdminItems', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/news/admin/items', 'newsItemsAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 
 /** @param array<string, string> $params */
 function newsFeedPage(array $params = []): void

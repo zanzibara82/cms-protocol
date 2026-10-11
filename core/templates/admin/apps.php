@@ -77,13 +77,9 @@ $table = '<div class="overflow-x-auto rounded-lg border border-ink/10 bg-white">
 
 // Отказ: заголовок берётся из словаря уведомлений, подробная причина приезжает из сессионного
 // flash. В адресную строку причина не уезжает — свободный текст из адреса не печатается.
-// Если причины нет (второй показ), остаётся только заголовок.
-$alert = ($alertTitle === '' && $alertReason === '')
-    ? ''
-    : '<div class="mb-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3" role="alert">'
-        . ($alertTitle !== '' ? '<p class="text-sm font-medium text-bad">' . e($alertTitle) . '</p>' : '')
-        . ($alertReason !== '' ? '<p class="mt-1 text-sm text-bad">' . e($alertReason) . '</p>' : '')
-        . '</div>';
+// Разметка плашки вынесена в общий шаблон ядра (admin/alert): его же читают экраны раздела,
+// чтобы красный блок не размечали пять раз по-своему.
+$alert = partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason]);
 
 // Строка помечена как разметка: $alert, $core и $table собраны этим же файлом из литералов
 // и e(), а наружу уходят единственным вызовом adminShell — голой конкатенации с данными нет.
