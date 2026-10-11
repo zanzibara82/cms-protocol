@@ -5,7 +5,7 @@
 - Create: `apps/news/admin.php` (контроллеры экранов), `apps/news/actions/items.php` (действие строки)
 - Create: `apps/news/templates/admin/summary.php`, `apps/news/templates/admin/items.php`
 - Modify: `apps/news/routes.php` (три адреса админки + подключение файлов раздела)
-- Modify: `apps/news/lib/boot.php` (девятая строка)
+- Modify: `apps/news/lib/boot.php` (подключение `admin.php` сразу за `items.php`)
 - Modify: `apps/news/lib/items.php` (`onSiteItemCount()` — счётчик «на сайте» по правилу ленты)
 - Modify: `core/apps.php` (`registerAppRoutes()` — снимок маршрутов)
 - Modify: `core/response.php` (`queryAppend()`), `core/routes.php` (`finishAppAction()` — склейка параметров)
@@ -398,7 +398,7 @@ function newsPinnedSkewAlert(int $pinned): string
 }
 ```
 
-Изменить `apps/news/lib/boot.php` — добавить девятую строку:
+Изменить `apps/news/lib/boot.php` — добавить подключение сразу после строки с `items.php`:
 
 ```php
 require_once __DIR__ . '/admin.php';
@@ -1885,7 +1885,7 @@ git commit -m "Экраны админки «Новостей»: сводка, �
 - Create: `public/uploads/news/.gitkeep`, `public/uploads/.htaccess`
 - Modify: `apps/news/admin.php` (два контроллера экрана + общая сборка формы)
 - Modify: `apps/news/routes.php` (четыре адреса формы)
-- Modify: `apps/news/lib/boot.php` (десятая и одиннадцатая строки)
+- Modify: `apps/news/lib/boot.php` (два подключения в конец списка)
 - Modify: `apps/news/templates/admin/summary.php`, `apps/news/templates/admin/items.php`
   (кнопка «Новый материал» и ссылка «Править»)
 - Modify: `.gitignore` (исключение для каталога загрузок)
@@ -2391,7 +2391,7 @@ function newsImageDelete(string $href): void
 }
 ```
 
-Изменить `apps/news/lib/boot.php` — добавить десятую и одиннадцатую строки:
+Изменить `apps/news/lib/boot.php` — дописать два подключения в конец списка, после `seo.php`:
 
 ```php
 require_once __DIR__ . '/form.php';
