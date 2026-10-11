@@ -3576,6 +3576,7 @@ git add apps/news/lib/form.php apps/news/lib/upload.php apps/news/lib/boot.php \
   apps/news/admin.php apps/news/actions/item.php apps/news/routes.php \
   apps/news/templates/admin/item-form.php apps/news/templates/admin/summary.php \
   apps/news/templates/admin/items.php public/uploads/.htaccess public/uploads/news/.gitkeep \
+  public/assets/app.css \
   .gitignore tests/http/Kernel.php tests/guard/WebServerConfigTest.php \
   tests/unit/NewsFormRulesTest.php tests/http/NewsItemFormTest.php
 git commit -m "Форма материала «Новостей»: создание, правка и загрузка обложки"
@@ -3588,3 +3589,13 @@ git commit -m "Форма материала «Новостей»: создан�
 редактор уже может записать исходник. `.gitkeep` и две строки в `.gitignore` нужны, чтобы каталог
 загрузок не пропал из репозитория при правиле `/public/uploads/*` — пустой каталог git не хранит, а без
 каталога `move_uploaded_file()` падает на ровном месте.
+
+Позиция `public/assets/app.css` в этом списке — не копия пояснения к задаче 17, а проверка, сделанная
+по разметке этой задачи. Классы `items-start` и `size-4` из строки чекбокса обложки (шаг 5,
+`apps/news/templates/admin/item-form.php`) в собранном артефакте из `HEAD` отсутствуют: у каждого
+ноль вхождений, тогда как в списке `@source` файл новой формы попадает под `../apps/**/templates/**/*.php`
+и сборка обязана их породить. Значит пересборка (`bash scripts/css` на хосте) обязательна, а артефакт
+обязан уехать в тот же коммит, что и разметка, — иначе первый шаг ворот на чистой копии сравнит свежую
+сборку с устаревшим файлом и покраснеет. Если шаг свежести назовёт ещё классы, их пересобирают тем же
+`bash scripts/css`, и результат идёт в этот же коммит: правило «артефакт и разметка, которая его
+породила, не разъезжаются по коммитам» сильнее экономии на diff.
