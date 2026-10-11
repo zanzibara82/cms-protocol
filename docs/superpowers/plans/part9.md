@@ -261,11 +261,18 @@ const NEWS_ADMIN_TABS = [
 ];
 ```
 
-Адреса — константы, а не шесть строковых литералов: `NEWS_ADMIN_PATH` и
-`NEWS_ADMIN_ITEMS_PATH` уже так стоят в задаче 17, а две новые ссылки читают те же
+Адреса — константы, а не шесть строковых литералов: `NEWS_ADMIN_PATH` определена в этом же файле
+(строка 10), `NEWS_ADMIN_ITEMS_PATH` — в `apps/news/lib/items.php:18`, а две новые ссылки читают
 `NEWS_ADMIN_CATEGORIES_PATH` и `NEWS_ADMIN_TAGS_PATH` из блока ниже. Литералы разошлись бы с
 адресами маршрутов на первом же переименовании, и заметен это стало бы только по `aria-current`.
+В существующих двух вкладках стоят ровно литералы `'/news/admin'` и `'/news/admin/items'` —
+задача 17 оставила их так, поэтому замена касается и уже написанных строк, а не только двух новых.
 Порядок вкладок — порядок экрана: справочники стоят после материалов.
+
+Ссылка на `NEWS_ADMIN_ITEMS_PATH` из этого файла держится на порядке подключения `lib/boot.php`:
+`items.php` идёт раньше `admin.php` (строки 13 и 14), поэтому константа определена к моменту, когда
+вычисляется `NEWS_ADMIN_TABS`. Этот порядок — уже не случайность, а условие: если его нарушить,
+константа вкладок упадёт с `Undefined constant` при подключении файла, и `php -l` этого не увидит.
 
 Тем же файлом дописать в конец:
 
@@ -897,36 +904,25 @@ function newsAdminTags(array $params = []): void
 во flash, в адрес уходит только ключ `migration-failed`, а экран собирает плашку помощниками ядра.
 Своего `?error=` у разделов быть не может — его запрещает `tests/guard/FailureChannelTest.php`.
 
-Контроллер сводки тоже меняется — целиком, тем же телом с двумя новыми ключами:
+Контроллер сводки меняется точечно: в массив `render('news/admin/summary', …)` после строки
+`'waiting' => $counts['scheduled'],` добавить два ключа. Функция целиком не переписывается:
+в её текущем теле уже есть `'onSite' => onSiteItemCount($now)` (правит задача 17), а копия тела,
+напечатанная в плане до той правки, молча сняла бы этот ключ — экран сводки печатает счётчик
+«на сайте», и без него обращение к `$onSite` стало бы ошибкой.
 
 ```php
-/** @param array<string, string> $params */
-function newsAdminSummary(array $params = []): void
-{
-    $now = nowUtc();
-    $counts = adminItemCounts($now);
-    $pinned = pinnedVisibleCount($now);
-    $alertReason = takeAdminFlashReason();
-
-    render('news/admin/summary', [
-        'nav' => newsAdminNav(requestPath()),
-        'notice' => noticeForAdminScreen(NEWS_NOTICE_TEXT),
-        'alertTitle' => adminFailureTitle($alertReason),
-        'alertReason' => $alertReason,
-        'counts' => $counts,
-        'pinned' => $pinned,
-        'waiting' => $counts['scheduled'],
         'categories' => count(adminCategoryRows()),
         'tags' => count(adminTagRows()),
-    ], ['title' => 'Новости — админка', 'noindex' => true]);
-}
 ```
 
 Счётчики справочников берутся из готовых выборок, а не новым `SELECT COUNT(*)` в контроллере:
 правило 1 запрещает экрану ходить в базу, а два запроса на админской странице — та цена, которой
 стоит это правило.
 
-Изменить `apps/news/routes.php` — после двух подключений задачи 17 добавить третье:
+Изменить `apps/news/routes.php` — добавить подключение сразу после строки с `actions/item.php`.
+Ориентир соседним файлом, а не порядковым числом: к моменту этой задачи в списке уже четыре строки
+(`lib/boot.php`, `admin.php`, `actions/items.php` и `actions/item.php`), а «третье подключение»
+было верно только сразу после задачи 17.
 
 ```php
 require_once __DIR__ . '/actions/catalog.php';
