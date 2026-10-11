@@ -341,7 +341,8 @@ function newsCategoryRowActions(array $row): array
 
 /**
  * Кнопки строки тегов. Переименование — поле с формой, а не кнопка строки: его подпись читает
- * шаблон прямо из NEWS_TAG_OP_LABEL.
+ * шаблон прямо из NEWS_TAG_OP_LABEL. Удаление, наоборот, кнопка: шаблон собирает её тем же
+ * циклом, что и кнопки строки рубрика.
  *
  * @param array{id: string, slug: string, label: string, items: int} $row
  *
@@ -1079,6 +1080,17 @@ foreach ($rows as $row) {
     $id = (string) $row['id'];
     $items = (int) $row['items'];
 
+    // Кнопка удаления собирается циклом по newsTagRowActions(), как в справочнике рубрик: иначе
+    // вспомогательная функция остаётся живой только в тестах, а подпись кнопки заводится вторым
+    // источником.
+    $delete = '';
+    foreach (newsTagRowActions($row) as $action) {
+        $delete .= '<form class="flex flex-wrap gap-2" method="post" action="' . e(NEWS_ADMIN_TAGS_PATH) . '">'
+            . csrfField() . '<input type="hidden" name="op" value="' . e((string) $action['op']) . '">'
+            . '<input type="hidden" name="id" value="' . e($id) . '">'
+            . '<button class="' . $danger . '" type="submit">' . e((string) $action['label']) . '</button></form>';
+    }
+
     $rowsHtml .= '<li class="space-y-3 rounded-lg border border-ink/10 bg-white p-4">'
         . '<div class="flex flex-wrap items-baseline justify-between gap-2">'
         . '<h3 class="font-semibold">' . e((string) $row['label']) . '</h3>'
@@ -1093,10 +1105,7 @@ foreach ($rows as $row) {
         . '<label class="grow text-sm">Надпись<input class="' . $input . '" type="text" name="label" value="'
         . e((string) $row['label']) . '" required maxlength="' . e((string) $labelMax) . '"></label>'
         . '<button class="' . $button . '" type="submit">' . e(NEWS_TAG_OP_LABEL['rename']) . '</button></form>'
-        . '<form class="flex flex-wrap gap-2" method="post" action="' . e(NEWS_ADMIN_TAGS_PATH) . '">'
-        . csrfField() . '<input type="hidden" name="op" value="delete">'
-        . '<input type="hidden" name="id" value="' . e($id) . '">'
-        . '<button class="' . $danger . '" type="submit">' . e(NEWS_TAG_OP_LABEL['delete']) . '</button></form>'
+        . $delete
         . '</li>';
 }
 
@@ -1545,6 +1554,17 @@ addFilter('sitemap_urls', static function (array $urls): array {
 ```
 страницы рубрик; скрытые рубрики, материалы с `noindex` и подборки тегов (они несут
 `noindex, nofollow` — задача 17) в карту не попадают.
+```
+
+Изменить `docs/superpowers/specs/2026-10-10-cms-final-specification.md` — те же адреса в более
+новом документе (строка 336). Правка обязательна: итоговая спецификация новее пилотной, и читатель,
+который откроет только её, восстановит адреса тегов в карте по более новому документу и будет чинить
+то, что сделано верно. Фраза меняется целиком, чтобы не осталось перечисления через «и»:
+
+```
+`/sitemap.xml` собирается из хука `sitemap_urls` (видимые материалы и страницы рубрик; скрытые
+рубрики, материалы с `noindex` и подборки тегов — они несут `noindex, nofollow` — в карту не
+попадают) и считается заново на каждый вызов — кеша процесса нет.
 ```
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSitemapTest`
@@ -2358,6 +2378,7 @@ GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \
 GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.com' \
 git add apps/news/lib/seo.php apps/news/routes.php \
   docs/superpowers/specs/2026-10-06-php-cms-pilot-design.md \
+  docs/superpowers/specs/2026-10-10-cms-final-specification.md \
   tests/db/NewsSitemapTest.php tests/db/NewsNoticeCoverageTest.php \
   tests/http/NewsAssemblyTest.php tests/guard/NewsVisibilityTest.php \
   tests/guard/AppActionContractTest.php
