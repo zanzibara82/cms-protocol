@@ -70,7 +70,7 @@ final class NewsAdminRulesTest extends TestCase
         self::assertSame([], newsRowActions($this->item(['status' => 'ARCHIVED'])), 'Строки из будущего не печатают кнопок');
     }
 
-    public function testПолосаВкладокЗнаетДваЭкрана(): void
+    public function testПолосаВкладокЗнаетЧетыреЭкрана(): void
     {
         self::assertCount(4, NEWS_ADMIN_TABS);
 

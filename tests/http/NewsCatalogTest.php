@@ -201,6 +201,21 @@ final class NewsCatalogTest extends TestCase
         self::assertSame('vypusknye', (string) end($rows)['slug'], 'Адрес сложен транслитерацией один раз');
     }
 
+    public function testЭкранРубрикПечатаетОбещанныйТекстУспеха(): void
+    {
+        // Ключ в адресе — только половина договора: экран за перенаправлением обязан напечатать
+        // текст из словаря раздела. Проверка идёт по адресу перенаправления тем же клиентом и
+        // сверяет тело со словарём, а не с вписанной строкой.
+        $this->login();
+        $response = $this->send(NEWS_ADMIN_CATEGORIES_PATH, ['op' => 'create', 'title' => 'Кружок пения', 'description' => '']);
+
+        self::assertSame('created', $this->noticeOf($response));
+
+        $screen = Kernel::get((string) $response['headers']['location']);
+        self::assertSame(200, $screen['status']);
+        self::assertStringContainsString(CATALOG_NOTICE_TEXT['created'], $screen['body']);
+    }
+
     public function testПереименованиеНеМеняетАдрес(): void
     {
         // Критерий §12.14. Адрес остался бы прежним и без теста, но проверить надо именно
