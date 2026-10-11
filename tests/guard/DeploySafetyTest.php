@@ -29,6 +29,15 @@ final class DeploySafetyTest extends TestCase
                 $var . ' обязан читаться через `:?` — запуск без него должен упасть, а не выложить в пустоту'
             );
         }
+
+        // `:?` ловит пустое значение и пропускает относительное, а его rsync считает от домашнего
+        // каталога входа: --delete уйдёт чистить соседнее дерево. Проверка ведущего слэша обязана
+        // стоять до вызова rsync.
+        self::assertMatchesRegularExpression(
+            '/case "\$CMS_DEPLOY_PATH" in\s*\n\s*\/\*\)/',
+            $sh,
+            'deploy.sh обязан отвергать относительный CMS_DEPLOY_PATH до вызова rsync'
+        );
     }
 
     public function testТриКаталогаНаСервереНеУдаляются(): void

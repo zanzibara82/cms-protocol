@@ -271,8 +271,13 @@ async function main() {
     await ws.open
     await ws.send('Page.enable')
     await ws.send('Network.enable')
-    if (cookie) {
-      await ws.send('Network.setCookie', {
+
+    // Кука кладётся в браузер командой протокола, а не ответом сервера, поэтому поставить её
+    // можно в любой момент прогона. Ставится она ПОСЛЕ замера публичных адресов: под живой
+    // сессией маршрут /login редиректит в /admin, и форма входа — экран, с которого начинается
+    // путь любого посетителя, — осталась бы без замера раскладки вообще.
+    const setSessionCookie = () =>
+      ws.send('Network.setCookie', {
         name: SESSION_COOKIE,
         value: cookie,
         domain: new URL(BASE).hostname,
@@ -280,45 +285,61 @@ async function main() {
         httpOnly: true,
         sameSite: 'Lax',
       })
+
+    const measure = async (list) => {
+      for (const vp of VIEWPORTS) {
+        // Метка mobile меняет то, как Chrome применяет media-запросы: на узких экранах часть
+        // раскладок живёт именно в них, и их надо просить как мобильный вьюпорт, а не сжимать
+        // десктопный.
+        await ws.send('Emulation.setDeviceMetricsOverride', {
+          width: vp.w,
+          height: vp.h,
+          deviceScaleFactor: 1,
+          mobile: vp.w < 500,
+        })
+        for (const item of list) {
+          const wait = ws.onLoad()
+          await ws.send('Page.navigate', { url: BASE + item.href })
+          await wait
+          await sleep(900)
+          await ws.send('Runtime.evaluate', {
+            expression: `document.querySelectorAll('details').forEach((d) => { d.open = true })`,
+          })
+          await sleep(200)
+          const { result } = await ws.send('Runtime.evaluate', { expression: PROBE, returnByValue: true })
+          const row = { page: item.name, href: item.href, vp: vp.name, ...result.value }
+          if (SHOTS && (vp.name === '360' || vp.name === '1440')) {
+            const shot = await ws.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
+            writeFileSync(join(OUT, `${safeName(item.name)}-${vp.name}.png`), Buffer.from(shot.data, 'base64'))
+          }
+          report.push(row)
+          const ok = row.offenders.length === 0 && row.scrollWidth <= row.vw + 1
+          const redirected = row.url !== item.href.split('?')[0] ? ` → ${row.url}` : ''
+          console.log(
+            `${ok ? 'OK  ' : 'FAIL'} ${item.name.padEnd(24)} ${vp.name.padStart(4)}  scroll=${row.scrollWidth}${redirected}  ` +
+              row.offenders.map((o) => `${o.sel}→${o.right}`).join(' | ').slice(0, 200),
+          )
+        }
+      }
     }
 
-    const pages = process.env.RESP_PAGES
-      ? JSON.parse(process.env.RESP_PAGES)
-      : [...(await publicPages()), ...(cookie ? ADMIN_PAGES : [])]
-    if (!pages.length) throw new Error('RESP_PAGES задан, но пуст: проверять нечего')
-
-    for (const vp of VIEWPORTS) {
-      // Метка mobile меняет то, как Chrome применяет media-запросы: на узких экранах часть
-      // раскладок живёт именно в них, и их надо просить как мобильный вьюпорт, а не сжимать
-      // десктопный.
-      await ws.send('Emulation.setDeviceMetricsOverride', {
-        width: vp.w,
-        height: vp.h,
-        deviceScaleFactor: 1,
-        mobile: vp.w < 500,
-      })
-      for (const item of pages) {
-        const wait = ws.onLoad()
-        await ws.send('Page.navigate', { url: BASE + item.href })
-        await wait
-        await sleep(900)
-        await ws.send('Runtime.evaluate', {
-          expression: `document.querySelectorAll('details').forEach((d) => { d.open = true })`,
-        })
-        await sleep(200)
-        const { result } = await ws.send('Runtime.evaluate', { expression: PROBE, returnByValue: true })
-        const row = { page: item.name, href: item.href, vp: vp.name, ...result.value }
-        if (SHOTS && (vp.name === '360' || vp.name === '1440')) {
-          const shot = await ws.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true })
-          writeFileSync(join(OUT, `${safeName(item.name)}-${vp.name}.png`), Buffer.from(shot.data, 'base64'))
-        }
-        report.push(row)
-        const ok = row.offenders.length === 0 && row.scrollWidth <= row.vw + 1
-        const redirected = row.url !== item.href.split('?')[0] ? ` → ${row.url}` : ''
-        console.log(
-          `${ok ? 'OK  ' : 'FAIL'} ${item.name.padEnd(24)} ${vp.name.padStart(4)}  scroll=${row.scrollWidth}${redirected}  ` +
-            row.offenders.map((o) => `${o.sel}→${o.right}`).join(' | ').slice(0, 200),
-        )
+    // RESP_PAGES задаёт список вручную — так проверяют адреса с id из базы (форма правки
+    // материала, заявка): их скрипт сам выдумать не может. В этом режиме кука ставится сразу,
+    // потому что список явно просит экраны под входом.
+    const explicit = process.env.RESP_PAGES ? JSON.parse(process.env.RESP_PAGES) : null
+    if (explicit !== null) {
+      if (!Array.isArray(explicit) || explicit.length === 0) {
+        throw new Error('RESP_PAGES задан, но пуст: проверять нечего')
+      }
+      if (cookie) await setSessionCookie()
+      await measure(explicit)
+    } else {
+      const guest = await publicPages()
+      if (!guest.length) throw new Error('публичных адресов нет: карта сайтов пуста — проверять нечего')
+      await measure(guest)
+      if (cookie) {
+        await setSessionCookie()
+        await measure(ADMIN_PAGES)
       }
     }
   } finally {
