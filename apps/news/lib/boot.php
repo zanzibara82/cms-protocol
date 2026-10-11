@@ -13,3 +13,5 @@ require_once __DIR__ . '/feed.php';
 require_once __DIR__ . '/items.php';
 require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/seo.php';
+require_once __DIR__ . '/form.php';
+require_once __DIR__ . '/upload.php';

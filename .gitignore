@@ -19,3 +19,8 @@
 /public/uploads/*
 !/public/uploads/.gitkeep
 !/public/uploads/.htaccess
+
+# Каталог обложек «Новостей» обязан быть в репозитории пустым: без него первая же загрузка падает,
+# а загруженные картинки git показал бы как изменения рабочего дерева.
+!/public/uploads/news/
+!/public/uploads/news/.gitkeep

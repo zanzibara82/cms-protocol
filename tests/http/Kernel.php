@@ -122,7 +122,10 @@ final class Kernel
     }
 
     /**
-     * @param array<string, string> $fields
+     * Значением поля может быть `\CURLFile`: `CURLOPT_POSTFIELDS` принимает его нативно и сам
+     * переключает запрос на `multipart/form-data`.
+     *
+     * @param array<string, string|\CURLFile> $fields
      * @param array<string, mixed> $options
      * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}
      */
@@ -132,7 +135,7 @@ final class Kernel
     }
 
     /**
-     * @param array<string, string> $fields
+     * @param array<string, string|\CURLFile> $fields
      * @param array<string, mixed> $options
      * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}
      */

@@ -104,6 +104,13 @@ foreach ($listing['items'] as $item) {
         $buttons = '<span class="text-sm text-ink/50">Действий нет</span>';
     }
 
+    // Ссылка «Править» ведёт на форму задачи 18 и несёт обратный адрес: вернувшись из сохранения,
+    // человек попадает в тот же список — с той же вкладкой, рубрикой и страницей. Она добавляется
+    // уже после проверки пустоты: иначе сама заполнила бы $buttons, и «Действий нет» не показался
+    // бы никогда.
+    $buttons .= '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-2.5 py-1 text-sm hover:bg-ink/5" href="'
+        . e(queryAppend((string) $item['editHref'], 'back', $listing['href'])) . '">Править</a>';
+
     // Адрес материала: невидимый материал открывается только по прямой ссылке с ?draft=1, и список
     // обязан вести именно туда — иначе редактор жалуется на 404 там, где всё работает.
     $publicHref = (string) $item['href'] . ($item['open'] === true ? '' : '?draft=1');

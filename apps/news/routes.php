@@ -7,6 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/lib/boot.php';
 require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/actions/items.php';
+require_once __DIR__ . '/actions/item.php';
 
 // Порядок важен: /news/c/{slug} и /news/t/{slug} стоят до /news/{slug}. Сами адреса «c» и «t»
 // заняты в NEWS_RESERVED_SLUGS, поэтому материал не может увести у рубрики её страницу.
@@ -21,6 +22,15 @@ addRoute('GET', '/news/{slug}', 'newsSinglePage', ['app' => 'news']);
 addRoute('GET', '/news/admin', 'newsAdminSummary', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/news/admin/items', 'newsAdminItems', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/news/admin/items', 'newsItemsAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+
+// Форма материала. Пути пишутся строковыми литералами, а не константами: страж
+// `CsrfCoverageTest::postHandlers()` ищет POST-обработчик регуляркой
+// addRoute('POST', 'путь', 'имя') — путь в виде константы в этот шаблон не попадает, и обработчик
+// исчез бы из-под проверки CSRF незаметно.
+addRoute('GET', '/news/admin/items/new', 'newsItemNew', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/news/admin/items/new', 'newsItemSaveAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/news/admin/items/{id}', 'newsItemEdit', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/news/admin/items/{id}', 'newsItemSaveAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 
 /** @param array<string, string> $params */
 function newsFeedPage(array $params = []): void

@@ -14,6 +14,8 @@ final class WebServerConfigTest extends TestCase
 {
     private const ROOT_CONFIG = 'public/.htaccess';
 
+    private const UPLOADS_CONFIG = 'public/uploads/.htaccess';
+
     public function testКорневойКонфигДержитВсеБарьеры(): void
     {
         $path = dirname(__DIR__, 2) . '/' . self::ROOT_CONFIG;
@@ -26,6 +28,23 @@ final class WebServerConfigTest extends TestCase
             [],
             $this->violations($config, self::ROOT_CONFIG),
             'Каждый барьер корневой конфигурации обязан быть на месте и в форме, живой на хостинге'
+        );
+    }
+
+    // Каталог загрузок — единственное место, куда ложится то, что принесли люди. Проверяется тем же
+    // механизмом, что и корень: голый «Require» без обёртки роняет сайт 500-м, а отказ, который не
+    // накрывает php-расширения, оставляет исполняемый файл по адресу картинки.
+    public function testКаталогЗагрузокДержитСвоиБарьеры(): void
+    {
+        $path = dirname(__DIR__, 2) . '/' . self::UPLOADS_CONFIG;
+
+        self::assertFileExists($path, 'У каталога загрузок нет .htaccess: PHP в нём исполняется');
+
+        $config = (string) file_get_contents($path);
+        self::assertSame(
+            [],
+            $this->uploadsViolations($config, self::UPLOADS_CONFIG),
+            'Барьеры каталога загрузок обязаны быть на месте и в форме, живой на хостинге'
         );
     }
 
@@ -242,6 +261,26 @@ final class WebServerConfigTest extends TestCase
         }
 
         return $this->withoutForwardedHeaders($found, $config, $relative);
+    }
+
+    /** @return list<string> */
+    private function uploadsViolations(string $config, string $relative): array
+    {
+        $found = [];
+
+        if (preg_match('/^\s*Options\b[^\n]*-Indexes/m', $config) !== 1) {
+            $found[] = $relative . ': нет Options -Indexes — содержимое каталога отдаётся списком';
+        }
+
+        if (! $this->hasDeniedWithFallback($config)) {
+            $found[] = $relative . ': нет отказа с обёрткой mod_authz_core и запасной веткой — неизвестная директива роняет сайт 500-м';
+        }
+
+        if (preg_match('/<FilesMatch[^>]*php/i', $config) !== 1) {
+            $found[] = $relative . ': отказ не накрывает php-расширения — файл, переименованный в .php, остаётся исполняемым';
+        }
+
+        return $found;
     }
 
     // Редирект обязан пропускать три рода адресов, иначе он ломает то, без чего сайт не живёт:

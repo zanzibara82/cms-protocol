@@ -48,6 +48,8 @@ $content = $nav . '<p class="text-sm text-ink/70">' . e($waitingText) . '</p>'
     . $alert
     . '<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">' . $panel . '</div>'
     . '<p class="flex flex-wrap items-center gap-3"><a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '
+    . 'href="' . e(NEWS_ITEM_NEW_PATH) . '">Новый материал</a>'
+    . '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm text-cream hover:opacity-90" '
     . 'href="' . e(NEWS_ADMIN_ITEMS_PATH) . '">Открыть список</a>'
     . '<a class="inline-flex min-h-[44px] items-center text-sm text-ink/70 underline underline-offset-4 hover:text-ink" href="/news">Посмотреть ленту</a></p>'
     . $foot;

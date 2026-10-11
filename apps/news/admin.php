@@ -58,3 +58,68 @@ function newsAdminItems(array $params = []): void
         'categories' => categoryOptions(),
     ], ['title' => 'Материалы — админка', 'noindex' => true]);
 }
+
+// Экран формы. Создание и правка различаются адресом, поэтому `$params['id']` — единственное,
+// что говорит контроллеру, новую строку показывать или сохранённую.
+//
+// Право на переход проверяет гейт маршрута (`permission => 'login'`), а POST-действие перечитывает
+// `getEditorAccess()`: роль и блокировка могли измениться посреди открытой формы, и имя автора
+// обязано соответствовать тому, кто сейчас за клавиатурой.
+
+/** @param array<string, string> $params */
+function newsItemNew(array $params = []): void
+{
+    renderNewsItemForm([], [], [], newsAdminBackHref((string) queryString('back', '')));
+}
+
+/** @param array<string, string> $params */
+function newsItemEdit(array $params = []): void
+{
+    $id = mb_substr(trim((string) ($params['id'] ?? '')), 0, NEWS_ID_MAX);
+    $item = itemForForm($id);
+    $back = newsAdminBackHref((string) queryString('back', ''));
+
+    if ($item === null) {
+        // Строки нет — в форму вести нечего: человек оказывается в списке с тем же текстом отказа,
+        // что даёт кнопка строки удалённого материала. Канал один на весь раздел: причина в flash,
+        // в адрес — только ключ словаря (тот же `finishAppAction()`, что и кнопки списка).
+        finishAppAction(itemFailure('Материала уже нет — обновите страницу.'), $back, '');
+    }
+
+    renderNewsItemForm($item, [], [], $back);
+}
+
+/**
+ * Один экран в трёх исходах: чистая форма, форма после отказа разбора, форма после отказа записи.
+ * Везде один и тот же набор имён полей, поэтому `render()` вызывается отсюда, а не из трёх мест:
+ * расхождение между ними — это экран, который в одном из исходов теряет половину полей.
+ *
+ * @param array<string, mixed> $item пустой массив — новый материал
+ * @param array<string, string> $raw введённые поля (пусто — значит брать из `$item`)
+ * @param array<string, string> $errors отказы по именам полей
+ */
+function renderNewsItemForm(array $item, array $raw, array $errors, string $back, string $error = ''): void
+{
+    $isNew = $item === [];
+    $status = (string) ($item['status'] ?? '');
+
+    render('news/admin/item-form', [
+        'nav' => newsAdminNav(NEWS_ADMIN_ITEMS_PATH),
+        'notice' => (string) (noticeOfRequest(NEWS_NOTICE_TEXT) ?? ''),
+        'error' => $error,
+        'errors' => $errors,
+        'values' => newsFormValues($item, $raw),
+        'buttons' => newsFormButtons($status),
+        'action' => $isNew ? NEWS_ITEM_NEW_PATH : (string) $item['editHref'],
+        'back' => $back,
+        'isNew' => $isNew,
+        'statusLabel' => (string) ($item['statusLabel'] ?? ''),
+        'publicHref' => (string) ($item['href'] ?? ''),
+        'updated' => (string) ($item['updated'] ?? ''),
+        'oldSlugs' => count((array) ($item['oldSlugs'] ?? [])),
+        'categories' => categoryOptions(),
+    ], [
+        'title' => ($isNew ? 'Новый материал' : 'Правка материала') . ' — админка',
+        'noindex' => true,
+    ]);
+}
