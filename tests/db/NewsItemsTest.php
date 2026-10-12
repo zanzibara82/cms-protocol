@@ -143,6 +143,10 @@ final class NewsItemsTest extends NewsDbTestCase
             'спецсимволы LIKE' => ['100%', []],
             'подчёркивание как текст' => ['100_процентов', ['yubilej']],
             'шаблон из подчёркивания' => ['_процентов', ['yubilej']],
+            // Буква задания буквально: шаблон сдвинут на символ (подчёркивание плюс слово без
+            // первой буквы) — ни в одном заголовке такой подстроки нет, а без экранирования `_`
+            // сожрёт «п» и найдёт оба подготовленных материала.
+            'шаблон со сдвигом на символ' => ['_роцентов', []],
             'ничего не найдено' => ['такого-нет', []],
         ];
 
@@ -373,10 +377,12 @@ final class NewsItemsTest extends NewsDbTestCase
         $id = self::makeItem($category, 'dvenadcat-adresov');
         $slugs = [];
 
+        // Нулевое заполнение шириной под самый большой номер цикла: ORDER BY slug возвращает
+        // список в том же порядке, что и переданный, независимо от разрядности предела.
+        $pad = strlen((string) (OLD_SLUGS_MAX + 2));
+
         for ($index = 1; $index <= OLD_SLUGS_MAX + 2; $index++) {
-            // Ширина два: ORDER BY slug возвращает список в том же порядке, что и переданный,
-            // а не в порядке `adres-10` раньше `adres-2`.
-            $slugs[] = sprintf('adres-%02d', $index);
+            $slugs[] = 'adres-' . str_pad((string) $index, $pad, '0', STR_PAD_LEFT);
         }
 
         saveOldSlugs($id, $slugs);
@@ -386,10 +392,10 @@ final class NewsItemsTest extends NewsDbTestCase
             all('SELECT slug FROM ' . t('news_old_slug') . ' WHERE item_id = ? ORDER BY slug', [$id])
         );
 
-        self::assertCount(OLD_SLUGS_MAX, $kept, 'Из двенадцати адресов в таблице остаётся ровно десять');
+        self::assertCount(OLD_SLUGS_MAX, $kept, 'Из ' . count($slugs) . ' адресов в таблице остаётся ровно ' . OLD_SLUGS_MAX);
         self::assertSame(array_slice($slugs, 0, OLD_SLUGS_MAX), $kept, 'Остаются первые по порядку, а не хвост списка');
-        self::assertNotContains('adres-11', $kept);
-        self::assertNotContains('adres-12', $kept);
+        self::assertNotContains($slugs[OLD_SLUGS_MAX], $kept);
+        self::assertNotContains($slugs[OLD_SLUGS_MAX + 1], $kept);
     }
 
     public function testПравкаОбновляетПоляТегиИСостояние(): void
