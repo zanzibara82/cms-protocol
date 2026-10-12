@@ -1800,7 +1800,9 @@ final class AppSqlTest extends TestCase
     {
         $violations = [];
 
-        foreach ($this->sqlFiles() as $file) {
+        // Имена проверяются только у файлов приложений: журнал обновлений читает их, а базовая
+        // схема ядра ставится установщиком по одному пути и в журнал не записывается.
+        foreach ($this->appSqlFiles() as $file) {
             if (preg_match('/^\d{8}_\d{4}_[a-z0-9_]+\.sql$/', basename($file)) !== 1) {
                 $violations[] = $file;
             }
@@ -1828,15 +1830,32 @@ final class AppSqlTest extends TestCase
         self::assertSame([], $violations);
     }
 
-    /** @return list<string> */
+    /**
+     * Релизы схемы на проверку содержимого: и приложения, и базовая схема ядра. Правила
+     * одинаковые — установщик исполняет файл ядра теми же утверждениями, что журнал исполняет
+     * файлы раздела, поэтому `CREATE TABLE` без `IF NOT EXISTS` в любом из них ломает повторный
+     * прогон установки.
+     *
+     * @return list<string>
+     */
     private function sqlFiles(): array
     {
         $root = dirname(__DIR__, 2);
-        $files = [];
+        $files = glob($root . '/sql/*.sql') ?: [];
 
         foreach (glob($root . '/apps/*/sql/*.sql') ?: [] as $file) {
             $files[] = $file;
         }
+
+        sort($files);
+
+        return $files;
+    }
+
+    /** @return list<string> */
+    private function appSqlFiles(): array
+    {
+        $files = glob(dirname(__DIR__, 2) . '/apps/*/sql/*.sql') ?: [];
 
         sort($files);
 
@@ -2122,9 +2141,9 @@ function visibleArgs(DateTimeImmutable $now): array
 /**
  * Порядок везде один: закреплённые вперёд, затем по сроку. Страница в него не входит — при
  * порядке «закреплённые только на первой» OFFSET читается по одной последовательности, а строки
- * по другой: на стыке страниц материал теряется, а закреплённый показывается дважды. Закреплённые
- * идут первыми и так, поэтому со второй страницы они не поднимаются, пока их не больше
- * PINNED_WARN_LIMIT — вытеснение ленты считает tooManyPinned().
+ * по другой: на стыке страниц материал теряется, а закреплённый показывается дважды. Плата за
+ * это иная: закреплённые занимают начало каждой страницы, и при большом их числе лента уходит с
+ * первой страницы целиком. Число ничего не блокирует — предельное подсказывает tooManyPinned().
  */
 function orderNews(): string
 {
