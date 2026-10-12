@@ -254,8 +254,11 @@ final class NoIndexNoStoreSweepTest extends TestCase
                     : (self::NOT_INSTALLED_FILE_ADDRESSES[$key] ?? self::NOT_INSTALLED_STATUS);
 
                 if ($actual !== $expectedOutcome) {
+                    // Имена исходов разного рода («помеченный экран», «перенаправление»), поэтому
+                    // подлежащие — неизменные слова, а имена стоят в кавычках: текст падения обязан
+                    // читаться согласованно при любом подставленном имени.
                     $violations[] = sprintf(
-                        '%s: ожидался %s со статусом %d, а получен %s со статусом %d',
+                        '%s: ожидаемый исход — «%s» (статус %d), фактический — «%s» (статус %d)',
                         $identity,
                         $expectedOutcome,
                         $expectedStatus,
