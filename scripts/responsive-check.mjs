@@ -313,7 +313,12 @@ async function main() {
             writeFileSync(join(OUT, `${safeName(item.name)}-${vp.name}.png`), Buffer.from(shot.data, 'base64'))
           }
           report.push(row)
-          const ok = row.offenders.length === 0 && row.scrollWidth <= row.vw + 1
+          // Порог — ширина, которую попросили, а не та, которую вернула страница. При мобильной
+          // эмуляции переполненный документ расширяет `innerWidth` до своей ширины, и сравнение с
+          // `row.vw` печатало бы `OK` на экране, который разложен вширь: строка расходилась бы с
+          // итогом (`fails` ниже мерит от запрошенного вьюпорта) и с кодом возврата. Человек,
+          // который смотрит на консоль, обязан видеть там то же, о чём прогон уже молча вернул 1.
+          const ok = row.offenders.length === 0 && row.scrollWidth <= vp.w + 1
           const redirected = row.url !== item.href.split('?')[0] ? ` → ${row.url}` : ''
           console.log(
             `${ok ? 'OK  ' : 'FAIL'} ${item.name.padEnd(24)} ${vp.name.padStart(4)}  scroll=${row.scrollWidth}${redirected}  ` +
