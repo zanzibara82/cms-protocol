@@ -130,11 +130,19 @@ final class NewsItemsTest extends NewsDbTestCase
         self::makeItem($category, 'itogi-goda', ['title' => 'Итоги года', 'lead_text' => 'Что мы сделали']);
         self::makeItem($category, 'vecher', ['title' => 'Вечер встречи', 'lead_text' => 'Выпускники собрались']);
 
+        // Подчёркивание в LIKE означает «любой символ», поэтому рядом кладётся подставной материал
+        // с пробелом на том же месте: экранирование сломано — и запрос про `100_процентов` отдаст
+        // оба материала вместо одного.
+        self::makeItem($category, 'yubilej', ['title' => 'Юбилей 100_процентов']);
+        self::makeItem($category, 'skidka', ['title' => 'Скидка 100 процентов']);
+
         $cases = [
             'заголовок' => ['итоги', ['itogi-goda']],
             'лид' => ['Выпускники', ['vecher']],
             'адрес' => ['vech', ['vecher']],
             'спецсимволы LIKE' => ['100%', []],
+            'подчёркивание как текст' => ['100_процентов', ['yubilej']],
+            'шаблон из подчёркивания' => ['_процентов', ['yubilej']],
             'ничего не найдено' => ['такого-нет', []],
         ];
 
@@ -356,6 +364,34 @@ final class NewsItemsTest extends NewsDbTestCase
         self::assertSame(['vecher-vstrechi'], oldSlugsOf($created['id']));
     }
 
+    // saveOldSlugs() — функция публичная: её могут позвать со всей историей правок, минуя
+    // rememberOldSlug(), которая режет список на своём конце. Срез обязан стоять и в самой записи,
+    // иначе в tbl_news_old_slug полезет весь хвост.
+    public function testЗаписьПрежнихАдресовРежетсяПоПределу(): void
+    {
+        $category = categoryIdOf('zhizn-shkoly');
+        $id = self::makeItem($category, 'dvenadcat-adresov');
+        $slugs = [];
+
+        for ($index = 1; $index <= OLD_SLUGS_MAX + 2; $index++) {
+            // Ширина два: ORDER BY slug возвращает список в том же порядке, что и переданный,
+            // а не в порядке `adres-10` раньше `adres-2`.
+            $slugs[] = sprintf('adres-%02d', $index);
+        }
+
+        saveOldSlugs($id, $slugs);
+
+        $kept = array_map(
+            static fn (array $row): string => (string) $row['slug'],
+            all('SELECT slug FROM ' . t('news_old_slug') . ' WHERE item_id = ? ORDER BY slug', [$id])
+        );
+
+        self::assertCount(OLD_SLUGS_MAX, $kept, 'Из двенадцати адресов в таблице остаётся ровно десять');
+        self::assertSame(array_slice($slugs, 0, OLD_SLUGS_MAX), $kept, 'Остаются первые по порядку, а не хвост списка');
+        self::assertNotContains('adres-11', $kept);
+        self::assertNotContains('adres-12', $kept);
+    }
+
     public function testПравкаОбновляетПоляТегиИСостояние(): void
     {
         $created = createItem($this->input(), $this->editor());
@@ -446,16 +482,19 @@ final class NewsItemsTest extends NewsDbTestCase
     public function testСнятиеССайтаСохраняетСрок(): void
     {
         $category = categoryIdOf('zhizn-shkoly');
+        // Один вызов на запись и на проверку: пересчёт момента вторым вызовом ловил границу
+        // секунды, и тест падал бы без вины кода.
+        $publishedAt = self::ago(60);
         $id = self::makeItem($category, 'na-sajte', [
             'status' => NEWS_STATUS['PUBLISHED'],
-            'published_at' => self::ago(60),
+            'published_at' => $publishedAt,
         ]);
 
         $result = setItemStatus($id, NEWS_STATUS['DRAFT']);
 
         self::assertTrue($result['ok']);
         self::assertSame('unpublished', $result['notice']);
-        self::assertSame(self::ago(60), $this->column('SELECT published_at FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
+        self::assertSame($publishedAt, $this->column('SELECT published_at FROM ' . t('news_item') . ' WHERE id = ?', [$id]));
         self::assertSame([], self::slugs(findFeed()['items']));
     }
 
