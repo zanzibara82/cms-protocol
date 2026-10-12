@@ -22,6 +22,7 @@ use PHPUnit\Framework\TestCase;
 final class UploadsIgnoreTest extends TestCase
 {
     private const FILE = '.gitignore';
+    private const GIT = 'git';
 
     /** Адреса, которые обязаны быть закрыты: их кладёт на диск человек или сервер. */
     private const MUST_IGNORE = [
@@ -51,6 +52,23 @@ final class UploadsIgnoreTest extends TestCase
             $this->violations($this->rulesOfRepository()),
             'Ни одно правило git не сместилось: обложки обязаны быть игнором, каркас каталога — в репозитории'
         );
+    }
+
+    // Собственный разбор правил отвечает на вопрос «что git считает игнорируемым», но пересобирает
+    // семантику git сам: расхождение своего матчера с настоящей командой остаётся невидимым, пока
+    // кто-то не сравнит их лоб в лоб. Здесь сверка идёт по тому же списку путей, что проверяют
+    // остальные проверки стража. Вызов только читает правила: ничего не пишется, индекс не меняется.
+    public function testСобственныйМатчерСовпадаетСКомандойGitCheckIgnore(): void
+    {
+        $rules = $this->rulesOfRepository();
+
+        foreach (array_merge(self::MUST_IGNORE, self::MUST_TRACK) as $path) {
+            self::assertSame(
+                self::ignoredByGit($path),
+                self::ignored($rules, $path),
+                'Матчер стража и `git check-ignore` разошлись на пути ' . $path
+            );
+        }
     }
 
     // Страж обязан краснеть на удалённой маске содержимого, а не молчать: без этой проверки
@@ -176,6 +194,30 @@ final class UploadsIgnoreTest extends TestCase
         self::assertFileExists($path, 'Правил игнора репозитория нет вовсе');
 
         return self::rules((string) file_get_contents($path));
+    }
+
+    /**
+     * Вердикт настоящего git по пути: `git check-ignore -q` отвечает кодом `0`, когда путь
+     * игнорируется, и кодом `1`, когда нет. Всё остальное — не ответ, а поломка сверки: нет
+     * бинарника, нет каталога `.git`, путь за пределами репозитория. Проверка в этом случае
+     * падает, а не пропускается — молча выключенная сверка это тот же выключенный страж.
+     */
+    private static function ignoredByGit(string $path): bool
+    {
+        $output = [];
+        $status = 0;
+
+        exec(
+            self::GIT . ' -C ' . escapeshellarg(dirname(__DIR__, 2)) . ' check-ignore -q ' . escapeshellarg($path) . ' 2>&1',
+            $output,
+            $status
+        );
+
+        if ($status !== 0 && $status !== 1) {
+            self::fail('Сверка с `git check-ignore` по пути ' . $path . ' не состоялась (код ' . $status . '): ' . trim(implode("\n", $output)));
+        }
+
+        return $status === 0;
     }
 
     /**
