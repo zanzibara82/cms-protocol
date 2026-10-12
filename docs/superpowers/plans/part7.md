@@ -302,7 +302,7 @@ final class NewsPublishRulesTest extends TestCase
             'pinned' => true,
             'seoTitle' => '',
             'seoDescription' => 'Описание',
-            'ogImage' => '/uploads/news/og.jpg',
+            'ogImage' => '/uploads/images/og.jpg',
             'noindex' => false,
         ];
 
@@ -315,7 +315,7 @@ final class NewsPublishRulesTest extends TestCase
         self::assertSame(1, $draft['pinned']);
         self::assertSame(0, $draft['noindex']);
         self::assertSame('Описание', $draft['seo_description']);
-        self::assertSame('/uploads/news/og.jpg', $draft['og_image']);
+        self::assertSame('/uploads/images/og.jpg', $draft['og_image']);
         self::assertSame(utcStamp($now), $draft['updated_at']);
         self::assertArrayNotHasKey('author_id', $draft, 'черновик снимок автора не ставит');
         self::assertArrayNotHasKey('author_email', $draft);

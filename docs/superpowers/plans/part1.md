@@ -178,7 +178,10 @@ cms/
     .htaccess                    rewrite, защитные правила, заголовки безопасности
     assets/app.css               собранный Tailwind (в репозитории)
     assets/og-default.png        фирменное превью 1200×630 (в репозитории, рисуется scripts/make-og-default.php)
-    uploads/.gitkeep
+    uploads/.gitkeep             каталог загрузок, пустой каркас
+    uploads/.htaccess            барьер: PHP в загрузках не исполняется
+    uploads/images/.gitkeep      картинки, которые кладёт админка
+    uploads/files/.gitkeep       прочие файлы админки
   core/
     bootstrap.php                подключение библиотек ядра, автозагрузчик, TZ, обработчики ошибок
     config-loader.php            чтение config.php с проверкой обязательных ключей

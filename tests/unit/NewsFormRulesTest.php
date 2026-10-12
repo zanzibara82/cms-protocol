@@ -94,7 +94,7 @@ final class NewsFormRulesTest extends TestCase
     {
         $href = newsImageHrefOf('png');
 
-        self::assertMatchesRegularExpression('#^/uploads/news/[0-9a-z]{26}\.png$#', $href);
+        self::assertMatchesRegularExpression('#^/uploads/images/[0-9a-z]{26}\.png$#', $href);
         self::assertNotSame($href, newsImageHrefOf('png'), 'Два вызова дают два разных имени');
     }
 
@@ -102,7 +102,7 @@ final class NewsFormRulesTest extends TestCase
     {
         $dir = str_replace('\\', '/', newsUploadDir());
 
-        self::assertStringEndsWith('/public/uploads/news', $dir);
+        self::assertStringEndsWith('/public/uploads/images', $dir);
         self::assertStringStartsWith(str_replace('\\', '/', dirname(__DIR__, 2)), $dir, 'За пределами проекта писать некуда');
     }
 
@@ -164,7 +164,7 @@ final class NewsFormRulesTest extends TestCase
         $foreign = dirname(__DIR__, 2) . '/config.sample.php';
         newsImageDelete('/uploads/../config.sample.php');
         newsImageDelete('');
-        newsImageDelete('/uploads/news/takogo-fajla-net.png');
+        newsImageDelete('/uploads/images/takogo-fajla-net.png');
 
         self::assertFileExists($foreign, 'Адрес вне каталога загрузок не удаляется');
     }

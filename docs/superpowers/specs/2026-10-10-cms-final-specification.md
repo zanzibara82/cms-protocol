@@ -264,8 +264,10 @@ created_at, updated_at; индексы `(status, published_at)`, `(category_id, 
 - Формы: `method="post"` везде, где есть пароль или изменение данных; намерение кнопки — отдельное
   поле `intent` или `op`; после успеха — PRG-редирект с `?notice=<ключ>`. Каждый экран работает без
   JavaScript.
-- Загрузки: `public/uploads/news/<сгенерированное-имя>.<расширение>`; MIME по содержимому (`finfo`),
-  размер ≤ 5 МБ, расширения `jpg, jpeg, png, webp`; путь из формы не используется.
+- Загрузки: `public/uploads/images/<сгенерированное-имя>.<расширение>`; MIME по содержимому (`finfo`),
+  размер ≤ 5 МБ, расширения `jpg, jpeg, png, webp`; путь из формы не используется. Каталог загрузок
+  разведён по типу содержимого: картинки в `images`, прочие файлы в `files`, барьер исполнения один
+  на дереве — `public/uploads/.htaccess`.
 - Заголовки ответа (`public/.htaccess` и дубль в `bootstrap.php`, потому что не каждый хостинг даёт
   `mod_headers`): `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `X-Frame-Options: SAMEORIGIN`, `Content-Security-Policy` из текущего проекта.

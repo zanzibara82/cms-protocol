@@ -9,11 +9,15 @@ use PHPUnit\Framework\TestCase;
 // Рецензия задачи 18 принесла находку, которую не поймали зелёные ворота: `.gitignore` обещает,
 // что загруженные обложки не пачкают рабочее дерево, а `git check-ignore` на путь обложки отвечает
 // «не игнорируется». Причина в семантике маски: `/public/uploads/*` не достреливает через `/`,
-// а строка `!/public/uploads/news/` после неё разрешает git зайти в каталог — и он считает каждую
+// а строка `!/public/uploads/images/` после неё разрешает git зайти в каталог — и он считает каждую
 // новую картинку изменением. Правим файл — и остаёмся без проверки: следующий, кто переставит
 // строки местами, повторит дефект молча. Отсюда этот страж: он перечитывает правила `.gitignore`
 // сам и отвечает на вопрос «что git считает игнорируемым», а не на вопрос «есть ли нужная строка
 // в файле».
+//
+// Загрузок в дереве теперь два каталога — картинки и прочие файлы, — и схема правил у каждого
+// своя тройка строк. Мутации поэтому идут по каждому каталогу отдельно: сила стража на картинках
+// ничего не доказывает про каталог файлов.
 //
 // Разбор сознательно узкий: файл знает только правила с якорем от корня, `*` внутри одного сегмента
 // и повторное включение по имени. Любой образец, который страж не умеет разобрать (`**`, класс
@@ -26,8 +30,9 @@ final class UploadsIgnoreTest extends TestCase
 
     /** Адреса, которые обязаны быть закрыты: их кладёт на диск человек или сервер. */
     private const MUST_IGNORE = [
-        'public/uploads/news/01m4n284s46hp26mtcz51j3peh.png',
-        'public/uploads/news/01zzzzzzzzzzzzzzzzzzzzzzzz.jpg',
+        'public/uploads/images/01m4n284s46hp26mtcz51j3peh.png',
+        'public/uploads/images/01zzzzzzzzzzzzzzzzzzzzzzzz.jpg',
+        'public/uploads/files/otchet-za-god.pdf',
         'config.php',
         'core/storage/error.log',
         'public/install.lock',
@@ -35,22 +40,24 @@ final class UploadsIgnoreTest extends TestCase
     ];
 
     /**
-     * Адреса, обязанные остаться в репозитории: без них каталог загрузок не существует после
-     * выгрузки, а барьеры в нём не работают.
+     * Адреса, обязанные остаться в репозитории: без них каталоги загрузок не существуют после
+     * выгрузки, а барьеры в них не работают.
      */
     private const MUST_TRACK = [
         'public/uploads/.htaccess',
         'public/uploads/.gitkeep',
-        'public/uploads/news',
-        'public/uploads/news/.gitkeep',
+        'public/uploads/images',
+        'public/uploads/images/.gitkeep',
+        'public/uploads/files',
+        'public/uploads/files/.gitkeep',
     ];
 
-    public function testЗагруженныеОбложкиЗакрытыASлужебныеФайлыНет(): void
+    public function testЗагруженныеФайлыЗакрытыASлужебныеНет(): void
     {
         self::assertSame(
             [],
             $this->violations($this->rulesOfRepository()),
-            'Ни одно правило git не сместилось: обложки обязаны быть игнором, каркас каталога — в репозитории'
+            'Ни одно правило git не сместилось: загрузки обязаны быть игнором, каркас каталогов — в репозитории'
         );
     }
 
@@ -74,19 +81,33 @@ final class UploadsIgnoreTest extends TestCase
     // Страж обязан краснеть на удалённой маске содержимого, а не молчать: без этой проверки
     // возврат дефекта (строки переставлены, маска убрана) остаётся зелёным, а находку видит
     // только человек на `git status` сервера.
-    public function testБезМаскиСодержимогоКаталогаОбложкиУтекают(): void
+    public function testБезМаскиСодержимогоКаталогаЗагрузкиУтекают(): void
     {
-        $rules = $this->rulesOfRepository();
-        unset($rules[self::ruleIndex($rules, '/public/uploads/news/*')]);
-
-        self::assertSame(
-            [
-                'обложка не игнорируется git: public/uploads/news/01m4n284s46hp26mtcz51j3peh.png',
-                'обложка не игнорируется git: public/uploads/news/01zzzzzzzzzzzzzzzzzzzzzzzz.jpg',
+        /** @var array<string, array{mask: string, leaks: list<string>}> $cases */
+        $cases = [
+            'картинки' => [
+                'mask' => '/public/uploads/images/*',
+                'leaks' => [
+                    'обложка не игнорируется git: public/uploads/images/01m4n284s46hp26mtcz51j3peh.png',
+                    'обложка не игнорируется git: public/uploads/images/01zzzzzzzzzzzzzzzzzzzzzzzz.jpg',
+                ],
             ],
-            $this->ignorationViolations($rules),
-            'Убранная маска содержимого каталога не найдена — проверка не имеет силы'
-        );
+            'файлы' => [
+                'mask' => '/public/uploads/files/*',
+                'leaks' => ['файл загрузки не игнорируется git: public/uploads/files/otchet-za-god.pdf'],
+            ],
+        ];
+
+        foreach ($cases as $catalog => $case) {
+            $rules = $this->rulesOfRepository();
+            unset($rules[self::ruleIndex($rules, $case['mask'])]);
+
+            self::assertSame(
+                $case['leaks'],
+                $this->ignorationViolations($rules),
+                'Убранная маска содержимого каталога «' . $catalog . '» не найдена — проверка не имеет силы'
+            );
+        }
     }
 
     // Повторное включение `.gitkeep` обязано идти ПОСЛЕ маски содержимого: если поставить его
@@ -94,27 +115,80 @@ final class UploadsIgnoreTest extends TestCase
     // исчезает из репозитория — первая же загрузка на сервере падает.
     public function testПовторноеВключениеGitkeepПередМаскойТеряетКаталог(): void
     {
-        $rules = $this->rulesOfRepository();
-        $masked = self::ruleIndex($rules, '/public/uploads/news/*');
-        $keep = self::ruleIndex($rules, '/public/uploads/news/.gitkeep', true);
+        /** @var array<string, array{mask: string, keep: string, lost: list<string>}> $cases */
+        $cases = [
+            'картинки' => [
+                'mask' => '/public/uploads/images/*',
+                'keep' => '/public/uploads/images/.gitkeep',
+                'lost' => ['каркас каталога загрузок исчезает из репозитория: public/uploads/images/.gitkeep'],
+            ],
+            'файлы' => [
+                'mask' => '/public/uploads/files/*',
+                'keep' => '/public/uploads/files/.gitkeep',
+                'lost' => ['каркас каталога загрузок исчезает из репозитория: public/uploads/files/.gitkeep'],
+            ],
+        ];
 
-        $reincluded = $rules[$keep];
-        array_splice($rules, $keep, 1);
-        array_splice($rules, $masked, 0, [$reincluded]);
+        foreach ($cases as $catalog => $case) {
+            $rules = $this->rulesOfRepository();
+            $masked = self::ruleIndex($rules, $case['mask']);
+            $keep = self::ruleIndex($rules, $case['keep'], true);
 
-        self::assertSame(
-            ['каркас каталога загрузок исчезает из репозитория: public/uploads/news/.gitkeep'],
-            $this->trackingViolations($rules),
-            'Маска, оказавшаяся после повторного включения, не найдена'
-        );
+            $reincluded = $rules[$keep];
+            array_splice($rules, $keep, 1);
+            array_splice($rules, $masked, 0, [$reincluded]);
+
+            self::assertSame(
+                $case['lost'],
+                $this->trackingViolations($rules),
+                'Маска, оказавшаяся после повторного включения каталога «' . $catalog . '», не найдена'
+            );
+        }
+    }
+
+    // Строка, разрешающая сам каталог, — часть схемы, а не украшение: без неё `/public/uploads/*`
+    // остаётся последним совпадением для имени каталога, и git не заходит внутрь. Тогда из
+    // репозитория исчезает и каталог, и его `.gitkeep`, а на сервере после выгрузки каталога
+    // загрузок нет вовсе — первая же картинка падает на недоступный путь.
+    public function testБезРазрешенияКаталогаИсчезаетВесьЕгоКаркас(): void
+    {
+        /** @var array<string, array{allow: string, lost: list<string>}> $cases */
+        $cases = [
+            'картинки' => [
+                'allow' => '/public/uploads/images/',
+                'lost' => [
+                    'каркас каталога загрузок исчезает из репозитория: public/uploads/images',
+                    'каркас каталога загрузок исчезает из репозитория: public/uploads/images/.gitkeep',
+                ],
+            ],
+            'файлы' => [
+                'allow' => '/public/uploads/files/',
+                'lost' => [
+                    'каркас каталога загрузок исчезает из репозитория: public/uploads/files',
+                    'каркас каталога загрузок исчезает из репозитория: public/uploads/files/.gitkeep',
+                ],
+            ],
+        ];
+
+        foreach ($cases as $catalog => $case) {
+            $rules = $this->rulesOfRepository();
+            unset($rules[self::ruleIndex($rules, $case['allow'], true)]);
+
+            self::assertSame(
+                $case['lost'],
+                $this->trackingViolations($rules),
+                'Убранное разрешение каталога «' . $catalog . '» не найдено — проверка не имеет силы'
+            );
+        }
     }
 
     public function testПустойФайлНеПроходитНиОднуПроверку(): void
     {
         self::assertSame(
             [
-                'обложка не игнорируется git: public/uploads/news/01m4n284s46hp26mtcz51j3peh.png',
-                'обложка не игнорируется git: public/uploads/news/01zzzzzzzzzzzzzzzzzzzzzzzz.jpg',
+                'обложка не игнорируется git: public/uploads/images/01m4n284s46hp26mtcz51j3peh.png',
+                'обложка не игнорируется git: public/uploads/images/01zzzzzzzzzzzzzzzzzzzzzzzz.jpg',
+                'файл загрузки не игнорируется git: public/uploads/files/otchet-za-god.pdf',
                 'боевой конфиг не игнорируется git: config.php',
                 'журнал ошибок не игнорируется git: core/storage/error.log',
                 'замок установщика не игнорируется git: public/install.lock',
@@ -178,7 +252,8 @@ final class UploadsIgnoreTest extends TestCase
     private static function reason(string $path): string
     {
         return match (true) {
-            str_starts_with($path, 'public/uploads/news/') => 'обложка не игнорируется git',
+            str_starts_with($path, 'public/uploads/images/') => 'обложка не игнорируется git',
+            str_starts_with($path, 'public/uploads/files/') => 'файл загрузки не игнорируется git',
             $path === 'config.php' => 'боевой конфиг не игнорируется git',
             $path === 'public/install.lock' => 'замок установщика не игнорируется git',
             str_starts_with($path, 'core/storage/') => 'журнал ошибок не игнорируется git',

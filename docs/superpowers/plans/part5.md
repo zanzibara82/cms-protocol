@@ -2665,10 +2665,10 @@ final class NewsValidatorsTest extends TestCase
 
     public function testКартинкойБываетТолькоПутьВнутриСайта(): void
     {
-        self::assertSame('/uploads/news/1.jpg', imagePath('/uploads/news/1.jpg'));
+        self::assertSame('/uploads/images/1.jpg', imagePath('/uploads/images/1.jpg'));
         self::assertNull(imagePath('https://chuzhoj.ru/1.jpg'));
         self::assertNull(imagePath('//chuzhoj.ru/1.jpg'));
-        self::assertNull(imagePath('uploads/news/1.jpg'));
+        self::assertNull(imagePath('uploads/images/1.jpg'));
         self::assertNull(imagePath('   '));
         self::assertNull(imagePath('/uploads/../../../etc/passwd'));
         self::assertNull(imagePath('/../etc/passwd'));
@@ -2680,9 +2680,9 @@ final class NewsValidatorsTest extends TestCase
         self::assertNull(imagePath('/uploads/a' . chr(0) . 'b.jpg'));
         self::assertNull(imagePath("/uploads/a\nb.jpg"));
         self::assertNull(imagePath("/uploads/a\tb.jpg"));
-        self::assertNull(imagePath('/uploads/news/../secret.php'));
+        self::assertNull(imagePath('/uploads/images/../secret.php'));
         self::assertNull(imagePath('/uploads/..'));
-        self::assertSame('/uploads/news-2026.photo.jpg', imagePath('/uploads/news-2026.photo.jpg'));
+        self::assertSame('/uploads/images-2026.photo.jpg', imagePath('/uploads/images-2026.photo.jpg'));
         self::assertSame('/a.b/c.jpg', imagePath('/a.b/c.jpg'));
         self::assertSame(
             fieldLimit(NEWS_FIELDS, 'image', 'max'),
@@ -2714,7 +2714,7 @@ final class NewsValidatorsTest extends TestCase
         self::assertSame('Выпускники собрались на вечер встречи', $data['title']);
         self::assertSame('vecher-vstrechi', $data['slug']);
         self::assertSame('Короткий лид.', $data['lead']);
-        self::assertSame('/uploads/news/cover.jpg', $data['cover']);
+        self::assertSame('/uploads/images/cover.jpg', $data['cover']);
         self::assertSame('kategoriya-1', $data['categoryId']);
         self::assertSame([['title' => 'Подготовка', 'text' => 'Текст абзаца.']], $data['body']);
         self::assertSame(['Выпускник', 'олимпиада'], $data['tags']);
@@ -2724,7 +2724,7 @@ final class NewsValidatorsTest extends TestCase
         self::assertTrue($data['pinned']);
         self::assertSame('Вечер встречи выпускников', $data['seoTitle']);
         self::assertSame('Описание для поисковика.', $data['seoDescription']);
-        self::assertSame('/uploads/news/og.jpg', $data['ogImage']);
+        self::assertSame('/uploads/images/og.jpg', $data['ogImage']);
         self::assertFalse($data['noindex']);
     }
 
@@ -2855,7 +2855,7 @@ final class NewsValidatorsTest extends TestCase
             'title' => '  Выпускники   собрались на вечер встречи ',
             'slug' => ' Вечер встречи ',
             'lead' => " Короткий\nлид. ",
-            'cover' => '/uploads/news/cover.jpg',
+            'cover' => '/uploads/images/cover.jpg',
             'categoryId' => 'kategoriya-1',
             'body' => "## Подготовка\nТекст абзаца.",
             'tags' => 'Выпускник, олимпиада',
@@ -2864,7 +2864,7 @@ final class NewsValidatorsTest extends TestCase
             'pinned' => 'on',
             'seoTitle' => 'Вечер встречи выпускников',
             'seoDescription' => 'Описание для поисковика.',
-            'ogImage' => '/uploads/news/og.jpg',
+            'ogImage' => '/uploads/images/og.jpg',
             'noindex' => '',
         ];
     }

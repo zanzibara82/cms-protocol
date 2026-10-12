@@ -6,8 +6,11 @@ declare(strict_types=1);
 // поэтому всё решение о том, что можно сохранить, живёт здесь: код загрузки, предел размера и
 // формат по содержимому.
 
-// Каталог загрузок доступен по `/uploads/news/…`, и он же — единственная запись на диск раздела.
-const NEWS_UPLOAD_PREFIX = '/uploads/news/';
+// Обложка доступна по `/uploads/images/…`, и этот каталог — единственное место, где раздел пишет
+// на диск. Каталоги внутри `public/uploads/` разведены по типу содержимого: картинка в `images`,
+// всё прочее в `files`. Барьер исполнения один на всё дерево загрузок (`public/uploads/.htaccess`),
+// поэтому разделение по типу не ослабляет защиту, а человеку на сервере видно, что где лежит.
+const NEWS_UPLOAD_PREFIX = '/uploads/images/';
 
 const NEWS_IMAGE_MAX_MB = 5;
 const NEWS_IMAGE_MAX_BYTES = NEWS_IMAGE_MAX_MB * 1024 * 1024;
@@ -23,7 +26,7 @@ const NEWS_IMAGE_MIME_EXT = [
 
 function newsUploadDir(): string
 {
-    return dirname(__DIR__, 3) . '/public/uploads/news';
+    return dirname(__DIR__, 3) . '/public/uploads/images';
 }
 
 /**

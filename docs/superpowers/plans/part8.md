@@ -1882,7 +1882,7 @@ git commit -m "Экраны админки «Новостей»: сводка, �
 **Files:**
 - Create: `apps/news/lib/form.php` (правила экрана формы), `apps/news/lib/upload.php` (приём обложки)
 - Create: `apps/news/actions/item.php` (POST сохранения), `apps/news/templates/admin/item-form.php`
-- Create: `public/uploads/news/.gitkeep`, `public/uploads/.htaccess`
+- Create: `public/uploads/images/.gitkeep`, `public/uploads/files/.gitkeep`, `public/uploads/.htaccess`
 - Modify: `apps/news/admin.php` (два контроллера экрана + общая сборка формы)
 - Modify: `apps/news/routes.php` (четыре адреса формы)
 - Modify: `apps/news/lib/boot.php` (два подключения в конец списка)
@@ -1925,7 +1925,7 @@ const NEWS_ITEM_NEW_PATH = '/news/admin/items/new';
 newsFormButtons(string $status): list<array{intent: string, label: string, tone: string}>
 newsFormValues(array $item, array $raw): array<string, string>
 
-const NEWS_UPLOAD_PREFIX = '/uploads/news/';
+const NEWS_UPLOAD_PREFIX = '/uploads/images/';
 const NEWS_IMAGE_MAX_MB = 5;
 const NEWS_IMAGE_MAX_BYTES = 5242880;
 NEWS_IMAGE_MIME_EXT = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
@@ -1956,7 +1956,7 @@ newsItemSaveAction(array $params = []): void
    `/news/admin/items` и список с параметрами, но **не** `/news/admin/items/new` и не
    `/news/admin/items/{id}` — возврат из формы ведёт в список, а не в саму форму. Сохранение из списка,
    открытого с фильтром, возвращает в тот же фильтр; прямой заход в форму без `back` даёт чистый список.
-4. **Путь картинки генерируется сервером.** `public/uploads/news/<newId()>.<расширение>`; расширение
+4. **Путь картинки генерируется сервером.** `public/uploads/images/<newId()>.<расширение>`; расширение
    берётся из содержимого (`finfo`), а не из имени, присланное имя файла не читается вообще. Текстовое
    поле `cover` по-прежнему принимает путь сайта — это значение никогда не открывается как файл, оно
    уходит в `src`/`og:image` и проверяется `imagePath()` (только `/…`, не `//…`, без `..` и его
@@ -1977,7 +1977,7 @@ newsItemSaveAction(array $params = []): void
 - **`php_flag engine off` в корневом `public/.htaccess` выключил бы PHP на всём сайте.** Отключать
   исполнение обязан только каталог загрузок: правило живёт в `public/uploads/.htaccess` (шаг 7), и задача 1
   в корневом файле его не ставит.
-- **`.gitignore` прячет `public/uploads/*` — вместе с `.htaccess` и с `.gitkeep` каталога обложек.**
+- **`.gitignore` прячет `public/uploads/*` — вместе с `.htaccess` и с `.gitkeep` каталогов загрузок.**
   Без исключения файл защиты не попал бы в репозиторий и на сервер, а без пустого каталога первый же
   отказ был бы «каталог недоступен»; загруженные картинки git показывал бы как изменения рабочего дерева.
   Нужны строки-исключения (шаг 7).
@@ -2085,7 +2085,7 @@ final class NewsFormRulesTest extends TestCase
     {
         $href = newsImageHrefOf('png');
 
-        self::assertMatchesRegularExpression('#^/uploads/news/[0-9a-z]{26}\.png$#', $href);
+        self::assertMatchesRegularExpression('#^/uploads/images/[0-9a-z]{26}\.png$#', $href);
         self::assertNotSame($href, newsImageHrefOf('png'), 'Два вызова дают два разных имени');
     }
 
@@ -2093,7 +2093,7 @@ final class NewsFormRulesTest extends TestCase
     {
         $dir = str_replace('\\', '/', newsUploadDir());
 
-        self::assertStringEndsWith('/public/uploads/news', $dir);
+        self::assertStringEndsWith('/public/uploads/images', $dir);
         self::assertStringStartsWith(str_replace('\\', '/', dirname(__DIR__, 2)), $dir, 'За пределами проекта писать некуда');
     }
 
@@ -2155,7 +2155,7 @@ final class NewsFormRulesTest extends TestCase
         $foreign = dirname(__DIR__, 2) . '/config.sample.php';
         newsImageDelete('/uploads/../config.sample.php');
         newsImageDelete('');
-        newsImageDelete('/uploads/news/takogo-fajla-net.png');
+        newsImageDelete('/uploads/images/takogo-fajla-net.png');
 
         self::assertFileExists($foreign, 'Адрес вне каталога загрузок не удаляется');
     }
@@ -2261,8 +2261,8 @@ declare(strict_types=1);
 // поэтому всё решение о том, что можно сохранить, живёт здесь: код загрузки, предел размера и
 // формат по содержимому.
 
-// Каталог загрузок доступен по `/uploads/news/…`, и он же — единственная запись на диск раздела.
-const NEWS_UPLOAD_PREFIX = '/uploads/news/';
+// Каталог загрузок доступен по `/uploads/images/…`, и он же — единственная запись на диск раздела.
+const NEWS_UPLOAD_PREFIX = '/uploads/images/';
 
 const NEWS_IMAGE_MAX_MB = 5;
 const NEWS_IMAGE_MAX_BYTES = NEWS_IMAGE_MAX_MB * 1024 * 1024;
@@ -2278,7 +2278,7 @@ const NEWS_IMAGE_MIME_EXT = [
 
 function newsUploadDir(): string
 {
-    return dirname(__DIR__, 3) . '/public/uploads/news';
+    return dirname(__DIR__, 3) . '/public/uploads/images';
 }
 
 /**
@@ -2500,7 +2500,7 @@ final class NewsItemFormTest extends TestCase
         $out = [];
 
         foreach (['png', 'jpg', 'jpeg', 'webp'] as $ext) {
-            foreach (glob(dirname(__DIR__, 2) . '/public/uploads/news/*.' . $ext) ?: [] as $file) {
+            foreach (glob(dirname(__DIR__, 2) . '/public/uploads/images/*.' . $ext) ?: [] as $file) {
                 $out[] = $file;
             }
         }
@@ -2885,7 +2885,7 @@ final class NewsItemFormTest extends TestCase
         $id = (string) value('SELECT id FROM ' . t('news_item') . ' WHERE slug = ?', ['bal-s-oblozhkoj']);
         $cover = (string) itemForForm($id)['cover'];
 
-        self::assertMatchesRegularExpression('#^/uploads/news/[0-9a-z]{26}\.png$#', $cover);
+        self::assertMatchesRegularExpression('#^/uploads/images/[0-9a-z]{26}\.png$#', $cover);
         self::assertFileExists(dirname(__DIR__, 2) . '/public' . $cover);
         self::assertSame(200, Kernel::get($cover)['status']);
         self::assertNotSame('', (string) $query['notice']);
@@ -2914,7 +2914,7 @@ final class NewsItemFormTest extends TestCase
     {
         $this->login();
         $id = (string) createItem(self::data('Материал с обложкой', 'material-s-oblozhkoj', [
-            'cover' => '/uploads/news/staroe-imenya-net.png',
+            'cover' => '/uploads/images/staroe-imenya-net.png',
         ]), self::EDITOR)['id'];
 
         $response = Kernel::post(NEWS_ADMIN_ITEMS_PATH . '/' . rawurlencode($id), $this->editFields($id, [
@@ -2926,7 +2926,7 @@ final class NewsItemFormTest extends TestCase
 
         self::assertSame(302, $response['status']);
         self::assertMatchesRegularExpression(
-            '#^/uploads/news/[0-9a-z]{26}\.png$#',
+            '#^/uploads/images/[0-9a-z]{26}\.png$#',
             (string) itemForForm($id)['cover']
         );
     }
@@ -3278,7 +3278,7 @@ $fields .= $two(
         . '<span class="font-medium">Обложка</span>'
         . '<input class="' . e($INPUT . ' font-mono') . '" id="f-cover" name="cover" type="text" maxlength="'
         . e((string) NEWS_FORM_MAX['cover']) . '" value="' . e($values['cover']) . '"'
-        . ($coverError === '' ? '' : ' aria-invalid="true"') . ' placeholder="/uploads/news/…">'
+        . ($coverError === '' ? '' : ' aria-invalid="true"') . ' placeholder="/uploads/images/…">'
         . '</label>'
         . '<p class="' . e($coverError === '' ? 'text-sm text-ink/60' : 'text-sm text-bad') . '">'
         . e($coverError !== '' ? $coverError : 'Путь картинки этого сайта. ' . $textHint) . '</p>'
@@ -3411,7 +3411,8 @@ Expected: `No syntax errors detected`.
 
 - [ ] **Шаг 7: Каталог загрузок и его защита**
 
-Создать `public/uploads/news/.gitkeep` — пустой файл.
+Создать `public/uploads/images/.gitkeep` и `public/uploads/files/.gitkeep` — пустые файлы: каталоги
+загрузок разведены по типу содержимого, и оба обязаны доехать до сервера каркасом.
 
 Создать `public/uploads/.htaccess`:
 
@@ -3494,25 +3495,32 @@ Options -Indexes
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter WebServerConfigTest`
 Expected: PASS — четыре метода (три корневых + каталог загрузок).
 
-Изменить `.gitignore` — в блок каталога загрузок, сразу после `!/public/uploads/.htaccess` из задачи 1, добавить три строки правила:
+Изменить `.gitignore` — в блок каталога загрузок, сразу после `!/public/uploads/.htaccess` из задачи 1,
+добавить по тройке строк на каждый каталог загрузок (картинки и прочие файлы):
 
 ```
-# Каталог обложек «Новостей» обязан быть в репозитории пустым: без него первая же загрузка падает.
+# Каталог картинок обязан быть в репозитории пустым: без него первая же загрузка падает.
 # Маска `/public/uploads/*` до содержимого этого каталога не достреливает (`*` не переходит через
 # `/`), а разрешение каталога возвращает git внутрь него — поэтому содержимое запрещено своей
-# маской, и только потом `.gitkeep` включён обратно по имени.
-!/public/uploads/news/
-/public/uploads/news/*
-!/public/uploads/news/.gitkeep
+# маской, и только потом `.gitkeep` включён обратно по имени. Порядок строк значим.
+!/public/uploads/images/
+/public/uploads/images/*
+!/public/uploads/images/.gitkeep
+
+# Каталог некартинок — той же схемой.
+!/public/uploads/files/
+/public/uploads/files/*
+!/public/uploads/files/.gitkeep
 ```
 
-Порядок этих трёх строк значим: решает последнее совпадение, поэтому `!/public/uploads/news/.gitkeep`
+Порядок этих строк значим: решает последнее совпадение, поэтому `!/public/uploads/images/.gitkeep`
 обязан идти после маски содержимого, иначе пустой каталог исчезнет из репозитория. Проверка —
 страж `tests/guard/UploadsIgnoreTest.php`, он перечитывает правила `.gitignore` и отвечает на вопрос
-«что git считает игнорируемым», а не «есть ли нужная строка в файле».
+«что git считает игнорируемым», а не «есть ли нужная строка в файле»; мутации он проходит по каждому
+каталогу отдельно.
 
-Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'require "config.php"; require "core/bootstrap.php"; echo is_dir("public/uploads/news") ? "есть" : "нет", PHP_EOL;'`
-Expected: `есть` (после `git add` каталога с `.gitkeep`).
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'require "config.php"; require "core/bootstrap.php"; echo is_dir("public/uploads/images") && is_dir("public/uploads/files") ? "есть" : "нет", PHP_EOL;'`
+Expected: `есть` (после `git add` каталогов с `.gitkeep`).
 
 - [ ] **Шаг 8: Разрешить `\CURLFile` в транспортном помощнике**
 
@@ -3576,7 +3584,7 @@ docker compose -f docker-compose.dev.yml run --rm -T -e CMS_DB_NAME=cms_test php
 
 - «Новый материал» открывает пустую форму, Enter в заголовке сохраняет **черновик**, а не печать;
 - печать без текста отказывает на месте, набранное остаётся в полях;
-- загруженная картинка появляется в `/uploads/news/…`, карточка показывает её в ленте, а отказ
+- загруженная картинка появляется в `/uploads/images/…`, карточка показывает её в ленте, а отказ
   («подписать .php как .png») не оставляет файла на диске;
 - «Править» из списка, открытого с фильтром по рубрике, возвращает в тот же фильтр с зелёной плашкой;
 - на 360 px поля складываются в одну колонку, кнопки переносятся, `datetime-local` остаётся
@@ -3590,7 +3598,8 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
 git add apps/news/lib/form.php apps/news/lib/upload.php apps/news/lib/boot.php \
   apps/news/admin.php apps/news/actions/item.php apps/news/routes.php \
   apps/news/templates/admin/item-form.php apps/news/templates/admin/summary.php \
-  apps/news/templates/admin/items.php public/uploads/.htaccess public/uploads/news/.gitkeep \
+  apps/news/templates/admin/items.php public/uploads/.htaccess \
+  public/uploads/images/.gitkeep public/uploads/files/.gitkeep \
   public/assets/app.css \
   .gitignore tests/http/Kernel.php tests/guard/WebServerConfigTest.php \
   tests/guard/UploadsIgnoreTest.php \
@@ -3598,13 +3607,14 @@ git add apps/news/lib/form.php apps/news/lib/upload.php apps/news/lib/boot.php \
 git commit -m "Форма материала «Новостей»: создание, правка и загрузка обложки"
 ```
 
-Коммит трогает три файла, которые кажутся чужими этой задаче: `public/uploads/.htaccess`,
-`public/uploads/news/.gitkeep` и `.gitignore`. Все три — следствия приёма файлов, и разносить их по
-разным коммитам нельзя. `public/uploads/.htaccess` выключает исполнение PHP в каталоге загрузок: если
-он попадёт в репозиторий позже загруженного файла, между ними на боевом хостинге лежит каталог, куда
-редактор уже может записать исходник. `.gitkeep` и три строки правила в `.gitignore` нужны, чтобы каталог
-загрузок не пропал из репозитория при правиле `/public/uploads/*` — пустой каталог git не хранит, а без
-каталога `move_uploaded_file()` падает на ровном месте.
+Коммит трогает четыре файла, которые кажутся чужими этой задаче: `public/uploads/.htaccess`,
+два `.gitkeep` каталогов загрузок и `.gitignore`. Все четыре — следствия приёма файлов, и разносить
+их по разным коммитам нельзя. `public/uploads/.htaccess` выключает исполнение PHP в каталоге
+загрузок: если он попадёт в репозиторий позже загруженного файла, между ними на боевом хостинге
+лежит каталог, куда редактор уже может записать исходник. `.gitkeep` и тройки строк правила в
+`.gitignore` нужны, чтобы каталоги загрузок не пропали из репозитория при правиле
+`/public/uploads/*` — пустой каталог git не хранит, а без каталога `move_uploaded_file()` падает
+на ровном месте.
 
 Позиция `public/assets/app.css` в этом списке — не копия пояснения к задаче 17, а проверка, сделанная
 по разметке этой задачи. Классы `items-start` и `size-4` из строки чекбокса обложки (шаг 5,

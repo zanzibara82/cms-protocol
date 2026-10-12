@@ -85,7 +85,7 @@ final class NewsItemFormTest extends TestCase
         $out = [];
 
         foreach (['png', 'jpg', 'jpeg', 'webp'] as $ext) {
-            foreach (glob(dirname(__DIR__, 2) . '/public/uploads/news/*.' . $ext) ?: [] as $file) {
+            foreach (glob(dirname(__DIR__, 2) . '/public/uploads/images/*.' . $ext) ?: [] as $file) {
                 $out[] = $file;
             }
         }
@@ -483,7 +483,7 @@ final class NewsItemFormTest extends TestCase
         $id = (string) value('SELECT id FROM ' . t('news_item') . ' WHERE slug = ?', ['bal-s-oblozhkoj']);
         $cover = (string) itemForForm($id)['cover'];
 
-        self::assertMatchesRegularExpression('#^/uploads/news/[0-9a-z]{26}\.png$#', $cover);
+        self::assertMatchesRegularExpression('#^/uploads/images/[0-9a-z]{26}\.png$#', $cover);
         self::assertFileExists(dirname(__DIR__, 2) . '/public' . $cover);
         self::assertSame(200, Kernel::get($cover)['status']);
         self::assertNotSame('', (string) $query['notice']);
@@ -534,7 +534,7 @@ final class NewsItemFormTest extends TestCase
     {
         $this->login();
         $id = (string) createItem(self::data('Материал с обложкой', 'material-s-oblozhkoj', [
-            'cover' => '/uploads/news/staroe-imenya-net.png',
+            'cover' => '/uploads/images/staroe-imenya-net.png',
         ]), self::EDITOR)['id'];
 
         $response = Kernel::post(NEWS_ADMIN_ITEMS_PATH . '/' . rawurlencode($id), $this->editFields($id, [
@@ -546,7 +546,7 @@ final class NewsItemFormTest extends TestCase
 
         self::assertSame(302, $response['status']);
         self::assertMatchesRegularExpression(
-            '#^/uploads/news/[0-9a-z]{26}\.png$#',
+            '#^/uploads/images/[0-9a-z]{26}\.png$#',
             (string) itemForForm($id)['cover']
         );
     }

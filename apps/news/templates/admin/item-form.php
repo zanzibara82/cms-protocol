@@ -126,7 +126,7 @@ $fields .= $two(
         . '<span class="font-medium">Обложка</span>'
         . '<input class="min-h-[44px] ' . e($INPUT . ' font-mono') . '" id="f-cover" name="cover" type="text" maxlength="'
         . e((string) NEWS_FORM_MAX['cover']) . '" value="' . e($values['cover']) . '"'
-        . ($coverError === '' ? '' : ' aria-invalid="true"') . ' placeholder="/uploads/news/…">'
+        . ($coverError === '' ? '' : ' aria-invalid="true"') . ' placeholder="/uploads/images/…">'
         . '</label>'
         . '<p class="' . e($coverError === '' ? 'text-sm text-ink/60' : 'text-sm text-bad') . '"'
         . ($coverError === '' ? '' : ' role="alert"') . '>'

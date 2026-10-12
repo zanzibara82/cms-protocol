@@ -1417,7 +1417,7 @@ final class NewsFeedTest extends NewsDbTestCase
         $itemId = $this->published('itogi-goda', [
             'title' => 'Итоги года',
             'lead_text' => 'Короткий лид',
-            'cover' => '/uploads/news/itogi.jpg',
+            'cover' => '/uploads/images/itogi.jpg',
             'body' => json_encode([['title' => 'Итоги', 'text' => 'Текст про **итоги**.']], JSON_THROW_ON_ERROR),
         ]);
         self::linkTag($itemId, resolveTagIds(['Олимпиада'])[0]);
@@ -1427,7 +1427,7 @@ final class NewsFeedTest extends NewsDbTestCase
         self::assertIsArray($item);
         self::assertSame('Итоги года', (string) $item['title']);
         self::assertSame('Короткий лид', (string) $item['lead']);
-        self::assertSame('/uploads/news/itogi.jpg', (string) $item['cover']);
+        self::assertSame('/uploads/images/itogi.jpg', (string) $item['cover']);
         self::assertSame('/news/itogi-goda', (string) $item['href']);
         self::assertSame('Жизнь школы', (string) $item['categoryTitle']);
         self::assertSame('/news/c/zhizn-shkoly', (string) $item['categoryHref']);

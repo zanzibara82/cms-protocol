@@ -270,7 +270,7 @@ tbl_news_old_slug   slug VARCHAR(60) PK, item_id VARCHAR(26) NOT NULL, created_a
   несовпадение — 403 и запись в журнал.
 - Формы: `method="post"` для всех, где есть пароль или изменение данных; намерение кнопки —
   отдельное поле `intent` или `op`; после успеха — PRG-редирект с `?notice=<ключ>`.
-- Загрузки: `public/uploads/news/<сгенерированное-имя>.<расширение>`; MIME проверяется по
+- Загрузки: `public/uploads/images/<сгенерированное-имя>.<расширение>`; MIME проверяется по
   содержимому (`finfo`), размер ≤ 5 МБ, расширение из белого списка `jpg, jpeg, png, webp`;
   путь из формы не используется (защита от path traversal).
 - Заголовки ответа (в `.htaccess` и/или в `bootstrap.php`): `X-Content-Type-Options: nosniff`,
