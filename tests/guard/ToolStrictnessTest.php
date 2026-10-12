@@ -16,6 +16,9 @@ use PHPUnit\Framework\TestCase;
 // чем заявлено»: каноническое имя секции подавления ошибок, маски исключения путей, различение шага
 // ворот по признакам самой работы, требование, чтобы вызовы доходили до исполнения, связка имени
 // набора с его каталогом, полнота путей анализа и состав собственного эталона вместо счётчика.
+// Пакет M3-1 усилил те же разборы: они видят кавычки и строчные (поточные) формы `neon` —
+// анализатор читает ключ и в кавычках, и списком на одной строке, а прежний разбор «ключ отдельной
+// строкой» оставлял такие подавления невидимыми для стража.
 final class ToolStrictnessTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
@@ -118,15 +121,7 @@ final class ToolStrictnessTest extends TestCase
     public function testPhpstanБезСекцийПодавленияОшибок(): void
     {
         $neon = $this->read('phpstan.neon');
-
-        // Пункт Т1: имена берутся из списка, который включает каноническое `ignoreErrors` и ключи
-        // сохранённого эталона, — прежний набор ловил только написания, которых у анализатора нет.
-        $suppressions = [];
-        foreach (self::PHPSTAN_SUPPRESSION_KEYS as $key) {
-            if (preg_match('/^\s*' . $key . '\s*:/mi', $neon) === 1) {
-                $suppressions[] = $key;
-            }
-        }
+        $suppressions = $this->phpstanSuppressions($neon);
 
         self::assertSame(
             [],
@@ -142,7 +137,10 @@ final class ToolStrictnessTest extends TestCase
         // проверяемый код. Значение запрещено, если под него попадает хоть один проверяемый файл
         // скрипта: сюда же входят широкие маски вида `core/**`, `apps/**` и `**/*`. Одобренное
         // значение `public/assets/*` остаётся зелёным: файлов скрипта в этом каталоге нет, поэтому
-        // правка `phpstan.neon` не нужна и ворота не ослабляются.
+        // правка `phpstan.neon` не нужна и ворота не ослабляются. Пункт M3-1: те же маски собираются
+        // и из строчной (поточной) формы, а значения очищаются от одной пары обрамляющих кавычек
+        // до сравнения — иначе маска `"core/**"` уходила в регулярку с кавычками и не накрывала
+        // ни одного файла, оставляя стража зелёным при исключённом каталоге `core`.
         $neon = $this->read('phpstan.neon');
         $masks = $this->excludeAnalyseMasks($neon);
         $phpFiles = $this->analysedPhpFiles();
@@ -429,7 +427,8 @@ final class ToolStrictnessTest extends TestCase
     }
 
     /**
-     * Значения `excludePaths: analyse:` — список масок исключения файлов из анализа.
+     * Значения `excludePaths: analyse:` — список масок исключения файлов из анализа. Блок не найден —
+     * маски собираются из строчной (поточной) формы (пункт M3-1).
      *
      * @return list<string>
      */
@@ -437,7 +436,7 @@ final class ToolStrictnessTest extends TestCase
     {
         $exclude = $this->keyBlock($neon, 'excludePaths');
         if ($exclude === null) {
-            return [];
+            return $this->excludePathsInlineMasks($neon);
         }
 
         $analyse = $this->keyBlock($neon, 'analyse', $exclude['indent'] + 1);
@@ -446,6 +445,103 @@ final class ToolStrictnessTest extends TestCase
         }
 
         return $this->listItemsFrom($neon, $analyse['indent'], $analyse['line']);
+    }
+
+    /**
+     * Строчная (поточная) форма `excludePaths` (пункт M3-1): `excludePaths: { analyse: [ … ] }` и
+     * `excludePaths: [ … ]` — список без ключа `analyse`, который анализатор тоже понимает.
+     * Вызывается, когда блок не найден; собранные значения проходят ту же проверку накрывания,
+     * что и значения из блока.
+     *
+     * @return list<string>
+     */
+    private function excludePathsInlineMasks(string $neon): array
+    {
+        $analyse = $this->inlineFlowList($neon, 'excludePaths', 'analyse');
+        if ($analyse !== null) {
+            return $analyse;
+        }
+
+        return $this->inlineFlowList($neon, 'excludePaths') ?? [];
+    }
+
+    /**
+     * Ключи подавления ошибок, найденные в тексте `neon`: имена берутся из списка, который включает
+     * каноническое `ignoreErrors` и ключи сохранённого эталона (пункт Т1), — прежний набор ловил
+     * только написания, которых у анализатора нет. Пункт M3-1: ключ допускается в одинарных или
+     * двойных кавычках сразу после ведущих пробелов — анализатор читает `"ignoreErrors":` как то же
+     * самое подавление, а прежний поиск оставлял такую строку невидимой.
+     *
+     * @return list<string>
+     */
+    private function phpstanSuppressions(string $neon): array
+    {
+        $suppressions = [];
+        foreach (self::PHPSTAN_SUPPRESSION_KEYS as $key) {
+            $quoted = preg_quote($key, '/');
+            if (preg_match('/^[ \t]*(?:(["\'])' . $quoted . '\1|' . $quoted . ')[ \t]*:/mi', $neon) === 1) {
+                $suppressions[] = $key;
+            }
+        }
+
+        return $suppressions;
+    }
+
+    /**
+     * Значения списка, записанного на одной строке с ключом (пункт M3-1): `ключ: [ a, b ]` или
+     * `ключ: { вложенный: [ a, b ] }`. Ключ и вложенный ключ допускаются в одинарных или двойных
+     * кавычках; каждое значение очищается от одной пары обрамляющих кавычек. Возвращает `null`,
+     * когда ключа со строчным значением нет: блок ищется отдельно методом `keyBlock()`.
+     *
+     * @return list<string>|null
+     */
+    private function inlineFlowList(string $text, string $key, ?string $inner = null): ?array
+    {
+        $quotedKey = preg_quote($key, '/');
+        $found = [];
+        if (preg_match('/^[ \t]*(?:(["\'])' . $quotedKey . '\1|' . $quotedKey . ')[ \t]*:[ \t]*(?P<rest>\S.*)$/m', $text, $found) !== 1) {
+            return null;
+        }
+
+        $body = [];
+        if ($inner !== null) {
+            $quotedInner = preg_quote($inner, '/');
+            if (preg_match('/(?:(["\'])' . $quotedInner . '\1|' . $quotedInner . ')[ \t]*:[ \t]*\[(?P<items>[^\]]*)\]/', $found['rest'], $body) !== 1) {
+                return null;
+            }
+        } elseif (preg_match('/\[(?P<items>[^\]]*)\]/', $found['rest'], $body) !== 1) {
+            return null;
+        }
+
+        $values = [];
+        foreach (explode(',', $body['items']) as $item) {
+            $value = $this->unquote($item);
+            if ($value !== '') {
+                $values[] = $value;
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * Значение `neon` без одной пары обрамляющих кавычек и пробелов вокруг них (пункт M3-1):
+     * `'core/**'`, `"core/**"` и `core/**` дают одно и то же. Операция идемпотентна: значение без
+     * кавычек чищается так же, как уже очищенное.
+     */
+    private function unquote(string $value): string
+    {
+        $value = trim($value);
+        $length = strlen($value);
+
+        if ($length >= 2) {
+            $first = $value[0];
+            if (($first === '"' || $first === "'") && $value[$length - 1] === $first) {
+                $value = trim(substr($value, 1, -1));
+            }
+        }
+
+        return $value;
     }
 
     /**
@@ -551,7 +647,8 @@ final class ToolStrictnessTest extends TestCase
 
     /**
      * Строка объявления ключа `key:` (ключ обязан стоять отдельной строкой без значения на той же
-     * строке, как в `paths:` или `analyse:`): возвращает отступ ключа и его номер строки либо `null`,
+     * строке, как в `paths:` или `analyse:`; пункт M3-1: ключ допускается в одинарных или двойных
+     * кавычках, оба варианта): возвращает отступ ключа и его номер строки либо `null`,
      * если ключ не найден или его отступ меньше `minIndent`. Позиция строки нужна, чтобы собирать
      * список значений ровно под этим ключом и не принимать за него соседнюю секцию того же уровня.
      *
@@ -563,7 +660,7 @@ final class ToolStrictnessTest extends TestCase
 
         foreach ($lines as $number => $line) {
             $found = [];
-            if (preg_match('/^(\s*)' . preg_quote($key, '/') . ':\s*$/', $line, $found) === 1) {
+            if (preg_match('/^(\s*)(?:(["\'])' . preg_quote($key, '/') . '\2|' . preg_quote($key, '/') . '):\s*$/', $line, $found) === 1) {
                 $indent = strlen($found[1]);
                 if ($indent >= $minIndent) {
                     return ['indent' => $indent, 'line' => $number];
@@ -577,7 +674,9 @@ final class ToolStrictnessTest extends TestCase
     /**
      * Значения `- текст`, идущие строками глубже отступа `blockIndent` сразу после строки `startLine`
      * (объявления ключа). Сбор останавливается на первой непустой строке, вернувшейся к отступу
-     * блока или мельче него: значит, список этого ключа закончился.
+     * блока или мельче него: значит, список этого ключа закончился. Каждое значение очищается от
+     * одной пары обрамляющих кавычек (пункт M3-1) — до того, как уходит в `globToRegex()` и в
+     * сравнение с каталогами.
      *
      * @return list<string>
      */
@@ -600,7 +699,7 @@ final class ToolStrictnessTest extends TestCase
 
             $found = [];
             if (preg_match('/^(\s*)-\s*(.+?)\s*$/', $line, $found) === 1) {
-                $items[] = $found[2];
+                $items[] = $this->unquote($found[2]);
             }
         }
 
