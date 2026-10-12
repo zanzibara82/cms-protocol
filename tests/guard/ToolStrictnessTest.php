@@ -290,15 +290,15 @@ final class ToolStrictnessTest extends TestCase
         // сверки каталогов. Карта «имя => каталоги» перезаписывается последним вхождением имени,
         // поэтому при дубликате («неверный» набор выше, «верный» ниже) утверждение «имя связано со
         // своим каталогом» лжёт: исполнитель собирает тесты чужого каталога, а страж молчит.
-        $names = [];
-        if (preg_match_all('/<testsuite name="([^"]+)"/', $xml, $names) === false) {
+        $matched = [];
+        if (preg_match_all('/<testsuite name="([^"]+)"/', $xml, $matched) === false) {
             self::fail('Разбор имён наборов в `phpunit.xml` не состоялся');
         }
 
-        /** @var array<string, int> $occurrences */
-        $occurrences = array_count_values(array_map('strval', $names[1]));
+        /** @var list<string> $declared */
+        $declared = array_map('strval', $matched[1]);
         $repeated = [];
-        foreach ($occurrences as $suite => $count) {
+        foreach (array_count_values($declared) as $suite => $count) {
             if ($count > 1) {
                 $repeated[] = 'число вхождений имени `' . $suite . '` = ' . $count;
             }
