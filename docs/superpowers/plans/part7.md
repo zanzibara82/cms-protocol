@@ -2033,6 +2033,13 @@ final class NewsSeoTest extends TestCase
         self::assertSame(201, mb_strlen($seo['description']), '200 знаков и многоточие');
     }
 
+    public function testВписанноеОписаниеОтдаётсяЦеликом(): void
+    {
+        $seo = seoOf($this->item(['seoDescription' => str_repeat('о', 260)]), NEWS_SITE['description']);
+
+        self::assertSame(260, mb_strlen($seo['description']), 'редактор вписал двести шестьдесят — столько и отдаём');
+    }
+
     public function testКартинкаПревьюБерётсяИзОбложкиЕслиСвоейНет(): void
     {
         /** @var list<array{0: array<string, mixed>, 1: string}> $cases */
@@ -2198,17 +2205,20 @@ function seoOf(array $item, string $fallback): array
         $title = trim((string) ($item['title'] ?? ''));
     }
 
-    $description = trim((string) ($item['seoDescription'] ?? ''));
-    if ($description === '') {
-        $description = trim((string) ($item['lead'] ?? ''));
-    }
-    if ($description === '') {
-        $description = trim($fallback);
+    // Порог режет только замену — лид, который никто для мета-описания не сочинял. Вписанное
+    // редактором описание уходит целиком: форма разрешает ему триста знаков, и обрезка до двухсот
+    // молча снимала бы конец фразы, которую человек писал под конкретный сниппет.
+    $explicit = trim((string) ($item['seoDescription'] ?? ''));
+    if ($explicit !== '') {
+        $description = $explicit;
+    } else {
+        $lead = trim((string) ($item['lead'] ?? ''));
+        $description = $lead === '' ? trim($fallback) : excerpt($lead, NEWS_SEO_DESCRIPTION_LIMIT);
     }
 
     return [
         'title' => $title === '' ? (string) NEWS_SITE['title'] : $title,
-        'description' => excerpt($description, NEWS_SEO_DESCRIPTION_LIMIT),
+        'description' => $description,
     ];
 }
 
@@ -2638,6 +2648,17 @@ final class NewsPublicTest extends TestCase
         ]), $editor);
 
         saveOldSlugs($renamed['id'], ['staroe-nazvanie']);
+
+        // Снятый материал с прежним адресом — носитель отдельной проверки: у него был публичный
+        // адрес, поэтому редирект с него выдал бы наружу и существование материала, и новый slug.
+        $withdrawn = createItem(self::input([
+            'title' => 'Снятая с публикации заметка',
+            'slug' => 'snjataja-zametka',
+            'status' => NEWS_STATUS['DRAFT'],
+            'tags' => [],
+        ]), $editor);
+
+        saveOldSlugs($withdrawn['id'], ['byvshee-nazvanie']);
     }
 
     private function login(): void
@@ -2726,6 +2747,25 @@ final class NewsPublicTest extends TestCase
 
         self::assertSame(301, $page['status']);
         self::assertSame('/news/novoe-nazvanie', $page['headers']['location']);
+    }
+
+    public function testПрежнийАдресЗакрытогоМатериалаОтвечаетКакНесуществующий(): void
+    {
+        $page = Kernel::get('/news/byvshee-nazvanie');
+        $unknown = Kernel::get('/news/net-takogo-adresa');
+
+        self::assertSame(404, $page['status'], 'снятый материал не редиректит анонима');
+        self::assertStringNotContainsString('snjataja-zametka', $page['body'], 'новый адрес не утекает');
+        self::assertSame($unknown['body'], $page['body'], 'ответ совпадает с ответом на чужой адрес');
+    }
+
+    public function testРедакторуПрежнийАдресЗакрытогоМатериалаОткрываетПредпросмотр(): void
+    {
+        $this->login();
+        $page = Kernel::get('/news/byvshee-nazvanie');
+
+        self::assertSame(301, $page['status']);
+        self::assertSame('/news/snjataja-zametka?draft=1', $page['headers']['location']);
     }
 
     public function testРедакторВидитЧерновикПоСсылкеПредпросмотра(): void
@@ -2958,12 +2998,16 @@ function newsSinglePage(array $params = []): void
     if ($item === null) {
         $alias = findByOldSlug($slug);
 
-        if ($alias === null) {
+        // Прежний адрес открытого материала переносит на новый навсегда; закрытого — не переносит
+        // никому, кроме редактора. Постоянный редирект со снятого материала выдал бы наружу три
+        // вещи сразу: что материал существует, что он снят, и его новый адрес — а §8.2 обещает
+        // анониму ответ как у несуществующего адреса.
+        if ($alias === null || ($alias['open'] !== true && !$editor)) {
             notFound();
         }
 
-        // Прежний адрес переносит на новый навсегда, а у закрытого материала сохраняет ?draft=1:
-        // редактор, который держал ссылку на черновик, не должен увидеть 404 после смены адреса.
+        // Редактор, державший ссылку на черновик, не должен увидеть 404 после смены адреса:
+        // у закрытого материала прежний адрес сохраняет ?draft=1.
         $target = newsHref(['slug' => (string) $alias['slug']]);
 
         redirect($alias['open'] === true ? $target : $target . '?draft=1', 301);
