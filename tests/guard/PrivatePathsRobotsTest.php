@@ -13,8 +13,13 @@ final class PrivatePathsRobotsTest extends TestCase
     public function testКаждыйПриватныйПутьЗакрыт(): void
     {
         $closed = robotsDisallowed();
+        $paths = appPrivatePaths();
 
-        foreach (appPrivatePaths() as $path) {
+        // Пустой список — не «нечего проверять», а выключенный страж: без этой строки обход
+        // молча проходил бы, стоит appPrivatePaths() перестать что-либо возвращать.
+        self::assertNotEmpty($paths, 'Список приватных путей пуст — страж robots проверяет ноль путей');
+
+        foreach ($paths as $path) {
             self::assertContains($path, $closed, 'Приватный путь ' . $path . ' не закрыт в robots.txt');
             self::assertTrue(isRobotsDisallowed($path));
         }
