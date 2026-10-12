@@ -345,6 +345,7 @@ final class NewsItemFormTest extends TestCase
 
         self::assertSame(200, $response['status']);
         self::assertStringContainsString('role="alert"', $response['body']);
+        self::assertStringContainsString('По такому адресу уже есть материал', $response['body'], 'Отказ обязан называть причину');
         self::assertStringContainsString('value="Второй осенний бал"', $response['body'], 'Набранное обязано остаться');
     }
 
@@ -505,6 +506,28 @@ final class NewsItemFormTest extends TestCase
         self::assertSame(200, $response['status']);
         self::assertStringContainsString('jpg, png или webp', $response['body']);
         self::assertCount($before, self::uploadFiles(), 'Отказ не оставляет файла на диске');
+    }
+
+    public function testОтказСлояДанныхУбираетУжеЗалитуюКартинку(): void
+    {
+        $this->login();
+        $before = count(self::uploadFiles());
+
+        $response = Kernel::post(NEWS_ITEM_NEW_PATH, $this->fields([
+            'title' => 'Обложка без рубрики',
+            'slug' => 'oblozhka-bez-rubriki',
+            'categoryId' => 'net-takoj-rubriki',
+            'cover_file' => new CURLFile(
+                dirname(__DIR__, 2) . '/public/assets/og-default.png',
+                'image/png',
+                'izbyshok.png'
+            ),
+        ]));
+
+        self::assertSame(200, $response['status']);
+        self::assertStringContainsString('Рубрики, в которую вы кладёте материал, уже нет', $response['body']);
+        self::assertCount($before, self::uploadFiles(), 'Отказ слоя данных не оставляет картинки на диске');
+        self::assertNull(value('SELECT id FROM ' . t('news_item') . ' WHERE slug = ?', ['oblozhka-bez-rubriki']));
     }
 
     public function testНоваяКартинкаПеретираетПутьОбложки(): void

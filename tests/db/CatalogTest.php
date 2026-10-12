@@ -272,7 +272,11 @@ final class CatalogTest extends NewsDbTestCase
         $ids = resolveTagIds(['Выпускник', 'олимпиада', 'Выпускник', '  ВЫПУСКНИК  ']);
 
         self::assertCount(2, $ids);
-        self::assertSame(array_values($ids), $ids);
+        self::assertSame(
+            array_map(static fn (array $row): string => (string) $row['id'], visibleTags()),
+            $ids,
+            'Порядок и состав — как в справочнике'
+        );
         self::assertSame(['Выпускник', 'олимпиада'], self::labels(visibleTags()));
         self::assertSame(['vypusknik', 'olimpiada'], self::slugs(visibleTags()));
     }

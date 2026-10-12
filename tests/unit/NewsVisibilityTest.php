@@ -86,7 +86,7 @@ final class NewsVisibilityTest extends TestCase
 
     public function testФрагментыПорядкаСостоятИзИменКолонок(): void
     {
-        self::assertMatchesRegularExpression('/^[a-z_]+ DESC(, [a-z_]+ DESC)?$/', orderNews());
+        self::assertMatchesRegularExpression('/^pinned DESC, [a-z_]+ DESC$/', orderNews());
     }
 
     public function testПредупреждениеОЗакреплённыхСрабатываетПослеПредела(): void

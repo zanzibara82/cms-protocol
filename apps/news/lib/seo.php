@@ -39,17 +39,20 @@ function seoOf(array $item, string $fallback): array
         $title = trim((string) ($item['title'] ?? ''));
     }
 
-    $description = trim((string) ($item['seoDescription'] ?? ''));
-    if ($description === '') {
-        $description = trim((string) ($item['lead'] ?? ''));
-    }
-    if ($description === '') {
-        $description = trim($fallback);
+    // Порог режет только замену — лид, который никто для мета-описания не сочинял. Вписанное
+    // редактором описание уходит целиком: форма разрешает ему триста знаков, и обрезка до двухсот
+    // молча снимала бы конец фразы, которую человек писал под конкретный сниппет.
+    $explicit = trim((string) ($item['seoDescription'] ?? ''));
+    if ($explicit !== '') {
+        $description = $explicit;
+    } else {
+        $lead = trim((string) ($item['lead'] ?? ''));
+        $description = $lead === '' ? trim($fallback) : excerpt($lead, NEWS_SEO_DESCRIPTION_LIMIT);
     }
 
     return [
         'title' => $title === '' ? (string) NEWS_SITE['title'] : $title,
-        'description' => excerpt($description, NEWS_SEO_DESCRIPTION_LIMIT),
+        'description' => $description,
     ];
 }
 

@@ -88,6 +88,13 @@ final class NewsSeoTest extends TestCase
         self::assertSame(201, mb_strlen($seo['description']), '200 знаков и многоточие');
     }
 
+    public function testВписанноеОписаниеОтдаётсяЦеликом(): void
+    {
+        $seo = seoOf($this->item(['seoDescription' => str_repeat('о', 260)]), NEWS_SITE['description']);
+
+        self::assertSame(260, mb_strlen($seo['description']), 'редактор вписал двести шестьдесят — столько и отдаём');
+    }
+
     public function testКартинкаПревьюБерётсяИзОбложкиЕслиСвоейНет(): void
     {
         /** @var array<string, array{0: array<string, mixed>, 1: string}> $cases */

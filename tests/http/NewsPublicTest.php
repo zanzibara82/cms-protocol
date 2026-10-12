@@ -97,6 +97,17 @@ final class NewsPublicTest extends TestCase
         ]), $editor);
 
         saveOldSlugs($renamed['id'], ['staroe-nazvanie']);
+
+        // Снятый материал с прежним адресом — носитель отдельной проверки: у него был публичный
+        // адрес, поэтому редирект с него выдал бы наружу и существование материала, и новый slug.
+        $withdrawn = createItem(self::input([
+            'title' => 'Снятая с публикации заметка',
+            'slug' => 'snjataja-zametka',
+            'status' => NEWS_STATUS['DRAFT'],
+            'tags' => [],
+        ]), $editor);
+
+        saveOldSlugs($withdrawn['id'], ['byvshee-nazvanie']);
     }
 
     private function login(): void
@@ -185,6 +196,25 @@ final class NewsPublicTest extends TestCase
 
         self::assertSame(301, $page['status']);
         self::assertSame('/news/novoe-nazvanie', $page['headers']['location']);
+    }
+
+    public function testПрежнийАдресЗакрытогоМатериалаОтвечаетКакНесуществующий(): void
+    {
+        $page = Kernel::get('/news/byvshee-nazvanie');
+        $unknown = Kernel::get('/news/net-takogo-adresa');
+
+        self::assertSame(404, $page['status'], 'снятый материал не редиректит анонима');
+        self::assertStringNotContainsString('snjataja-zametka', $page['body'], 'новый адрес не утекает');
+        self::assertSame($unknown['body'], $page['body'], 'ответ совпадает с ответом на чужой адрес');
+    }
+
+    public function testРедакторуПрежнийАдресЗакрытогоМатериалаОткрываетПредпросмотр(): void
+    {
+        $this->login();
+        $page = Kernel::get('/news/byvshee-nazvanie');
+
+        self::assertSame(301, $page['status']);
+        self::assertSame('/news/snjataja-zametka?draft=1', $page['headers']['location']);
     }
 
     public function testРедакторВидитЧерновикПоСсылкеПредпросмотра(): void

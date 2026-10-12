@@ -82,15 +82,26 @@ final class Kernel
     public static function stop(): void
     {
         // Гасим прежде всего собственный процесс: proc_terminate закрывает того ребёнка, что мы
-        // породили, даже если набор упал до готовности сервера. pkill остаётся сверху — он снимает
-        // самого php -S (внук оболочки proc_open), которого proc_terminate не всегда добирает.
+        // породили. Но `php -S` живёт внуком за оболочкой `sh -c`, а SIGTERM оболочке не
+        // передаётся детям: оболочка умирает, сервер осиротевает на порту, и следующий класс
+        // падает «порт занят». Поэтому страховка снимает детей породившего процесса ДО его
+        // закрытия: пока оболочка жива, `pkill -P <pid>` видит `php -S` своим ребёнком. Сузили
+        // именно до `-P`, а не `-f`: `-P` отбирает детей указанного родителя, тогда как `-f`
+        // сверяет строку запуска любого процесса и задел бы чужой сервер на том же порту.
+        // `pid` читается без проверки на `false`: вне ресурса `proc_get_status()` и не вызывается
+        // — ветка `is_resource()` уже гарантирует живой процесс, а с ним статус всегда массив.
         if (is_resource(self::$process)) {
+            $pid = (int) proc_get_status(self::$process)['pid'];
+
+            if ($pid > 0) {
+                exec('pkill -P ' . $pid . ' 2>/dev/null || true');
+            }
+
             proc_terminate(self::$process);
             proc_close(self::$process);
             self::$process = null;
         }
 
-        exec('pkill -f "php -S ' . self::HOST . ':' . self::PORT . '" 2>/dev/null || true');
         if (self::$cookieJar !== null && is_file(self::$cookieJar)) {
             unlink(self::$cookieJar);
         }
