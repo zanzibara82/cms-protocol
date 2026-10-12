@@ -18,7 +18,10 @@ use PHPUnit\Framework\TestCase;
 // набора с его каталогом, полнота путей анализа и состав собственного эталона вместо счётчика.
 // Пакет M3-1 усилил те же разборы: они видят кавычки и строчные (поточные) формы `neon` —
 // анализатор читает ключ и в кавычках, и списком на одной строке, а прежний разбор «ключ отдельной
-// строкой» оставлял такие подавления невидимыми для стража.
+// строкой» оставлял такие подавления невидимыми для стража. Пакет M3-2 подключил к этим проверкам
+// файлы из ключа `includes`: подавление в подключаемом файле анализатор применяет, а сам
+// `phpstan.neon` внешне остаётся чистым, поэтому его не запрещаем, а читаем каждое подключение
+// теми же списками ключей и масок, красня именем файла.
 final class ToolStrictnessTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
@@ -120,13 +123,28 @@ final class ToolStrictnessTest extends TestCase
 
     public function testPhpstanБезСекцийПодавленияОшибок(): void
     {
-        $neon = $this->read('phpstan.neon');
-        $suppressions = $this->phpstanSuppressions($neon);
+        $configs = $this->phpstanCheckedConfigs($this->read('phpstan.neon'));
+
+        // Пункт M3-2: проверка идёт по всем собираемым файлам, а не только по самому `phpstan.neon`:
+        // подключение через `includes` переносит подавление за пределы видимого текста конфигурации.
+        self::assertSame(
+            [],
+            $configs['problems'],
+            'Подключение `includes` в `phpstan.neon` разобрано с проблемой: ' . implode('; ', $configs['problems']) . ': такой конфигурации страж не доверяет'
+        );
+
+        $flagged = [];
+        foreach ($configs['files'] as $file) {
+            $suppressions = $this->phpstanSuppressions($this->read($file));
+            if ($suppressions !== []) {
+                $flagged[] = 'в файле `' . $file . '` найдена секция подавления ошибок (' . implode(', ', $suppressions) . ')';
+            }
+        }
 
         self::assertSame(
             [],
-            $suppressions,
-            'В `phpstan.neon` найдена секция подавления ошибок (' . implode(', ', $suppressions) . '): поблажки в анализе запрещены'
+            $flagged,
+            'Поблажки в анализе запрещены, но найдены секции подавления ошибок: ' . implode('; ', $flagged)
         );
     }
 
@@ -140,17 +158,27 @@ final class ToolStrictnessTest extends TestCase
         // правка `phpstan.neon` не нужна и ворота не ослабляются. Пункт M3-1: те же маски собираются
         // и из строчной (поточной) формы, а значения очищаются от одной пары обрамляющих кавычек
         // до сравнения — иначе маска `"core/**"` уходила в регулярку с кавычками и не накрывала
-        // ни одного файла, оставляя стража зелёным при исключённом каталоге `core`.
+        // ни одного файла, оставляя стража зелёным при исключённом каталоге `core`. Пункт M3-2:
+        // те же маски собираются и из подключаемых через `includes` файлов.
         $neon = $this->read('phpstan.neon');
-        $masks = $this->excludeAnalyseMasks($neon);
+        $configs = $this->phpstanCheckedConfigs($neon);
         $phpFiles = $this->analysedPhpFiles();
 
+        self::assertSame(
+            [],
+            $configs['problems'],
+            'Подключение `includes` в `phpstan.neon` разобрано с проблемой: ' . implode('; ', $configs['problems']) . ': такой конфигурации страж не доверяет'
+        );
+
         $covering = [];
-        foreach ($masks as $mask) {
-            foreach ($phpFiles as $file) {
-                if (preg_match($this->globToRegex($mask), $file) === 1) {
-                    $covering[] = $mask . ' накрывает ' . $file;
-                    break;
+        foreach ($configs['files'] as $source) {
+            $text = $source === 'phpstan.neon' ? $neon : $this->read($source);
+            foreach ($this->excludeAnalyseMasks($text) as $mask) {
+                foreach ($phpFiles as $file) {
+                    if (preg_match($this->globToRegex($mask), $file) === 1) {
+                        $covering[] = 'в файле `' . $source . '` маска `' . $mask . '` накрывает ' . $file;
+                        break;
+                    }
                 }
             }
         }
@@ -158,7 +186,7 @@ final class ToolStrictnessTest extends TestCase
         self::assertSame(
             [],
             $covering,
-            'В `phpstan.neon` маска `excludePaths: analyse:` накрывает проверяемый код: ' . implode('; ', $covering)
+            'Маска `excludePaths` в `phpstan.neon` или подключаемом им файле накрывает проверяемый код: ' . implode('; ', $covering)
         );
     }
 
@@ -485,6 +513,59 @@ final class ToolStrictnessTest extends TestCase
         }
 
         return $suppressions;
+    }
+
+    /**
+     * Подключённые файлы из ключа `includes`: значения собираются разборами, усиленными в M3-1, —
+     * блоком (ключ отдельной строкой + список `- путь`) и строчной формой `includes: [ a.neon, b.neon ]`,
+     * оба варианта с очисткой значений от кавычек. (Пункт M3-2.)
+     *
+     * @return list<string>
+     */
+    private function phpstanIncludes(string $neon): array
+    {
+        $block = $this->keyBlock($neon, 'includes');
+        if ($block !== null) {
+            return $this->listItemsFrom($neon, $block['indent'], $block['line']);
+        }
+
+        return $this->inlineFlowList($neon, 'includes') ?? [];
+    }
+
+    /**
+     * Файлы конфигурации, которые страж обязан разобрать: сам `phpstan.neon` и каждый подключаемый
+     * им существующий файл (пункт M3-2). Каждый путь из `includes` разрешается относительно корня
+     * проекта, где лежит `phpstan.neon`. Абсолютный путь или путь с `..` краснится отдельной
+     * строкой: проверка остаётся в границах проекта, иначе страж читает файлы вне дерева.
+     * Отсутствующий подключённый файл — тоже падение с именем пути: нельзя проверить то, чего нет,
+     * и молча зелёный прогон тут не подходит.
+     *
+     * @return array{files: list<string>, problems: list<string>}
+     */
+    private function phpstanCheckedConfigs(string $neon): array
+    {
+        $files = ['phpstan.neon'];
+        $problems = [];
+
+        foreach ($this->phpstanIncludes($neon) as $path) {
+            if ($path === '') {
+                continue;
+            }
+
+            if ($path[0] === '/' || $path[0] === '\\' || preg_match('/^[a-zA-Z]:/', $path) === 1 || str_contains($path, '..')) {
+                $problems[] = 'подключение `' . $path . '` ведёт за границы проекта: страж проверяет только файлы внутри дерева';
+                continue;
+            }
+
+            if (!is_file(self::ROOT . '/' . $path)) {
+                $problems[] = 'подключённый файл `' . $path . '` не найден: нельзя проверить то, чего нет';
+                continue;
+            }
+
+            $files[] = $path;
+        }
+
+        return ['files' => $files, 'problems' => $problems];
     }
 
     /**
