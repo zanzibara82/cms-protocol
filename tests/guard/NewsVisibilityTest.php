@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cms\Tests\guard;
 
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
 
 // Единственный способ опубликовать черновик «случайно» — новый запрос к tbl_news_item без
@@ -43,7 +44,7 @@ final class NewsVisibilityTest extends TestCase
 
             $code = $this->stripComments((string) file_get_contents($file));
 
-            foreach ($this->functions($code) as $name => $body) {
+            foreach ($this->functions($code, $relative) as $name => $body) {
                 $reads = false;
                 foreach (self::READ_MARKERS as $marker) {
                     if (str_contains($body, $marker)) {
@@ -84,7 +85,7 @@ final class NewsVisibilityTest extends TestCase
             }
 
             $code = $this->stripComments((string) file_get_contents($path));
-            $functions = $this->functions($code);
+            $functions = $this->functions($code, $file);
 
             foreach ($names as $name) {
                 self::assertArrayHasKey($name, $functions, $file . ': функции ' . $name . '() в белом списке нет');
@@ -105,6 +106,48 @@ final class NewsVisibilityTest extends TestCase
     }
 
     /**
+     * Имя проверки для замыкания — номер строки, и для `apps/news/routes.php` это единственная
+     * наводка текста падения на место в файле: хук карты сайтов начинается на 48-й строке. Если
+     * вычёркивание комментариев сжимает текст, страж называет `{closure:30}`, следующий правщик не
+     * может честно внести легальное замыкание в список разрешённого и закрывает весь файл маской.
+     */
+    public function testНомерСтрокиЗамыканияСчитаетсяПоИсходномуТексту(): void
+    {
+        $code = $this->stripComments((string) file_get_contents(dirname(__DIR__, 2) . '/apps/news/routes.php'));
+        $closures = array_values(array_filter(
+            array_keys($this->functions($code, 'apps/news/routes.php')),
+            static fn (string $name): bool => str_starts_with($name, '{closure:')
+        ));
+
+        self::assertSame(['{closure:48}'], $closures, 'Хук карты сайтов — единственное замыкание файла, его строка — 48');
+    }
+
+    // Незакрытая открывающая скобка и скобка внутри строки: прежний сборщик молча возвращал хвост
+    // до конца файла и создавал фантомные замыкания. Доказательство — подставной текст прямо здесь,
+    // разбираемые файлы раздела не тронуты.
+    public function testРазбаланСкобокРоняетСборщик(): void
+    {
+        $fixtures = [
+            'незакрытая скобка' => "<?php\nfunction a(): void\n{\n    \$s = 'x';\n",
+            'скобка внутри строки' => "<?php\nfunction a(): void\n{\n    \$s = '{';\n}\n",
+        ];
+
+        foreach ($fixtures as $label => $code) {
+            $crashed = false;
+
+            try {
+                $this->functions((string) $code, 'fixture.php');
+            } catch (AssertionFailedError $failure) {
+                $crashed = true;
+                self::assertStringContainsString('файл fixture.php', $failure->getMessage(), $label);
+                self::assertStringContainsString('(строка ', $failure->getMessage(), $label);
+            }
+
+            self::assertTrue($crashed, 'Сборщик промолчал на разбалан скобок: ' . $label);
+        }
+    }
+
+    /**
      * Тела функций: именованных, анонимных `function () {}` и стрелочных `fn () => ...`.
      * Замыкания собираются наравне с именованными: чтение материалов внутри `static function () {}`,
      * стоящего на уровне файла, иначе остаётся для стража невидимым. Имя замыкания не выдумывается —
@@ -112,7 +155,7 @@ final class NewsVisibilityTest extends TestCase
      *
      * @return array<string, string> имя функции → её тело
      */
-    private function functions(string $code): array
+    private function functions(string $code, string $file): array
     {
         $out = [];
 
@@ -128,7 +171,7 @@ final class NewsVisibilityTest extends TestCase
             $bodyStart = (int) $start[1] + strlen((string) $start[0]);
             $key = $name !== '' ? $name : self::closureName($code, (int) $start[1]);
 
-            $out[self::uniqueKey($out, $key)] = self::bracedBody($code, $bodyStart);
+            $out[self::uniqueKey($out, $key)] = self::bracedBody($code, $bodyStart, $file);
         }
 
         // Стрелочные функции тела в фигурных скобках не имеют, поэтому их граница — конец
@@ -148,8 +191,13 @@ final class NewsVisibilityTest extends TestCase
         return $out;
     }
 
-    /** Тело от открывающей `{` до парной закрывающей: тот же счёт скобок, что вёл прежний сборщик. */
-    private static function bracedBody(string $code, int $bodyStart): string
+    /**
+     * Тело от открывающей `{` до парной закрывающей: тот же счёт скобок, что вёл прежний сборщик.
+     * Разбалан — не молчаливый хвост до конца файла, а падение проверки с именем файла и позицией
+     * потерянного закрытия: тихое самоискажение в страже недопустимо, даже если достижимо только
+     * будущей правкой (незакрытая скобка или скобка внутри строки).
+     */
+    private static function bracedBody(string $code, int $bodyStart, string $file): string
     {
         $length = strlen($code);
         $depth = 1;
@@ -165,6 +213,15 @@ final class NewsVisibilityTest extends TestCase
             }
 
             ++$position;
+        }
+
+        if ($depth > 0) {
+            $opened = $bodyStart - 1;
+
+            self::fail(
+                'Сборщик тел функций потерял закрывающую скобку: файл ' . $file . ', тело открыто на позиции ' . $opened .
+                ' (строка ' . (substr_count($code, "\n", 0, $opened) + 1) . ') и до конца файла не закрыто'
+            );
         }
 
         return substr($code, $bodyStart, max(0, $position - $bodyStart));
@@ -252,13 +309,21 @@ final class NewsVisibilityTest extends TestCase
         return $key;
     }
 
+    /**
+     * Вычёркивание комментариев сохраняет длину текста и переводы строк: каждый заменённый кусок
+     * становится пробелами той же длины, а перевод строки остаётся на месте. Иначе смещение в
+     * вычищенном тексте расходится со смещением в исходном, номер строки замыкания (см.
+     * closureName) съезжает, и имя проверки перестаёт быть честной наводкой на место в файле.
+     */
     private function stripComments(string $code): string
     {
-        $out = preg_replace('/(^|\s)\/\/[^\n\r]*/', ' ', $code) ?? $code;
-        $out = preg_replace('/#![^\n\r]*/', ' ', $out) ?? $out;
-        $out = preg_replace('/\/\*.*?\*\//s', ' ', $out) ?? $out;
+        $blank = static fn (array $match): string => (string) preg_replace('/[^\n\r]/', ' ', $match[0]);
 
-        return preg_replace('/(^|\s)#[^\n\r]*/', ' ', $out) ?? $out;
+        $out = preg_replace_callback('/(^|\s)\/\/[^\n\r]*/', $blank, $code) ?? $code;
+        $out = preg_replace_callback('/#![^\n\r]*/', $blank, $out) ?? $out;
+        $out = preg_replace_callback('/\/\*.*?\*\//s', $blank, $out) ?? $out;
+
+        return preg_replace_callback('/(^|\s)#[^\n\r]*/', $blank, $out) ?? $out;
     }
 
     /** @return list<string> */
