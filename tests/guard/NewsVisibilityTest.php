@@ -104,35 +104,152 @@ final class NewsVisibilityTest extends TestCase
         self::assertCount(3, $used, 'Список разрешённых функций читается целиком — три именованные строки feed.php');
     }
 
-    /** @return array<string, string> имя функции → её тело */
+    /**
+     * Тела функций: именованных, анонимных `function () {}` и стрелочных `fn () => ...`.
+     * Замыкания собираются наравне с именованными: чтение материалов внутри `static function () {}`,
+     * стоящего на уровне файла, иначе остаётся для стража невидимым. Имя замыкания не выдумывается —
+     * в отчёте оно выглядит как `{closure:номер строки}`.
+     *
+     * @return array<string, string> имя функции → её тело
+     */
     private function functions(string $code): array
     {
-        preg_match_all('/\bfunction\s+([a-zA-Z_]\w*)\s*\([^)]*\)[^{]*\{/', $code, $starts, PREG_OFFSET_CAPTURE);
-
         $out = [];
-        $length = strlen($code);
 
-        foreach ($starts[1] as $index => $start) {
-            $bodyStart = (int) $starts[0][$index][1] + strlen((string) $starts[0][$index][0]);
-            $depth = 1;
-            $position = $bodyStart;
+        preg_match_all(
+            '/\bfunction\s*([a-zA-Z_]\w*)?\s*\([^)]*\)(?:\s*use\s*\([^)]*\))?\s*[^{;]*\{/',
+            $code,
+            $starts,
+            PREG_OFFSET_CAPTURE
+        );
 
-            while ($position < $length && $depth > 0) {
-                $character = $code[$position];
+        foreach ($starts[0] as $index => $start) {
+            $name = (string) $starts[1][$index][0];
+            $bodyStart = (int) $start[1] + strlen((string) $start[0]);
+            $key = $name !== '' ? $name : self::closureName($code, (int) $start[1]);
 
-                if ($character === '{') {
-                    ++$depth;
-                } elseif ($character === '}') {
-                    --$depth;
-                }
+            $out[self::uniqueKey($out, $key)] = self::bracedBody($code, $bodyStart);
+        }
 
-                ++$position;
-            }
+        // Стрелочные функции тела в фигурных скобках не имеют, поэтому их граница — конец
+        // выражения, а не закрывающая скобка.
+        preg_match_all('/(?<![\w$])fn\s*\(/', $code, $arrows, PREG_OFFSET_CAPTURE);
 
-            $out[(string) $start[0]] = substr($code, $bodyStart, max(0, $position - $bodyStart));
+        foreach ($arrows[0] as $arrow) {
+            $position = (int) $arrow[1];
+
+            $out[self::uniqueKey($out, self::closureName($code, $position))] = substr(
+                $code,
+                $position,
+                max(0, self::expressionEnd($code, $position) - $position)
+            );
         }
 
         return $out;
+    }
+
+    /** Тело от открывающей `{` до парной закрывающей: тот же счёт скобок, что вёл прежний сборщик. */
+    private static function bracedBody(string $code, int $bodyStart): string
+    {
+        $length = strlen($code);
+        $depth = 1;
+        $position = $bodyStart;
+
+        while ($position < $length && $depth > 0) {
+            $character = $code[$position];
+
+            if ($character === '{') {
+                ++$depth;
+            } elseif ($character === '}') {
+                --$depth;
+            }
+
+            ++$position;
+        }
+
+        return substr($code, $bodyStart, max(0, $position - $bodyStart));
+    }
+
+    /**
+     * Где заканчивается выражение, начатое на `$position`: запятая, точка с запятой или закрывающая
+     * скобка собственного уровня. Кавычки пропускаются целиком — запятая внутри строки выражение
+     * не завершает, иначе тело стрелочной функции обрезалось бы на первом тексте через пробел.
+     */
+    private static function expressionEnd(string $code, int $position): int
+    {
+        $length = strlen($code);
+        $depth = 0;
+
+        for (; $position < $length; ++$position) {
+            $character = $code[$position];
+
+            if ($character === "'" || $character === '"') {
+                $position = self::skipQuoted($code, $position, $character);
+                continue;
+            }
+
+            if ($character === '(' || $character === '[' || $character === '{') {
+                ++$depth;
+                continue;
+            }
+
+            if ($character === ')' || $character === ']' || $character === '}') {
+                if ($depth === 0) {
+                    break;
+                }
+
+                --$depth;
+
+                continue;
+            }
+
+            if ($depth === 0 && ($character === ',' || $character === ';')) {
+                break;
+            }
+        }
+
+        return $position;
+    }
+
+    /** Позиция закрывающей кавычки того же вида; незакрытая строка отдаёт конец кода. */
+    private static function skipQuoted(string $code, int $position, string $quote): int
+    {
+        $length = strlen($code);
+
+        for (++$position; $position < $length; ++$position) {
+            if ($code[$position] === '\\') {
+                ++$position;
+
+                continue;
+            }
+
+            if ($code[$position] === $quote) {
+                return $position;
+            }
+        }
+
+        return $length;
+    }
+
+    /** Имя замыкания: строка, на которой оно начато — придумывать его стражу не для чего. */
+    private static function closureName(string $code, int $position): string
+    {
+        return '{closure:' . (substr_count($code, "\n", 0, $position) + 1) . '}';
+    }
+
+    /**
+     * Два замыкания на одной строке не должны затирать тело друг друга: иначе одно из них
+     * выпадает из проверки молча.
+     *
+     * @param array<string, string> $out
+     */
+    private static function uniqueKey(array $out, string $key): string
+    {
+        while (isset($out[$key])) {
+            $key .= '~';
+        }
+
+        return $key;
     }
 
     private function stripComments(string $code): string
