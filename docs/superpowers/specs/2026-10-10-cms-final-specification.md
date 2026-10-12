@@ -334,7 +334,7 @@ Enter сохраняет черновик, а не печатает), кнопк
 
 **Метаданные, карта сайта, OG.** Карточка отдаёт `title`, `description`, `robots` (`noindex` по флагу
 материала), OG-теги (`og:title`, `og:description`, `og:image`, `og:type=article`) и JSON-LD
-`NewsArticle`. OG-картинка 1200×630, фирменная заглушка — `public/assets/og-default.png`.
+`NewsArticle`. OG-картинка 1200×630, фирменная заглушка — `public/assets/img/brand/og-default.png`.
 `/sitemap.xml` собирается из хука `sitemap_urls` (видимые материалы и страницы рубрик; скрытые
 рубрики, материалы с `noindex` и подборки тегов — они несут `noindex, nofollow` — в карту не
 попадают) и считается заново на каждый вызов — кеша процесса нет. `/robots.txt` — из хука `robots_lines` плюс приватные пути манифестов.

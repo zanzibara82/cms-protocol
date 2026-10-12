@@ -12,10 +12,13 @@ $width = max(1, (int) ($size ?? 40));
 
 // height считается от настоящих пропорций файла: грустный кот не квадратный, и при height === width
 // он на экранах отказа сплюснут по вертикали. Если файл не читается, остаётся квадрат — место под
-// картинку всё равно зарезервировано, и вёрстка не едет. Путь задаётся внутри публичного каталога.
-$natural = imageNaturalSize('assets/' . $file);
+// картинку всё равно зарезервировано, и вёрстка не едет.
+$src = '/assets/img/cats/' . $file;
+// Путь на диск снимается с адреса, а не записывается второй строкой: каталог картинок обязан
+// совпасть с разметкой сам, иначе перенос файла рассорит их молча.
+$natural = imageNaturalSize(ltrim($src, '/'));
 $height = $natural[0] > 0 ? (int) round($width * $natural[1] / $natural[0]) : $width;
 $lazy = (bool) ($lazy ?? false);
 ?>
-<img src="/assets/<?= e($file) ?>" class="cat-idle" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
+<img src="<?= e($src) ?>" class="cat-idle" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
      alt="Кот-талисман школы"<?php if ($lazy): ?> loading="lazy" decoding="async"<?php endif; ?>>

@@ -121,7 +121,7 @@ final class NewsFormRulesTest extends TestCase
         $check = newsImageInspect([
             'name' => 'bal.png',
             'type' => 'image/png',
-            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/og-default.png',
+            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png',
             'error' => UPLOAD_ERR_OK,
             'size' => NEWS_IMAGE_MAX_BYTES + 1,
         ]);
@@ -136,7 +136,7 @@ final class NewsFormRulesTest extends TestCase
         $check = newsImageInspect([
             'name' => 'bal.jpg',
             'type' => 'image/jpeg',
-            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/og-default.png',
+            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png',
             'error' => UPLOAD_ERR_OK,
             'size' => 2048,
         ]);

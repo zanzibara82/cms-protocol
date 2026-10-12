@@ -2112,7 +2112,7 @@ final class NewsFormRulesTest extends TestCase
         $check = newsImageInspect([
             'name' => 'bal.png',
             'type' => 'image/png',
-            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/og-default.png',
+            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png',
             'error' => UPLOAD_ERR_OK,
             'size' => NEWS_IMAGE_MAX_BYTES + 1,
         ]);
@@ -2127,7 +2127,7 @@ final class NewsFormRulesTest extends TestCase
         $check = newsImageInspect([
             'name' => 'bal.jpg',
             'type' => 'image/jpeg',
-            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/og-default.png',
+            'tmp_name' => dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png',
             'error' => UPLOAD_ERR_OK,
             'size' => 2048,
         ]);
@@ -2870,7 +2870,7 @@ final class NewsItemFormTest extends TestCase
     public function testКартинкаЛожитсяВКаталогЗагрузокИОтдаётсяПоАдресу(): void
     {
         $this->login();
-        $png = dirname(__DIR__, 2) . '/public/assets/og-default.png';
+        $png = dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png';
 
         $response = Kernel::post(NEWS_ITEM_NEW_PATH, $this->fields([
             'title' => 'Бал с обложкой',
@@ -2921,7 +2921,7 @@ final class NewsItemFormTest extends TestCase
             'title' => 'Материал с обложкой',
             'slug' => 'material-s-oblozhkoj',
             'tags' => 'бал, обложка',
-            'cover_file' => new CURLFile(dirname(__DIR__, 2) . '/public/assets/og-default.png', 'image/png', 'novoe.png'),
+            'cover_file' => new CURLFile(dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png', 'image/png', 'novoe.png'),
         ]));
 
         self::assertSame(302, $response['status']);

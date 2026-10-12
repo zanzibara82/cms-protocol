@@ -84,8 +84,8 @@ final class TemplateTest extends TestCase
     {
         // Шаблоны считают от этих цифр height: грустный кот не квадратный, и height === width
         // сплющивает его по вертикали. Числа обязана давать сама картинка, а не предположение кода.
-        self::assertSame([64, 64], imageNaturalSize('assets/cat-happy.png'));
-        self::assertSame([192, 170], imageNaturalSize('assets/cat-sad.png'));
+        self::assertSame([64, 64], imageNaturalSize('assets/img/cats/cat-happy.png'));
+        self::assertSame([192, 170], imageNaturalSize('assets/img/cats/cat-sad.png'));
     }
 
     public function testВнеПубличногоКаталогаРазмерыНеЧитаются(): void
@@ -93,7 +93,7 @@ final class TemplateTest extends TestCase
         // Путь собирается внутри public: `..` наружу не выводит, а несуществующий файл означает
         // «не читается» — шаблоны тогда остаются на квадрате, а не берут размеры чужого файла.
         self::assertSame([0, 0], imageNaturalSize('../core/template.php'));
-        self::assertSame([0, 0], imageNaturalSize('assets/такой-картинки-нет.png'));
+        self::assertSame([0, 0], imageNaturalSize('assets/img/cats/такой-картинки-нет.png'));
     }
 
     public function testHeadСтраницыДополняетВыводХукаВРазметкеШапки(): void

@@ -1881,7 +1881,7 @@ git commit -m "Правила редактора раздела «Новости
 **Файлы:**
 - Создать: `apps/news/routes.php`
 - Создать: `apps/news/lib/seo.php`
-- Создать: `scripts/make-og-default.php`, `public/assets/og-default.png` (готовый файл, лежит в репозитории)
+- Создать: `scripts/make-og-default.php`, `public/assets/img/brand/og-default.png` (готовый файл, лежит в репозитории)
 - Заменить: `apps/news/templates/feed.php` (заглушку задачи 4 — настоящей лентой)
 - Создать: `apps/news/templates/single.php`, `apps/news/templates/category.php`, `apps/news/templates/tag.php`
 - Создать: `apps/news/templates/partials/search.php`, `partials/categories.php`, `partials/list.php`,
@@ -2182,7 +2182,7 @@ const NEWS_TITLE_TEMPLATE = '%s · Новости школы';
 
 // Фирменная картинка превью лежит в репозитории: у материала без обложки пустое превью
 // показывать нельзя, а рисовать её на лету значило бы требовать от хостинга GD.
-const NEWS_OG_IMAGE = '/assets/og-default.png';
+const NEWS_OG_IMAGE = '/assets/img/brand/og-default.png';
 const NEWS_OG_WIDTH = 1200;
 const NEWS_OG_HEIGHT = 630;
 const NEWS_SEO_DESCRIPTION_LIMIT = 200;
@@ -2500,7 +2500,7 @@ declare(strict_types=1);
 // один раз здесь и попадает в репозиторий готовым файлом.
 // Запуск: docker compose -f docker-compose.dev.yml run --rm -T php php scripts/make-og-default.php
 
-$target = __DIR__ . '/../public/assets/og-default.png';
+$target = __DIR__ . '/../public/assets/img/brand/og-default.png';
 
 if (!function_exists('imagecreatetruecolor')) {
     fwrite(STDERR, 'GD не установлен — перерисовать файл нечем.' . PHP_EOL);
@@ -2535,11 +2535,11 @@ echo 'Готово: ' . $target . PHP_EOL;
 ```
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php php scripts/make-og-default.php`
-Expected: `Готово: …/public/assets/og-default.png`.
+Expected: `Готово: …/public/assets/img/brand/og-default.png`.
 
 Проверить размер готового файла:
 
-Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'echo implode(" ", getimagesize("public/assets/og-default.png")), PHP_EOL;'`
+Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'echo implode(" ", getimagesize("public/assets/img/brand/og-default.png")), PHP_EOL;'`
 Expected: `1200 630 3 …` (ширина, высота, тип PNG).
 
 Файл коммитится вместе с задачей — на хостинге его никто не перерисовывает.
@@ -3453,7 +3453,7 @@ Expected: зелёные все четыре проверки. Если PHP-CS-F
 
 ```bash
 git add apps/news/routes.php apps/news/lib/seo.php apps/news/lib/boot.php apps/news/templates/ \
-        scripts/make-og-default.php public/assets/og-default.png \
+        scripts/make-og-default.php public/assets/img/brand/og-default.png \
         tests/unit/NewsSeoTest.php tests/http/NewsPublicTest.php
 git status --short
 GIT_AUTHOR_NAME='Алексей' GIT_AUTHOR_EMAIL='zanzibaradevil@gmail.com' \

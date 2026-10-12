@@ -7,7 +7,7 @@ declare(strict_types=1);
 // один раз здесь и попадает в репозиторий готовым файлом.
 // Запуск: docker compose -f docker-compose.dev.yml run --rm -T php php scripts/make-og-default.php
 
-$target = __DIR__ . '/../public/assets/og-default.png';
+$target = __DIR__ . '/../public/assets/img/brand/og-default.png';
 
 if (!function_exists('imagecreatetruecolor')) {
     fwrite(STDERR, 'GD не установлен — перерисовать файл нечем.' . PHP_EOL);

@@ -177,7 +177,9 @@ cms/
     setup.php                    одноразовый установщик ядра
     .htaccess                    rewrite, защитные правила, заголовки безопасности
     assets/app.css               собранный Tailwind (в репозитории)
-    assets/og-default.png        фирменное превью 1200×630 (в репозитории, рисуется scripts/make-og-default.php)
+    assets/img/cats/             кот-талисман: весёлый и грустный (в репозитории)
+    assets/img/brand/            фирменные картинки: иконка браузера и превью 1200×630
+                                 (рисуется scripts/make-og-default.php)
     uploads/.gitkeep             каталог загрузок, пустой каркас
     uploads/.htaccess            барьер: PHP в загрузках не исполняется
     uploads/images/.gitkeep      картинки, которые кладёт админка
@@ -260,7 +262,7 @@ cms/
     gate.sh                      php -l + phpstan + cs-fixer + phpunit
     db-reset                     пересоздаёт ТОЛЬКО cms_test
     css                          сборка Tailwind (Node у разработчика)
-    make-og-default.php          одноразовая заготовка public/assets/og-default.png (нужен GD)
+    make-og-default.php          одноразовая заготовка public/assets/img/brand/og-default.png (нужен GD)
     responsive-check.mjs         360…1440 через системный Chrome и протокол отладки, без пакетов
     deploy.sh                    rsync по SSH, два варианта раскладки
     hosting-probe.php            одноразовый зонд хостинга (удаляется после проверки)

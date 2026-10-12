@@ -28,16 +28,16 @@ final class AssetWeightTest extends TestCase
      * чтобы возврат тяжёлых файлов не прошёл.
      */
     private const BUDGETS = [
-        'assets/cat-happy.png' => 40 * 1024,
-        'assets/cat-sad.png' => 20 * 1024,
-        'assets/favicon.png' => 8 * 1024,
+        'assets/img/cats/cat-happy.png' => 40 * 1024,
+        'assets/img/cats/cat-sad.png' => 20 * 1024,
+        'assets/img/brand/favicon.png' => 8 * 1024,
     ];
 
     /** Пиксельные пределы: двойная максимальная показываемая ширина (32 / 96 / 32 px). */
     private const MAX_WIDTHS = [
-        'assets/cat-happy.png' => 64,
-        'assets/cat-sad.png' => 192,
-        'assets/favicon.png' => 64,
+        'assets/img/cats/cat-happy.png' => 64,
+        'assets/img/cats/cat-sad.png' => 192,
+        'assets/img/brand/favicon.png' => 64,
     ];
 
     public function testСтатикаШапкиИЭкрановОтказаВБюджете(): void
@@ -56,33 +56,33 @@ final class AssetWeightTest extends TestCase
     {
         // Зелёный контрпример: замеры заведомо лёгкого набора дают пустой список находок.
         $working = [
-            'assets/cat-happy.png' => ['bytes' => 30 * 1024, 'width' => 64],
-            'assets/cat-sad.png' => ['bytes' => 15 * 1024, 'width' => 192],
-            'assets/favicon.png' => ['bytes' => 6 * 1024, 'width' => 64],
+            'assets/img/cats/cat-happy.png' => ['bytes' => 30 * 1024, 'width' => 64],
+            'assets/img/cats/cat-sad.png' => ['bytes' => 15 * 1024, 'width' => 192],
+            'assets/img/brand/favicon.png' => ['bytes' => 6 * 1024, 'width' => 64],
         ];
         self::assertSame([], $this->assetProblems($working), 'Лёгкий набор помечен как тяжёлый');
 
         // Посаженный вес: прежний cat-happy.png (343 587 байт) обязан быть находкой по байтам.
         $heavy = $working;
-        $heavy['assets/cat-happy.png'] = ['bytes' => 343587, 'width' => 64];
+        $heavy['assets/img/cats/cat-happy.png'] = ['bytes' => 343587, 'width' => 64];
         $problems = $this->assetProblems($heavy);
         self::assertNotEmpty($problems, 'Возврат тяжёлого файла не пойман');
         self::assertStringContainsString('весит', $problems[0]);
 
         // Посаженная ширина: 488 px при вписанном весе — картинка снова несёт лишние пиксели.
         $wide = $working;
-        $wide['assets/cat-sad.png'] = ['bytes' => 15 * 1024, 'width' => 366];
+        $wide['assets/img/cats/cat-sad.png'] = ['bytes' => 15 * 1024, 'width' => 366];
         self::assertNotEmpty($this->assetProblems($wide), 'Разрастание пикселей не поймано');
 
         // Граница предела: ровно 192 px — ещё предел, 193 px — уже находка.
         self::assertSame([], $this->assetProblems($working));
         $edge = $working;
-        $edge['assets/cat-sad.png'] = ['bytes' => 15 * 1024, 'width' => 193];
+        $edge['assets/img/cats/cat-sad.png'] = ['bytes' => 15 * 1024, 'width' => 193];
         self::assertNotEmpty($this->assetProblems($edge), 'Предел ширины сработал не строго');
 
         // Граница бюджета: вес ровно по бюджету — уже находка («вес < бюджета», не «<=»).
         $exact = $working;
-        $exact['assets/favicon.png'] = ['bytes' => 8 * 1024, 'width' => 64];
+        $exact['assets/img/brand/favicon.png'] = ['bytes' => 8 * 1024, 'width' => 64];
         self::assertNotEmpty($this->assetProblems($exact), 'Вес ровно по бюджету прошёл зелёным');
 
         // Исчезнувший файл: пустой список замеров — тоже находка, а не зелёная заглушка.
@@ -95,7 +95,7 @@ final class AssetWeightTest extends TestCase
 
         try {
             self::assertIsInt(file_put_contents($probe, str_repeat("\0", 44 * 1024)));
-            $probeProblems = $this->assetProblems($this->measureAssets(['assets/cat-happy.png' => $probe]));
+            $probeProblems = $this->assetProblems($this->measureAssets(['assets/img/cats/cat-happy.png' => $probe]));
             self::assertNotEmpty($probeProblems, 'Заведомо тяжёлый временный файл прошёл зелёным');
             $weightHits = array_values(array_filter($probeProblems, static fn (string $p): bool => str_contains($p, 'весит')));
             self::assertNotEmpty($weightHits, 'Тяжёлый временный файл найден, но не по весу');

@@ -15,7 +15,7 @@ const NEWS_TITLE_TEMPLATE = '%s · Новости школы';
 
 // Фирменная картинка превью лежит в репозитории: у материала без обложки пустое превью
 // показывать нельзя, а рисовать её на лету значило бы требовать от хостинга GD.
-const NEWS_OG_IMAGE = '/assets/og-default.png';
+const NEWS_OG_IMAGE = '/assets/img/brand/og-default.png';
 const NEWS_OG_WIDTH = 1200;
 const NEWS_OG_HEIGHT = 630;
 const NEWS_SEO_DESCRIPTION_LIMIT = 200;

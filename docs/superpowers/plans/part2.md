@@ -717,9 +717,12 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
   `theme/partials/header.php`, `theme/partials/footer.php`, `theme/partials/cat.php`
 - Create: `tailwind.config.js`, `postcss.config.js`, `package.json`, `src-css/app.css`, `scripts/css`,
   `public/assets/app.css` (`package-lock.json` появляется из `npm install` и тоже коммитится)
-- Copy (побайтово, без перемасштабирования и без пересохранения): `public/assets/cat-happy.png` и
-  `public/assets/cat-sad.png` — из `../english-portal/public/cats/`; `public/assets/favicon.png` —
-  из `../english-portal/public/brand/`. Векторных версий талисмана в `english-portal` нет (файлов
+- Copy (побайтово, без перемасштабирования и без пересохранения): `public/assets/img/cats/cat-happy.png`
+  и `public/assets/img/cats/cat-sad.png` — из `../english-portal/public/cats/`;
+  `public/assets/img/brand/favicon.png` — из `../english-portal/public/brand/`. Картинки лежат в
+  подкаталогах по назначению: `img/cats/` — талисман, `img/brand/` — фирменные файлы; стили при этом
+  остаются на уровне `public/assets/`, перенос касался только картинок. Векторных версий талисмана в
+  `english-portal` нет (файлов
   `cat-happy.svg` и `cat-sad.svg` не существует), поэтому переносятся растровые PNG, а шаблон кота
   и `<link rel="icon">` ссылаются на `.png`.
   Пакет V, задача V6: перенесённые копии оказались слишком тяжёлыми для веба и заменены в дереве
@@ -1230,11 +1233,12 @@ require_once __DIR__ . '/template.php';
 `cms/`, путь `../english-portal` из него недоступен. Проверка совпадения — по хешу, а не по размеру:
 
 ```bash
-cp ../english-portal/public/cats/cat-happy.png ../english-portal/public/cats/cat-sad.png public/assets/
-cp ../english-portal/public/brand/favicon.png public/assets/
-md5sum ../english-portal/public/cats/cat-happy.png public/assets/cat-happy.png
-md5sum ../english-portal/public/cats/cat-sad.png public/assets/cat-sad.png
-md5sum ../english-portal/public/brand/favicon.png public/assets/favicon.png
+mkdir -p public/assets/img/cats public/assets/img/brand
+cp ../english-portal/public/cats/cat-happy.png ../english-portal/public/cats/cat-sad.png public/assets/img/cats/
+cp ../english-portal/public/brand/favicon.png public/assets/img/brand/
+md5sum ../english-portal/public/cats/cat-happy.png public/assets/img/cats/cat-happy.png
+md5sum ../english-portal/public/cats/cat-sad.png public/assets/img/cats/cat-sad.png
+md5sum ../english-portal/public/brand/favicon.png public/assets/img/brand/favicon.png
 ```
 
 Expected: в каждой паре хеши совпали. Из `english-portal` берётся только то, что лежит в открытом `public/`;
@@ -1271,7 +1275,7 @@ declare(strict_types=1);
         <meta name="robots" content="noindex, nofollow">
     <?php endif; ?>
     <link rel="stylesheet" href="/assets/app.css">
-    <link rel="icon" href="/assets/favicon.png" type="image/png">
+    <link rel="icon" href="/assets/img/brand/favicon.png" type="image/png">
     <?= $head /* @safe html */ ?>
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
@@ -1359,21 +1363,24 @@ $width = max(1, (int) ($size ?? 40));
 
 // height считается от настоящих пропорций файла: грустный кот не квадратный, и при height === width
 // он на экранах отказа сплюснут по вертикали. Если файл не читается, остаётся квадрат — место под
-// картинку всё равно зарезервировано, и вёрстка не едет. Путь задаётся внутри публичного каталога.
-$natural = imageNaturalSize('assets/' . $file);
+// картинку всё равно зарезервировано, и вёрстка не едет.
+$src = '/assets/img/cats/' . $file;
+// Путь на диск снимается с адреса, а не записывается второй строкой: каталог картинок обязан
+// совпасть с разметкой сам, иначе перенос файла рассорит их молча.
+$natural = imageNaturalSize(ltrim($src, '/'));
 $height = $natural[0] > 0 ? (int) round($width * $natural[1] / $natural[0]) : $width;
 $lazy = (bool) ($lazy ?? false);
 ?>
-<img src="/assets/<?= e($file) ?>" class="cat-idle" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
+<img src="<?= e($src) ?>" class="cat-idle" width="<?= e((string) $width) ?>" height="<?= e((string) $height) ?>"
      alt="Кот-талисман школы"<?php if ($lazy): ?> loading="lazy" decoding="async"<?php endif; ?>>
 ```
 
 Блок приведён к виду, который лежит в дереве после пакета V: `class="cat-idle"` возвращён в задаче V7 —
 без него правило анимации из `src-css/app.css` оставалось мёртвым (объявлено в источнике стилей, никто
-в разметке не использует), а обратный страж `StyleSourceTest` теперь такое ловит. Путь для
-`imageNaturalSize()` задаётся внутри публичного каталога (`assets/…`, а не `public/assets/…`): так
-сделал фикс первой задачи пакета V, а проверка на `../core/template.php` означает «не читается», а не
-«выйти наружу».
+в разметке не использует), а обратный страж `StyleSourceTest` теперь такое ловит. Пакет `A-2` перенёс
+картинки в `public/assets/img/cats/`, и путь для `imageNaturalSize()` снимается с печатаемого адреса
+(`assets/…`, а не `public/assets/…`): так сделал фикс первой задачи пакета V, а проверка на
+`../core/template.php` означает «не читается», а не «выйти наружу».
 
 `theme/404.php`:
 
