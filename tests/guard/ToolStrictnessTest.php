@@ -21,7 +21,10 @@ use PHPUnit\Framework\TestCase;
 // строкой» оставлял такие подавления невидимыми для стража. Пакет M3-2 подключил к этим проверкам
 // файлы из ключа `includes`: подавление в подключаемом файле анализатор применяет, а сам
 // `phpstan.neon` внешне остаётся чистым, поэтому его не запрещаем, а читаем каждое подключение
-// теми же списками ключей и масок, красня именем файла.
+// теми же списками ключей и масок, красня именем файла. Пакет M3-3 закрыл слепую зону разбора
+// `phpunit.xml`: комментарии вырезаются до любого поиска (тестировщик их не видит, а прежний разбор
+// считал закомментированный флаг настоящим), а повторное имя набора краснит — карта «имя => каталоги»
+// при дубликате смотрит только на последнее вхождение и лжёт.
 final class ToolStrictnessTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
@@ -213,7 +216,11 @@ final class ToolStrictnessTest extends TestCase
 
     public function testPhpunitФлагиСтрогостиСохранены(): void
     {
-        $xml = $this->read('phpunit.xml');
+        // Пункт M3-3: разбор ведётся по тексту без комментариев. Строка `<!-- … -->` не существует
+        // для тестировщика, а прежний поиск находил нужное значение внутри комментария и не
+        // различал, где оно настоящее: выключенный атрибут рядом с закомментированным верным
+        // значением (`failOnDeprecation="false"` плюс комментарий с `true`) оставлял прогон зелёным.
+        $xml = $this->stripXmlComments($this->read('phpunit.xml'));
 
         $missing = [];
         foreach (self::PHPUNIT_STRICT_FLAGS as $flag => $value) {
@@ -231,7 +238,9 @@ final class ToolStrictnessTest extends TestCase
 
     public function testPhpunitНаборыНеСокращаются(): void
     {
-        $xml = $this->read('phpunit.xml');
+        // Пункт M3-3: имена собираются из текста без комментариев — иначе закомментированный блок
+        // набора засчитывался бы как живое объявление.
+        $xml = $this->stripXmlComments($this->read('phpunit.xml'));
 
         $matched = [];
         if (preg_match_all('/<testsuite name="([^"]+)"/', $xml, $matched) === false) {
@@ -267,7 +276,35 @@ final class ToolStrictnessTest extends TestCase
         // на другой каталог или снабдить суффиксом, и набор перестанет собирать свои тесты, сохранив
         // имя и счёт «не меньше четырёх». Связываем имя набора с его каталогом: набор `unit` обязан
         // читать `tests/unit`, `http` — `tests/http`, и так для каждого заявленного набора.
-        $xml = $this->read('phpunit.xml');
+        // Пункт M3-3: разбор ведётся по тексту без комментариев, иначе закомментированный верный блок
+        // каталога считался бы настоящим.
+        $xml = $this->stripXmlComments($this->read('phpunit.xml'));
+
+        // Пункт M3-3: повторное имя набора краснит, и проверка эта независима от карты и стоит до
+        // сверки каталогов. Карта «имя => каталоги» перезаписывается последним вхождением имени,
+        // поэтому при дубликате («неверный» набор выше, «верный» ниже) утверждение «имя связано со
+        // своим каталогом» лжёт: исполнитель собирает тесты чужого каталога, а страж молчит.
+        $names = [];
+        if (preg_match_all('/<testsuite name="([^"]+)"/', $xml, $names) === false) {
+            self::fail('Разбор имён наборов в `phpunit.xml` не состоялся');
+        }
+
+        /** @var array<string, int> $occurrences */
+        $occurrences = array_count_values(array_map('strval', $names[1]));
+        $repeated = [];
+        foreach ($occurrences as $suite => $count) {
+            if ($count > 1) {
+                $repeated[] = 'число вхождений имени `' . $suite . '` = ' . $count;
+            }
+        }
+
+        self::assertSame(
+            [],
+            $repeated,
+            'В `phpunit.xml` имя набора объявлено повторно (' . implode(', ', $repeated) . '): сверка каталога смотрит только на последнее вхождение, '
+                . 'и набор с таким именем тихо собирает чужой каталог'
+        );
+
         $suiteDirs = $this->phpunitSuiteDirectories($xml);
 
         $wrong = [];
@@ -793,6 +830,17 @@ final class ToolStrictnessTest extends TestCase
     private function stripShellComments(string $gate): string
     {
         return (string) preg_replace('/^\s*#.*$/m', '', $gate);
+    }
+
+    /**
+     * Текст `phpunit.xml` без комментариев `<!-- … -->` (пункт M3-3): применяется до любого разбора
+     * файла, потому что тестировщик комментария не видит. Без вырезания флаг строгости, записанный
+     * комментарием, считался настоящим, а закомментированный верный каталог набора перекрывал
+     * наведённый на чужой каталог — прогон оставался зелёным при исполняемых чужих тестах.
+     */
+    private function stripXmlComments(string $xml): string
+    {
+        return (string) preg_replace('/<!--.*?-->/s', '', $xml);
     }
 
     /**
