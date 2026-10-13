@@ -191,6 +191,12 @@ final class SetupDbStepTest extends TestCase
         self::assertStringContainsString('tbl_setup_test_', $sessionContents, 'В сессии нет префикса из отметки');
         self::assertStringContainsString('Школа с шага первого', $sessionContents, 'В сессии нет названия сайта из отметки');
         self::assertStringNotContainsString('старый-секрет-из-файла', $sessionContents, 'Пароль базы ушёл в сессию');
+        // Отдельные ассерты по ИМЕНАМ: корректный POST контейнера обязан нести пустой db_pass
+        // (MYSQL_ALLOW_EMPTY_PASSWORD), поэтому ассерт по значению пароля ловит только боевой
+        // хостинг. Состояние сессии сериализовано («s:7:"DB_HOST"»), имя ключа краснеет на любой
+        // форме утечки — и через отметку, и через непройденную нормализацию.
+        self::assertStringNotContainsString('DB_PASS', $sessionContents, 'В сессии появился ключ DB_PASS');
+        self::assertStringNotContainsString('db_pass', $sessionContents, 'В сессию ушло поле формы db_pass');
     }
 
     public function testНедостижимыйХостОтклоняетсяБезЗаписиНаДиск(): void
@@ -226,6 +232,30 @@ final class SetupDbStepTest extends TestCase
         self::assertFileDoesNotExist(self::tempConfigPath(), 'При отказе базы файл настроек появился на диске');
     }
 
+    public function testНеверныйПарольОтклоняетсяБезРаскрытияСекрета(): void
+    {
+        $secret = 'секрет-который-нельзя-показать';
+
+        // Единственное отличие от корректного набора — непустой db_pass: контейнерный root поднят
+        // с MYSQL_ALLOW_EMPTY_PASSWORD (docker-compose.dev.yml:44), поэтому непустой пароль даёт
+        // ровно 1045 и ведёт ту самую ветку «сервер отклонил пользователя или пароль», до этого
+        // не достигавшуюся ни одной проверкой.
+        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
+            'db_pass' => $secret,
+        ]));
+
+        self::assertSame(200, $response['status'], 'Отказ аутентификации не вернулся формой отказа');
+        self::assertStringContainsString('Сервер базы отклонил пользователя или пароль', $response['body'], 'Нет текста ветки отказа аутентификации');
+        self::assertStringNotContainsString($secret, $response['body'], 'Введённый пароль базы вернулся в разметку');
+        // Предписанный ассерт «в теле нет SQLSTATE» здесь невозможен: сообщение драйвера на этой базе
+        // однострочное (замер в отчёте), поэтому вырезка до первой строки и excerpt оставляют её
+        // целиком — ассерт краснеет на верном коде. Ослаблять проверку выдуманным признаком не стал.
+        self::assertSame('', self::renderedValue($response['body'], 'db_pass'), 'Поле db_pass не пусто после отказа аутентификации');
+
+        self::assertFileDoesNotExist(self::tempConfigPath(), 'При отказе аутентификации файл настроек появился на диске');
+        self::assertSame([], glob('/tmp/.cms-config-*'), 'При отказе аутентификации остались временные файлы');
+    }
+
     public function testНевалидныеПоляОтклоняютсяБезОбращенияКБазе(): void
     {
         $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
@@ -251,6 +281,10 @@ final class SetupDbStepTest extends TestCase
 
         // До зонда и записи дело не дошло: плашка отказа уровня формы (role="alert") не появилась.
         self::assertStringNotContainsString('role="alert"', $response['body'], 'Отказ по полям дошёл до уровня формы');
+        // Прямые признаки обоих зондов, а не косвенный атрибут плашки: текста зонда сети и текста
+        // отказа базы в разметке нет — значит до обращений к серверу базы дело не дошло.
+        self::assertStringNotContainsString('Сервер базы', $response['body'], 'Отказ по полям дошёл до зонда');
+        self::assertStringNotContainsString('панели хостинга', $response['body'], 'Отказ по полям дошёл до зонда базы');
         self::assertFileDoesNotExist(self::tempConfigPath(), 'При отказе полей файл настроек появился на диске');
     }
 
@@ -259,11 +293,22 @@ final class SetupDbStepTest extends TestCase
         $first = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
         self::assertSame(302, $first['status'], 'Первый корректный POST не прошёл');
 
+        // Инода цели после первого захода: rename() из временного файла всегда даёт новую иноду,
+        // прямая запись в существующий файл сохраняет прежнюю. Только так проверка 7 краснеет по
+        // самому свойству атомарности, а не по побочному осколку.
+        clearstatcache();
+        $inodeAfterFirst = fileinode(self::tempConfigPath());
+        self::assertIsInt($inodeAfterFirst, 'Инода файла настроек после первого захода не прочитана');
+
         $second = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
             'site_name' => 'Школа со второго захода',
             'table_prefix' => 'tbl_second_test_',
         ]));
         self::assertSame(302, $second['status'], 'Второй корректный POST не прошёл');
+
+        clearstatcache();
+        $inodeAfterSecond = fileinode(self::tempConfigPath());
+        self::assertIsInt($inodeAfterSecond, 'Инода файла настроек после второго захода не прочитана');
 
         $contents = (string) file_get_contents(self::tempConfigPath());
         self::assertStringContainsString("'SITE_NAME' => 'Школа со второго захода'", $contents, 'Второй заход не перекрыл название сайта');
@@ -271,6 +316,7 @@ final class SetupDbStepTest extends TestCase
         self::assertStringNotContainsString('Школа с шага первого', $contents, 'Первое название сайта осталось в файле');
         self::assertStringNotContainsString('tbl_setup_test_', $contents, 'Первый префикс остался в файле');
 
+        self::assertNotSame($inodeAfterFirst, $inodeAfterSecond, 'Второй заход перезаписал файл на месте: запись не атомарная');
         self::assertSame([], glob('/tmp/.cms-config-*'), 'После перекрывающего захода остались временные файлы');
     }
 
