@@ -5,6 +5,7 @@ declare(strict_types=1);
 /** @var list<string> $problems */
 /** @var array<string, string> $errors */
 /** @var array<string, string> $values */
+/** @var string $notice */
 
 $disabled = $problems === [] ? '' : ' disabled';
 $fields = [
@@ -16,6 +17,12 @@ $fields = [
 <section class="mx-auto max-w-xl py-10">
     <h1 class="text-2xl font-bold">Установка сайта</h1>
     <p class="mt-2 text-sm text-ink/70">Шаг второй из двух: здесь появляются таблицы ядра и первый администратор. Разделы устанавливаются потом, на странице «Приложения».</p>
+
+    <?php if ($notice !== ''): ?>
+        <div class="mt-4 rounded-lg border border-ink/20 bg-cream px-4 py-3 text-sm text-ink/80">
+            <?= e($notice) ?>
+        </div>
+    <?php endif; ?>
 
     <?php if ($problems !== []): ?>
         <ul class="mt-4 space-y-1 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">

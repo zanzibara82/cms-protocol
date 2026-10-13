@@ -14,6 +14,10 @@ const SETUP_MIN_PHP = '8.1.0';
 const SETUP_PASSWORD_MIN = 10;
 const SETUP_STEP_DB = 'db';
 const SETUP_STEP_ADMIN = 'admin';
+// Ключ отметки сессии перехода и белый список полей формы шага 1 (db_pass читается здесь же,
+// но в шаблон не уходит никогда — прежнее правило F9).
+const SETUP_SESSION_DB = 'setup_db';
+const SETUP_DB_FIELDS = ['db_host', 'db_port', 'db_name', 'db_user', 'db_pass', 'table_prefix', 'site_url', 'site_name'];
 
 /**
  * Помощники сида и шага объявлены в начале файла, а не в общем списке ниже: их вызов обязан
@@ -286,6 +290,299 @@ function setupFinish(): void
     logInfo('setup.finished', ['php' => PHP_VERSION]);
 }
 
+/**
+ * Нормализация полей шага 1: trim() у всего, что не пароль, и снятие конечного слэша у адреса.
+ * db_pass остаётся как есть: пробелы в пароле легальны, и нормализация изменила бы реальный пароль.
+ *
+ * @param array<string, string> $values
+ * @return array<string, string>
+ */
+function setupNormalizeDb(array $values): array
+{
+    $normalized = [];
+
+    foreach (['db_host', 'db_port', 'db_name', 'db_user', 'table_prefix', 'site_name'] as $field) {
+        $normalized[$field] = trim($values[$field]);
+    }
+
+    // Адрес сайта хранится без слэша в конце: из него строят абсолютные ссылки OG и карту сайтов.
+    $normalized['site_url'] = rtrim($values['site_url'], '/');
+    $normalized['db_pass'] = $values['db_pass'];
+
+    return $normalized;
+}
+
+/**
+ * Проверка нормализованных значений шага 1: «прошло проверку» и «записалось» — один и тот же набор.
+ * Пустой пароль — валидное значение, правил у db_pass нет.
+ *
+ * @param array<string, string> $values
+ * @return array<string, string>
+ */
+function setupValidateDb(array $values): array
+{
+    $errors = [];
+
+    $host = $values['db_host'];
+    if ($host === '') {
+        $errors['db_host'] = 'Укажите хост базы данных.';
+    } elseif (preg_match('/^[a-z0-9._-]+$/i', $host) !== 1 || strlen($host) > 190) {
+        // Регулярка хоста взята из scripts/hosting-probe.php — тот же приём.
+        $errors['db_host'] = 'Хост базы — адрес вида db.example.com или 127.0.0.1, без схемы, слэшей и пробелов.';
+    }
+
+    $port = $values['db_port'];
+    if ($port === '') {
+        $errors['db_port'] = 'Укажите порт базы данных — обычно 3306.';
+    } elseif (preg_match('/^\d+$/', $port) !== 1 || (int) $port < 1 || (int) $port > 65535) {
+        $errors['db_port'] = 'Порт базы — целое число от 1 до 65535.';
+    }
+
+    $dbName = $values['db_name'];
+    if ($dbName === '') {
+        $errors['db_name'] = 'Укажите имя базы данных.';
+    } elseif (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $dbName) !== 1) {
+        // Имя базы ограничено строже хоста: оно попадает в DSN без экранирования.
+        $errors['db_name'] = 'Имя базы — до 64 символов: латинские буквы, цифры, подчёркивание и дефис.';
+    }
+
+    $user = $values['db_user'];
+    if ($user === '') {
+        $errors['db_user'] = 'Укажите пользователя базы данных.';
+    } elseif (strlen($user) > 190) {
+        $errors['db_user'] = 'Имя пользователя — не длиннее 190 символов.';
+    }
+
+    $prefix = $values['table_prefix'];
+    if ($prefix === '') {
+        $errors['table_prefix'] = 'Укажите префикс таблиц, например tbl_.';
+    } elseif (preg_match('/^[a-z][a-z0-9_]*$/', $prefix) !== 1 || strlen($prefix) > 30) {
+        // Префикс читает t() (core/db.php): она ждёт именно такой узор и иначе падает в fail()
+        // уже на установленном сайте, поэтому ограничение строже, чем у хоста.
+        $errors['table_prefix'] = 'Префикс таблиц — строчные латинские буквы, цифры и подчёркивание, начинается с буквы, до 30 символов.';
+    }
+
+    $siteUrl = $values['site_url'];
+    if ($siteUrl === '') {
+        $errors['site_url'] = 'Укажите адрес сайта, например https://example.com.';
+    } elseif (filter_var($siteUrl, FILTER_VALIDATE_URL) === false) {
+        $errors['site_url'] = 'Адрес сайта — полный URL со схемой http или https.';
+    } else {
+        $scheme = parse_url($siteUrl, PHP_URL_SCHEME);
+        if (!is_string($scheme) || ($scheme !== 'http' && $scheme !== 'https')) {
+            $errors['site_url'] = 'Адрес сайта — полный URL со схемой http или https.';
+        }
+    }
+
+    $siteName = $values['site_name'];
+    if (mb_strlen($siteName) < 2) {
+        $errors['site_name'] = 'Название сайта — не короче двух символов.';
+    } elseif (mb_strlen($siteName) > 120) {
+        $errors['site_name'] = 'Название сайта — не длиннее 120 символов.';
+    }
+
+    return $errors;
+}
+
+/**
+ * Зонд достигаемости хоста и порта: три секунды на установку соединения — тот же приём, что в
+ * scripts/hosting-probe.php. null — адрес достижим.
+ */
+function setupProbeNetwork(string $host, int $port): ?string
+{
+    $errno = 0;
+    $errstr = '';
+    $socket = @stream_socket_client('tcp://' . $host . ':' . (string) $port, $errno, $errstr, 3.0);
+
+    if ($socket === false) {
+        return 'Сервер базы недоступен по адресу ' . $host . ':' . (string) $port
+            . '. Проверьте хост и порт: на виртуальном хостинге их выдаёт панель хостинга.';
+    }
+
+    fclose($socket);
+
+    return null;
+}
+
+/**
+ * Зонд самой базы: создаёт свой PDO, а не через db() — db() читает конфиг, который мы ещё не
+ * записали. null — соединение прошло.
+ *
+ * @param array<string, string> $values
+ */
+function setupProbeDatabase(array $values): ?string
+{
+    $dsn = sprintf(
+        'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+        $values['db_host'],
+        $values['db_port'],
+        $values['db_name']
+    );
+
+    try {
+        // Атрибуты совпадают с core/db.php:7-30 — иначе установщик и сайт судили бы о соединении
+        // по-разному (режим ошибок, способ выборки и представления строк).
+        new PDO($dsn, $values['db_user'], $values['db_pass'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_STRINGIFY_FETCHES => false,
+        ]);
+    } catch (PDOException $exception) {
+        if (($exception->errorInfo[1] ?? null) === 1049) {
+            return 'Базы с именем ' . $values['db_name'] . ' нет. Создайте её в панели хостинга и повторите шаг.';
+        }
+
+        // Сообщение драйвера содержит имя пользователя: это не секрет, но целиком показывать незачем,
+        // поэтому берём первую строку и режем до 160 символов. Пароля в тексте драйвера нет.
+        $hint = explode("\n", $exception->getMessage())[0];
+
+        return 'Сервер базы отклонил пользователя или пароль: ' . excerpt($hint, 160);
+    }
+
+    return null;
+}
+
+/**
+ * Сборка записываемого набора: сначала ключи образца (в его порядке), затем ключи файла, которых
+ * в образце нет, затем оверлей восьми полей формы. Пустая строка в существующем файле — выбор
+ * оператора, а не отсутствие ключа, поэтому array_key_exists, а не ??.
+ *
+ * @param array<string, mixed> $raw
+ * @param array<string, mixed> $sample
+ * @param array<string, string> $posted
+ * @return array<string, mixed>
+ */
+function setupBuildConfig(array $raw, array $sample, array $posted): array
+{
+    $out = [];
+
+    foreach ($sample as $key => $value) {
+        $out[$key] = array_key_exists($key, $raw) ? $raw[$key] : $value;
+    }
+
+    foreach ($raw as $key => $value) {
+        if (!array_key_exists($key, $out)) {
+            $out[$key] = $value;
+        }
+    }
+
+    // Оверлей введённого: восемь полей формы. DB_PASS живёт ровно здесь, в записанном файле.
+    $out['DB_HOST'] = $posted['db_host'];
+    $out['DB_PORT'] = $posted['db_port'];
+    $out['DB_NAME'] = $posted['db_name'];
+    $out['DB_USER'] = $posted['db_user'];
+    $out['DB_PASS'] = $posted['db_pass'];
+    $out['TABLE_PREFIX'] = $posted['table_prefix'];
+    $out['SITE_URL'] = $posted['site_url'];
+    $out['SITE_NAME'] = $posted['site_name'];
+
+    return $out;
+}
+
+/**
+ * Рендер файла настроек: по строке на ключ, var_export() на ключе и значении (тип сохраняется —
+ * в образце SMTP_PORT это число). Никакой интерполяции текста в PHP-исходник: var_export() обязан
+ * экранировать и кавычки, и переносы строк — это защита от записи исполняемого кода через поле.
+ *
+ * @param array<string, mixed> $config
+ */
+function setupRenderConfig(array $config): string
+{
+    $lines = [
+        '<?php',
+        '',
+        'declare(strict_types=1);',
+        '',
+        '// Файл создан установщиком. Содержит пароль базы данных: права 600, в репозиторий не попадает.',
+        '',
+        'return [',
+    ];
+
+    foreach ($config as $key => $value) {
+        $lines[] = '    ' . var_export((string) $key, true) . ' => ' . var_export($value, true) . ',';
+    }
+
+    $lines[] = '];';
+
+    return implode("\n", $lines) . "\n";
+}
+
+/**
+ * Атомарная запись: временный файл рядом с целью → chmod 600 → rename. Порядок строгий; ранний
+ * отказ по имени цели происходит ДО любого обращения к диску.
+ *
+ * @return array{error: string, warning: string}
+ */
+function setupWriteConfig(string $content, string $target): array
+{
+    $result = ['error' => '', 'warning' => ''];
+
+    // Тестовый харнес передаёт подпроцессу CMS_CONFIG_FILE=<корень>/config.sample.php, и без отказа
+    // первый же тест стёр бы версионированный образец. Выход ДО любого обращения к диску.
+    if (basename($target) === 'config.sample.php') {
+        $result['error'] = 'Настройки не записаны: цель установки называется config.sample.php — это образец, а не рабочий файл. Укажите верный путь в CMS_CONFIG_FILE.';
+
+        return $result;
+    }
+
+    // Именно так, а не tempnam(): tempnam сам создаёт файл с 0600, и проверка chmod стала бы
+    // непроверяемой.
+    $tmp = dirname($target) . '/.cms-config-' . bin2hex(random_bytes(6));
+
+    if (@file_put_contents($tmp, $content) === false) {
+        $result['error'] = 'Не удалось подготовить файл настроек: каталог ' . dirname($target) . ' недоступен для записи.';
+        // Временный файл удаляем, если он всё-таки появился на диске.
+        if (is_file($tmp)) {
+            @unlink($tmp);
+        }
+
+        return $result;
+    }
+
+    // Права выставляются до rename(): между созданием и закрытием окна виден файл 0644.
+    $chmodOk = @chmod($tmp, 0600);
+
+    if (@rename($tmp, $target) === false) {
+        $result['error'] = 'Не удалось записать файл настроек по адресу ' . $target . ': проверьте права на каталог.';
+        // Временный файл обязан удалиться — иначе повторный заход оставляет мусор.
+        if (is_file($tmp)) {
+            @unlink($tmp);
+        }
+
+        return $result;
+    }
+
+    if (!$chmodOk) {
+        // Установка продолжается: на части панелей 600 запрещает жёстче, чем позволяет владелец, и
+        // молчаливый отказ здесь хуже предупреждения.
+        $result['warning'] = 'Настройки записаны, но права 600 выставить не удалось — поправьте их в панели хостинга.';
+    }
+
+    return $result;
+}
+
+/**
+ * Отметка перехода в сессию: семь значений из нормализованного набора плюс метка времени проверки.
+ * DB_PASS — никогда: пароль нужен только соединению и живёт в записанном config.php, поэтому шаг 2
+ * пойдёт обычным путём через db(), читающий файл, а не по значениям этой отметки.
+ *
+ * @param array<string, string> $values
+ */
+function setupMarkSession(array $values): void
+{
+    $_SESSION[SETUP_SESSION_DB] = [
+        'DB_HOST' => $values['db_host'],
+        'DB_PORT' => $values['db_port'],
+        'DB_NAME' => $values['db_name'],
+        'DB_USER' => $values['db_user'],
+        'TABLE_PREFIX' => $values['table_prefix'],
+        'SITE_URL' => $values['site_url'],
+        'SITE_NAME' => $values['site_name'],
+        'checked_at' => utcStamp(nowUtc()),
+    ];
+}
+
 if (setupLocked()) {
     notFound('Сайт уже установлен.');
 }
@@ -293,28 +590,73 @@ if (setupLocked()) {
 startSession();
 
 // Шаг 1 отделяется отдельной веткой ДО прежней разметки шага 2: при шаге 1 прежняя POST-обработка
-// администратора не выполняется. Здесь параметры только собираются — запись config.php, зонд базы
-// и отметка сессии перехода появятся в M6-2 и M6-3, поэтому корректный POST шага 1 возвращает ту же
-// форму с прежними значениями из файла и образца, ничего не сохраняя и не трогая базу.
+// администратора не выполняется. Успешный POST проверяет поля, зондирует базу, атомарно пишет
+// config.php и уводит на шаг 2; отказ возвращает ту же форму с прежними значениями из окружения,
+// файла и образца — на диск при отказе не пишется ничего.
 if (setupStep() === SETUP_STEP_DB) {
+    // Предзаполнение без POST: шаг 1 не гейтится setupProblems() — проверка полей и зонд не требуют
+    // gd и не пишут в public/. Значения берутся в приоритете «окружение, файл, образец» через
+    // уже накормленный config(); db_pass сюда не попадает и в разметку уходит пустым (F9).
+    $dbValues = [
+        'db_host' => (string) configValue('DB_HOST', ''),
+        'db_port' => (string) configValue('DB_PORT', ''),
+        'db_name' => (string) configValue('DB_NAME', ''),
+        'db_user' => (string) configValue('DB_USER', ''),
+        'table_prefix' => (string) configValue('TABLE_PREFIX', ''),
+        'site_url' => (string) configValue('SITE_URL', ''),
+        'site_name' => (string) configValue('SITE_NAME', ''),
+    ];
     $dbErrors = [];
 
     if (isPost()) {
         csrfCheck();
+
+        $posted = formValues($_POST, SETUP_DB_FIELDS);
+        $values = setupNormalizeDb($posted);
+
+        // Введённые значения сохраняются в форме при отказе — кроме пароля базы (прежнее правило F9).
+        $dbValues = $values;
+        unset($dbValues['db_pass']);
+
+        // Порядок общий: валидация полей → зонд сети → зонд базы → сборка → запись. Отказ любого
+        // шага не пишет ни на диск, ни в сессию, не редиректит; install.lock шаг 1 не трогает
+        // (замок относится к шагу 2, M6-3).
+        $dbErrors = setupValidateDb($values);
+
+        if ($dbErrors === []) {
+            $networkError = setupProbeNetwork($values['db_host'], (int) $values['db_port']);
+
+            if ($networkError !== null) {
+                $dbErrors['form'] = $networkError;
+            } else {
+                $dbError = setupProbeDatabase($values);
+
+                if ($dbError !== null) {
+                    $dbErrors['form'] = $dbError;
+                } else {
+                    $config = setupBuildConfig($setupRawConfig, setupSampleConfig(), $values);
+                    $written = setupWriteConfig(setupRenderConfig($config), configPath());
+
+                    if ($written['error'] !== '') {
+                        $dbErrors['form'] = $written['error'];
+                    } else {
+                        setupMarkSession($values);
+
+                        // Предупреждение о правах человек видит плашкой на шаге 2 (PRG).
+                        if ($written['warning'] !== '') {
+                            redirectWithNotice('/setup.php?step=admin', 'config-permissions');
+                        }
+
+                        redirect('/setup.php?step=admin');
+                    }
+                }
+            }
+        }
     }
 
     render('setup-db', [
         'errors' => $dbErrors,
-        'values' => [
-            // Белый список значений формы: db_pass сюда не попадает и в разметку уходит пустым.
-            'db_host' => (string) configValue('DB_HOST', ''),
-            'db_port' => (string) configValue('DB_PORT', ''),
-            'db_name' => (string) configValue('DB_NAME', ''),
-            'db_user' => (string) configValue('DB_USER', ''),
-            'table_prefix' => (string) configValue('TABLE_PREFIX', ''),
-            'site_url' => (string) configValue('SITE_URL', ''),
-            'site_name' => (string) configValue('SITE_NAME', ''),
-        ],
+        'values' => $dbValues,
     ], [
         'title' => 'Настройка базы данных',
         'noindex' => true,
@@ -383,7 +725,8 @@ if (isPost()) {
 }
 
 // В шаблон уходит белый список полей (F9): пароли — не значение формы, они не возвращаются
-// в разметку и не покидают этот скрипт.
+// в разметку и не покидают этот скрипт. Плашка уведомления читается из адресной строки: на шаге 2
+// она показывает предупреждение о правах 600, пришедшее редиректом с шага 1.
 render('setup', [
     'problems' => $problems,
     'errors' => $errors,
@@ -392,6 +735,7 @@ render('setup', [
         'admin_email' => $values['admin_email'],
         'admin_name' => $values['admin_name'],
     ],
+    'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
 ], [
     'title' => 'Установка сайта',
     'noindex' => true,

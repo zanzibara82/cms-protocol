@@ -19,6 +19,12 @@ $fields = [
     <h1 class="text-2xl font-bold">Установка сайта</h1>
     <p class="mt-2 text-sm text-ink/70">Шаг первый из двух: здесь появляются параметры базы и адрес сайта.</p>
 
+    <?php if (($errors['form'] ?? '') !== ''): ?>
+        <div class="mt-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">
+            <?= e((string) $errors['form']) ?>
+        </div>
+    <?php endif; ?>
+
     <form class="mt-6 space-y-4" method="post" action="/setup.php?step=db">
         <?php /* @safe html */ ?><?= csrfField() ?>
 
