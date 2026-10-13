@@ -115,6 +115,32 @@ final class Kernel
     }
 
     /**
+     * Идентификатор сессии из jar: curl пишет строку вида
+     * `#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tcms_session\t<id>`, поэтому префикс `#HttpOnly_`
+     * снимается, а поле ищется по имени на позиции 5.
+     */
+    public static function sessionId(): string
+    {
+        if (self::$cookieJar === null || !is_file(self::$cookieJar)) {
+            return '';
+        }
+
+        $lines = file(self::$cookieJar, FILE_IGNORE_NEW_LINES);
+        if ($lines === false) {
+            return '';
+        }
+
+        foreach ($lines as $line) {
+            $fields = explode("\t", $line);
+            if (count($fields) >= 7 && $fields[5] === 'cms_session') {
+                return $fields[6];
+            }
+        }
+
+        return '';
+    }
+
+    /**
      * CSRF-токен из печатаемой формы. Разбор один на весь набор: три частные копии regex
      * однажды разошлись бы опечаткой — и проверка токена стала бы бутафорской.
      */
