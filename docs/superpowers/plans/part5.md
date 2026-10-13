@@ -16,7 +16,7 @@
 
 **Почему штамп даты добавляется в `core/date.php`:** страж `tests/guard/DateUsageTest.php` запрещает `date(`, `->format(` и `time()` вне этого модуля, поэтому форматирование RFC 2822 делается здесь же.
 
-- [ ] **Шаг 1: Написать падающий тест письма**
+- [x] **Шаг 1: Написать падающий тест письма**
 
 Создать `tests/unit/MailerTest.php`:
 
@@ -251,12 +251,12 @@ final class MailerTest extends TestCase
 }
 ```
 
-- [ ] **Шаг 2: Запустить тест и убедиться, что он падает**
+- [x] **Шаг 2: Запустить тест и убедиться, что он падает**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter MailerTest`
 Expected: FAIL — `Class "Cms\Core\Mailer" not found`.
 
-- [ ] **Шаг 3: Добавить штамп даты в `core/date.php`**
+- [x] **Шаг 3: Добавить штамп даты в `core/date.php`**
 
 В `core/date.php` перед функцией `parseFormDateTime()` добавить:
 
@@ -267,7 +267,7 @@ function rfc2822Stamp(DateTimeImmutable $date): string
 }
 ```
 
-- [ ] **Шаг 4: Написать сокет SMTP**
+- [x] **Шаг 4: Написать сокет SMTP**
 
 Создать `core/SmtpSocket.php`:
 
@@ -452,7 +452,7 @@ final class SmtpSocket
 }
 ```
 
-- [ ] **Шаг 5: Написать сборщик писем**
+- [x] **Шаг 5: Написать сборщик писем**
 
 Уточнение контроллера к шагу 4 (внесено по рецензии задачи 10, обязательного кода в блоке выше
 оно не отменяет):
@@ -719,7 +719,7 @@ final class Mailer
 }
 ```
 
-- [ ] **Шаг 6: Запустить тест и убедиться, что он проходит**
+- [x] **Шаг 6: Запустить тест и убедиться, что он проходит**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter MailerTest`
 Expected: PASS — 13 проверок.
@@ -731,7 +731,7 @@ Expected: PASS — 13 проверок.
 настройки на весь процесс. Поэтому пропуск в контейнере означает, что файл-обнуление больше не мешает
 набору `http`, — см. шаг 10.
 
-- [ ] **Шаг 7: Написать страж против `mail()`**
+- [x] **Шаг 7: Написать страж против `mail()`**
 
 Создать `tests/guard/MailFunctionTest.php`:
 
@@ -820,12 +820,12 @@ final class MailFunctionTest extends TestCase
 }
 ```
 
-- [ ] **Шаг 8: Запустить стража**
+- [x] **Шаг 8: Запустить стража**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter MailFunctionTest`
 Expected: PASS.
 
-- [ ] **Шаг 9: Написать интеграционную проверку на mailpit**
+- [x] **Шаг 9: Написать интеграционную проверку на mailpit**
 
 Создать `tests/http/SmtpIntegrationTest.php`:
 
@@ -926,7 +926,7 @@ final class SmtpIntegrationTest extends TestCase
 }
 ```
 
-- [ ] **Шаг 10: Запустить интеграционную проверку в контейнере**
+- [x] **Шаг 10: Запустить интеграционную проверку в контейнере**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter SmtpIntegrationTest`
 Expected: PASS — 3 проверки.
@@ -944,7 +944,7 @@ Expected: SKIPPED — 3 проверки с текстом про `CMS_MAILPIT_U
 проверки выше могут показаться пропускающимися — цифры надо снимать изолированным прогоном, как здесь,
 и полным прогоном ворот, и объяснять расхождение.
 
-- [ ] **Шаг 11: Прогнать ворота и зафиксировать**
+- [x] **Шаг 11: Прогнать ворота и зафиксировать**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.
@@ -989,7 +989,7 @@ git commit -m "SMTP-клиент ядра: письмо через сокет, �
 
 **Почему `IF NOT EXISTS` в каждом `CREATE TABLE`:** MySQL фиксирует DDL сразу, поэтому `applyApp()` пишет строку журнала после каждого файла, а не одним оборотом (отклонение 9). Повторный прогон файла обязан проходить молча.
 
-- [ ] **Шаг 1: Написать падающий тест схемы раздела**
+- [x] **Шаг 1: Написать падающий тест схемы раздела**
 
 Создать `tests/db/NewsSchemaTest.php`:
 
@@ -1233,12 +1233,12 @@ final class NewsSchemaTest extends TestCase
 }
 ```
 
-- [ ] **Шаг 2: Запустить тест и убедиться, что он падает**
+- [x] **Шаг 2: Запустить тест и убедиться, что он падает**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSchemaTest`
 Expected: FAIL — `Раздел «Новости» не установился: Раздел «news» не найден в сборке.`
 
-- [ ] **Шаг 3: Создать манифест и загрузчик правил раздела**
+- [x] **Шаг 3: Создать манифест и загрузчик правил раздела**
 
 Создать `apps/news/manifest.php`:
 
@@ -1289,7 +1289,7 @@ require_once dirname(__DIR__) . '/apps/news/lib/boot.php';
     }
 ```
 
-- [ ] **Шаг 4: Создать словарь пределов и текстов раздела**
+- [x] **Шаг 4: Создать словарь пределов и текстов раздела**
 
 Создать `apps/news/lib/constants.php`:
 
@@ -1432,7 +1432,7 @@ function fieldLimit(array $limits, string $field, string $key = ''): int
 }
 ```
 
-- [ ] **Шаг 5: Написать тест пределов и запустить его**
+- [x] **Шаг 5: Написать тест пределов и запустить его**
 
 Создать `tests/unit/NewsConstantsTest.php`:
 
@@ -1520,7 +1520,7 @@ final class NewsConstantsTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsConstantsTest`
 Expected: PASS — 6 проверок.
 
-- [ ] **Шаг 6: Создать первый релиз схемы — каталог**
+- [x] **Шаг 6: Создать первый релиз схемы — каталог**
 
 Создать `apps/news/sql/20261006_0001_catalog.sql`:
 
@@ -1553,7 +1553,7 @@ CREATE TABLE IF NOT EXISTS tbl_news_tag (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-- [ ] **Шаг 7: Создать второй релиз схемы — материалы**
+- [x] **Шаг 7: Создать второй релиз схемы — материалы**
 
 Создать `apps/news/sql/20261006_0002_items.sql`:
 
@@ -1614,12 +1614,12 @@ CREATE TABLE IF NOT EXISTS tbl_news_old_slug (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-- [ ] **Шаг 8: Запустить тест схемы и убедиться, что он проходит**
+- [x] **Шаг 8: Запустить тест схемы и убедиться, что он проходит**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSchemaTest`
 Expected: PASS — 12 проверок.
 
-- [ ] **Шаг 9: Создать начальную закладку и её тест**
+- [x] **Шаг 9: Создать начальную закладку и её тест**
 
 Создать `apps/news/seed.php`:
 
@@ -1758,7 +1758,7 @@ final class NewsSeedTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSeedTest`
 Expected: PASS — 4 проверки.
 
-- [ ] **Шаг 10: Написать страж SQL-файлов раздела и тест реестра**
+- [x] **Шаг 10: Написать страж SQL-файлов раздела и тест реестра**
 
 Создать `tests/guard/AppSqlTest.php`. Ниже — каркас с тремя проверками: живых в файле пять, две
 добавлены более поздними шагами той же задачи. Проверки содержимого идут по `sqlFiles()` и потому
@@ -1954,12 +1954,12 @@ final class NewsRegistryTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "vendor/bin/phpunit --testsuite guard --filter AppSqlTest && vendor/bin/phpunit --testsuite db --filter NewsRegistryTest"`
 Expected: PASS — 3 стража и 5 проверок реестра.
 
-- [ ] **Шаг 11: Прогнать все наборы**
+- [x] **Шаг 11: Прогнать все наборы**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — падения только в задачах, которые ещё не написаны, отсутствуют; `AppsRegistryTest` проходит с обновлённым списком приватных путей.
 
-- [ ] **Шаг 12: Ворота и фиксация**
+- [x] **Шаг 12: Ворота и фиксация**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.
@@ -1993,7 +1993,7 @@ git commit -m "Раздел «Новости»: манифест, два рел�
 
 **Что переносится дословно, а что нет:** `NEWS_TRANSLIT`, тексты отказов и правила разбора абзацев перенесены из `src/lib/slug.ts` и `src/apps/news/lib/validators.ts` без изменения смысла. Две осознанные разницы: отказ про занятый адрес называет сам адрес («Адрес «admin» занят…») — так редактору видно, что именно предложить, и правило картинки строже порталовского — путь с `..`, его процент-кодами, обратным слэшем или управляющим символом отклоняется целиком. Zod заменён явными проверками (у ядра нет рантайм-зависимостей), `newsFormValues()` не переносится — её заменяет `formValues()` из `core/form.php`, а предел `categoryId` ужат с 64 до 26 символов: столько занимает строковый идентификатор из `core/id.php`.
 
-- [ ] **Шаг 1: Написать падающий тест видимости**
+- [x] **Шаг 1: Написать падающий тест видимости**
 
 Создать `tests/unit/NewsVisibilityTest.php`:
 
@@ -2101,7 +2101,7 @@ final class NewsVisibilityTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsVisibilityTest`
 Expected: FAIL — `Call to undefined function isOpen()`.
 
-- [ ] **Шаг 2: Создать правила видимости**
+- [x] **Шаг 2: Создать правила видимости**
 
 Создать `apps/news/lib/visibility.php`:
 
@@ -2184,7 +2184,7 @@ require_once __DIR__ . '/visibility.php';
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsVisibilityTest`
 Expected: PASS — 9 проверок.
 
-- [ ] **Шаг 3: Написать падающий тест адресов**
+- [x] **Шаг 3: Написать падающий тест адресов**
 
 Создать `tests/unit/NewsSlugTest.php`:
 
@@ -2354,7 +2354,7 @@ final class NewsSlugTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSlugTest`
 Expected: FAIL — `Call to undefined function slugify()`.
 
-- [ ] **Шаг 4: Создать правила адресов**
+- [x] **Шаг 4: Создать правила адресов**
 
 Создать `apps/news/lib/slug.php`:
 
@@ -2502,7 +2502,7 @@ require_once __DIR__ . '/slug.php';
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSlugTest`
 Expected: PASS — 16 проверок.
 
-- [ ] **Шаг 5: Написать падающий тест проверки полей**
+- [x] **Шаг 5: Написать падающий тест проверки полей**
 
 Создать `tests/unit/NewsValidatorsTest.php`:
 
@@ -2904,7 +2904,7 @@ final class NewsValidatorsTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsValidatorsTest`
 Expected: FAIL — `Call to undefined function parseBody()`.
 
-- [ ] **Шаг 6: Создать проверку полей**
+- [x] **Шаг 6: Создать проверку полей**
 
 Создать `apps/news/lib/validators.php`:
 
@@ -3304,7 +3304,7 @@ function parseNewsForm(array $raw): array
 
 **Почему теги проверяются по длине, но не обрезаются:** длина строки тегов ограничена `NEWS_FORM_MAX['tags']`, но сама строка при этом не обрезается — иначе отказ «список слишком длинный» не сработал бы никогда. Поэтому в проверку длины и в `parseTagList()` идёт одно и то же очищенное значение из `$values`.
 
-- [ ] **Шаг 7: Подключить правила и запустить тесты**
+- [x] **Шаг 7: Подключить правила и запустить тесты**
 
 Заменить `apps/news/lib/boot.php` целиком:
 
@@ -3324,7 +3324,7 @@ require_once __DIR__ . '/validators.php';
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsValidatorsTest`
 Expected: PASS — 26 проверок.
 
-- [ ] **Шаг 8: Прогнать все наборы, ворота и зафиксировать**
+- [x] **Шаг 8: Прогнать все наборы, ворота и зафиксировать**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора зелёные.

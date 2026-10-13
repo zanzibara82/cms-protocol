@@ -61,7 +61,7 @@
   - Фикстуры: `demo` (версия `1.1.0`, два файла SQL, `seed.php`, приватный путь `/demo/admin`, вкладка `/demo/admin`)
     и `future` (`requiresCore 99.0.0`, пустой `sql/`, приватный путь `/future/admin`).
 
-- [ ] **Шаг 1: Фикстуры приложений**
+- [x] **Шаг 1: Фикстуры приложений**
 
 `tests/fixtures/apps/demo/manifest.php`:
 
@@ -196,7 +196,7 @@ function futureFeed(array $params = []): void
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php -l tests/fixtures/apps/demo/routes.php`
 Expected: `No syntax errors detected`.
 
-- [ ] **Шаг 2: Падающий тест реестра — он же красным, пока реестра нет**
+- [x] **Шаг 2: Падающий тест реестра — он же красным, пока реестра нет**
 
 `tests/db/AppsRegistryTest.php`:
 
@@ -313,7 +313,7 @@ final class AppsRegistryTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter AppsRegistryTest`
 Expected: FAIL — `appManifests()` не определена.
 
-- [ ] **Шаг 3: Реестр приложений**
+- [x] **Шаг 3: Реестр приложений**
 
 `core/apps.php`:
 
@@ -545,12 +545,12 @@ require_once dirname(__DIR__) . '/admin/layout.php';
 Файлы `migrations.php`, `options.php` и `admin/layout.php` создаются в шагах 5, 8 и 11 этой же задачи:
 подключайте каждую строку тогда, когда файл появился, иначе `php -l` на воротах упадёт на первом же прогоне.
 
-- [ ] **Шаг 4: Зелёный тест реестра**
+- [x] **Шаг 4: Зелёный тест реестра**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter AppsRegistryTest`
 Expected: PASS (10/10).
 
-- [ ] **Шаг 5: План миграций**
+- [x] **Шаг 5: План миграций**
 
 `core/MigrationPlan.php`:
 
@@ -838,7 +838,7 @@ function seedApp(array $manifest): void
 }
 ```
 
-- [ ] **Шаг 6: Тесты миграций**
+- [x] **Шаг 6: Тесты миграций**
 
 `tests/db/MigrationsTest.php`:
 
@@ -1060,7 +1060,7 @@ final class MigrationsTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter MigrationsTest`
 Expected: PASS (15/15).
 
-- [ ] **Шаг 7: Право на установку разделов**
+- [x] **Шаг 7: Право на установку разделов**
 
 `core/auth.php` дополняется (после `roleGrantsManage()`):
 
@@ -1130,7 +1130,7 @@ function dispatch(): void
 }
 ```
 
-- [ ] **Шаг 8: Настройки сайта**
+- [x] **Шаг 8: Настройки сайта**
 
 `core/options.php`:
 
@@ -1308,7 +1308,7 @@ final class OptionsTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter OptionsTest`
 Expected: PASS (8/8).
 
-- [ ] **Шаг 9: Одноразовый установщик**
+- [x] **Шаг 9: Одноразовый установщик**
 
 `public/setup.php`:
 
@@ -1619,7 +1619,7 @@ PHP-тегов:
 Под `php -S` то же делает блок пропуска статики из задачи 5: он исключает расширение `.lock`.
 Форму этих барьеров закрепляет страж `tests/guard/WebServerConfigTest.php`.
 
-- [ ] **Шаг 10: HTTP-тест установщика**
+- [x] **Шаг 10: HTTP-тест установщика**
 
 `tests/http/SetupTest.php`:
 
@@ -1802,7 +1802,7 @@ Expected: PASS (8/8). Порядок тестов внутри файла зна
 Проверьте, что `public/install.lock` закрыт в `.gitignore` (задача 1 добавляла строку `public/install.lock`);
 если её нет — добавьте и включите в коммит этой задачи.
 
-- [ ] **Шаг 11: Каркас админки**
+- [x] **Шаг 11: Каркас админки**
 
 `admin/layout.php`:
 
@@ -2025,7 +2025,7 @@ $alert = $error === ''
 /* @safe html */ echo $alert . adminShell('Приложения', $core . $table, $notice);
 ```
 
-- [ ] **Шаг 12: Экраны и действия админки**
+- [x] **Шаг 12: Экраны и действия админки**
 
 `core/routes.php` — внутри `registerCoreRoutes()` добавьте три маршрута:
 
@@ -2162,7 +2162,7 @@ function finishAppAction(array $result, string $to, string $notice): void
 }
 ```
 
-- [ ] **Шаг 13: HTTP-тесты админки и два отложенных теста входа**
+- [x] **Шаг 13: HTTP-тесты админки и два отложенных теста входа**
 
 `tests/http/AdminAppsTest.php`:
 
@@ -2452,7 +2452,7 @@ final class AdminAppsTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http`
 Expected: PASS (`NotFoundTest`, `LoginTest`, `SetupTest`, `AdminAppsTest`).
 
-- [ ] **Шаг 14: Страж обработчиков маршрутов**
+- [x] **Шаг 14: Страж обработчиков маршрутов**
 
 `tests/guard/RouteHandlersTest.php`:
 
@@ -2555,7 +2555,7 @@ final class RouteHandlersTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS.
 
-- [ ] **Шаг 15: Ворота и коммит**
+- [x] **Шаг 15: Ворота и коммит**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.
@@ -2594,7 +2594,7 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
   - фильтры `sitemap_urls` (принимает и возвращает `list<array{loc: string, lastmod?: string}>`) и
     `robots_lines` (принимает и возвращает `list<string>` закрытых префиксов).
 
-- [ ] **Шаг 1: Падающие тесты карты сайта и robots.txt**
+- [x] **Шаг 1: Падающие тесты карты сайта и robots.txt**
 
 `tests/http/SitemapTest.php`:
 
@@ -2791,7 +2791,7 @@ final class RobotsTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter 'SitemapTest|RobotsTest'`
 Expected: FAIL — маршрутов `/sitemap.xml` и `/robots.txt` ещё нет.
 
-- [ ] **Шаг 2: Карта сайта и robots.txt**
+- [x] **Шаг 2: Карта сайта и robots.txt**
 
 `core/seo.php`:
 
@@ -2989,7 +2989,7 @@ require_once __DIR__ . '/seo.php';
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter 'SitemapTest|RobotsTest'`
 Expected: PASS (7/7 и 6/6).
 
-- [ ] **Шаг 3: Страж приватных путей**
+- [x] **Шаг 3: Страж приватных путей**
 
 `tests/guard/PrivatePathsRobotsTest.php`:
 
@@ -3082,7 +3082,7 @@ final class PrivatePathsRobotsTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS.
 
-- [ ] **Шаг 4: Ворота и коммит**
+- [x] **Шаг 4: Ворота и коммит**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.

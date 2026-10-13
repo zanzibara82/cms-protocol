@@ -46,7 +46,7 @@
 значение. Портал на PostgreSQL добавлял `mode: 'insensitive'` к каждому сравнению; в MySQL это свойство сопоставления,
 поэтому отдельное приведение регистра стало бы вторым местом, где живёт правило.
 
-- [ ] **Шаг 1: Написать подставку тестов раздела и падающий тест справочников**
+- [x] **Шаг 1: Написать подставку тестов раздела и падающий тест справочников**
 
 Создать `tests/db/NewsDbTestCase.php`:
 
@@ -552,7 +552,7 @@ final class CatalogTest extends NewsDbTestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter CatalogTest`
 Expected: FAIL — `Call to undefined function createCategory()`.
 
-- [ ] **Шаг 2: Написать справочники раздела**
+- [x] **Шаг 2: Написать справочники раздела**
 
 Создать `apps/news/lib/catalog.php`:
 
@@ -1076,18 +1076,18 @@ Expected: `No syntax errors detected`.
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpstan analyse --no-progress apps/news`
 Expected: ошибок нет.
 
-- [ ] **Шаг 3: Прогнать тест справочников**
+- [x] **Шаг 3: Прогнать тест справочников**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter CatalogTest`
 Expected: PASS — 25 проверок.
 
-- [ ] **Шаг 4: Прогнать все наборы**
+- [x] **Шаг 4: Прогнать все наборы**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора зелёные. `NewsSeedTest` проходит: `setUp()` теста справочников очищает таблицы
 раздела и возвращает рубрики закладки, а `tearDownAfterClass()` убирает таблицы и строку установки.
 
-- [ ] **Шаг 5: Ворота и фиксация**
+- [x] **Шаг 5: Ворота и фиксация**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.
@@ -1153,7 +1153,7 @@ git commit -m "Справочники раздела «Новости»: руб�
 прямому адресу открывается — скрыта рубрика, а не материал (§8.4). В карту сайта материал тоже попадает (§8.6
 говорит «видимые материалы … скрытые рубрики … не попадают», то есть из карты уходят страницы рубрик).
 
-- [ ] **Шаг 1: Написать падающие тесты чтения**
+- [x] **Шаг 1: Написать падающие тесты чтения**
 
 Создать `tests/unit/NewsFeedRulesTest.php`:
 
@@ -1552,7 +1552,7 @@ Expected: FAIL — `Call to undefined function pageCount()`.
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsFeedTest`
 Expected: FAIL — `Call to undefined function findFeed()`.
 
-- [ ] **Шаг 2: Написать чтение раздела**
+- [x] **Шаг 2: Написать чтение раздела**
 
 Создать `apps/news/lib/feed.php`:
 
@@ -2118,7 +2118,7 @@ Expected: ошибок нет. Если PHPStan не принимает форм
 `@return`, ключи карточки выписываются в литерал явно — форма, объявленная в комментарии, обязательна:
 её читают шаблоны задачи 16.
 
-- [ ] **Шаг 3: Прогнать тесты чтения**
+- [x] **Шаг 3: Прогнать тесты чтения**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsFeedRulesTest`
 Expected: PASS — 9 проверок.
@@ -2127,12 +2127,12 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — 13 проверок. Если падает проверка, правка делается в `feed.php`, а не в тесте: тест
 описывает правила из спецификации (§8.2, §8.4, §8.6), а не поведение кода.
 
-- [ ] **Шаг 4: Прогнать все наборы**
+- [x] **Шаг 4: Прогнать все наборы**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора зелёные. `NewsSeedTest` и `CatalogTest` не зависят от `feed.php`.
 
-- [ ] **Шаг 5: Ворота и фиксация**
+- [x] **Шаг 5: Ворота и фиксация**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.

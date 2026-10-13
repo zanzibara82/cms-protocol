@@ -106,7 +106,7 @@ newsTagsAction(array $params = []): void
   поэтому возврат всегда ведёт на адрес этого же экрана. Поля нет — нечего и очищать,
   открытого редиректа на этих двух адресах не возникает в принципе.
 
-- [ ] **Шаг 1: Написать падающий unit-тест правил экрана**
+- [x] **Шаг 1: Написать падающий unit-тест правил экрана**
 
 Создать `tests/unit/NewsCatalogRulesTest.php`:
 
@@ -250,7 +250,7 @@ Expected: FAIL — `Constant "NEWS_ADMIN_CATEGORIES_PATH" not found`.
 
 (тело метода заменяется одной строкой; остальной тест про каждую вкладку остаётся как есть).
 
-- [ ] **Шаг 2: Правила экрана**
+- [x] **Шаг 2: Правила экрана**
 
 Изменить `apps/news/lib/admin.php` — константу вкладок заменить целиком (`const` нельзя
 «дополнить», а unit-тест шага 1 и HTTP-тест задачи 17 читают один и тот же массив):
@@ -370,7 +370,7 @@ Expected: `No syntax errors detected`.
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter "NewsCatalogRulesTest|NewsAdminRulesTest"`
 Expected: PASS. `NewsAdminRulesTest` зелёный вместе с новым — он ждёт четыре вкладки с этого шага.
 
-- [ ] **Шаг 3: Написать падающий HTTP-тест двух экранов**
+- [x] **Шаг 3: Написать падающий HTTP-тест двух экранов**
 
 Создать `tests/http/NewsCatalogTest.php`:
 
@@ -800,7 +800,7 @@ Expected: FAIL — 404 на `/news/admin/categories`: адресов справ�
   тегов не создаёт, а без живой строки проверка удаления пустого тега была бы проверкой
   отсутствующего идентификатора.
 
-- [ ] **Шаг 4: Контроллеры, действия и маршруты**
+- [x] **Шаг 4: Контроллеры, действия и маршруты**
 
 Создать `apps/news/actions/catalog.php`:
 
@@ -945,7 +945,7 @@ addRoute('POST', '/news/admin/tags', 'newsTagsAction', ['app' => 'news', 'privat
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/actions/catalog.php && php -l apps/news/admin.php && php -l apps/news/routes.php"`
 Expected: `No syntax errors detected` трижды.
 
-- [ ] **Шаг 5: Шаблоны двух экранов и две панели сводки**
+- [x] **Шаг 5: Шаблоны двух экранов и две панели сводки**
 
 Создать `apps/news/templates/admin/categories.php`:
 
@@ -1182,7 +1182,7 @@ Expected: PASS — панели сводки и четыре вкладки ни
 не убирает проверок, а добавляет их — адрес после переворота обязан печататься. Никаких других
 правок в прежних тестах задача 19 не делает.
 
-- [ ] **Шаг 6: Прогнать ворота целиком**
+- [x] **Шаг 6: Прогнать ворота целиком**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — четыре набора.
@@ -1203,7 +1203,7 @@ Expected: зелёные `php -l`, PHPStan 6, PHP-CS-Fixer, PHPUnit.
   оттень `e((string) ($row['description'] ?? ''))`) и `array_column()` на списковом массиве —
   аргумент обязан быть `array<int|string, mixed>` после `@var`-аннотации `adminCategoryRows()`.
 
-- [ ] **Шаг 7: Проверить экраны руками и закоммитить**
+- [x] **Шаг 7: Проверить экраны руками и закоммитить**
 
 Run:
 ```bash
@@ -1320,7 +1320,7 @@ git commit -m "Новости: экраны справочников — руб�
    ключи уведомлений — вызовами правил на живой базе (второе направление: ни один текст словаря
    не должен быть недостижим).
 
-- [ ] **Шаг 1: Написать падающий тест адресов карты сайта**
+- [x] **Шаг 1: Написать падающий тест адресов карты сайта**
 
 Создать `tests/db/NewsSitemapTest.php`:
 
@@ -1507,7 +1507,7 @@ final class NewsSitemapTest extends NewsDbTestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSitemapTest`
 Expected: FAIL — `Call to undefined function newsSitemapUrls()`.
 
-- [ ] **Шаг 2: Адреса раздела в карте сайтов**
+- [x] **Шаг 2: Адреса раздела в карте сайтов**
 
 Изменить `apps/news/lib/seo.php` — дописать в конец файла:
 
@@ -1594,7 +1594,7 @@ Expected: PASS — файл `tests/http/SitemapTest.php` задачи 9 прав
 процесс `public/index.php`. Если `SitemapTest` всё-таки падает, значит фильтр добавляет адреса при
 неустановленном разделе: править надо проверку `isAppActive()`, а не тест.
 
-- [ ] **Шаг 3: Страж видимости**
+- [x] **Шаг 3: Страж видимости**
 
 Создать `tests/guard/NewsVisibilityTest.php`:
 
@@ -1789,7 +1789,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — 2 проверки. Если падает вторая, править надо список `ALLOWED`, а не тест:
 расхождение списка и исходников — это и есть тот случай, который страж сторожит.
 
-- [ ] **Шаг 4: Страж договора «действие ↔ обработчик ↔ подпись ↔ текст»**
+- [x] **Шаг 4: Страж договора «действие ↔ обработчик ↔ подпись ↔ текст»**
 
 Создать `tests/guard/AppActionContractTest.php`:
 
@@ -1908,7 +1908,7 @@ final class AppActionContractTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter AppActionContractTest`
 Expected: PASS — 4 проверки.
 
-- [ ] **Шаг 5: Покрытие текстов уведомлений на живой базе**
+- [x] **Шаг 5: Покрытие текстов уведомлений на живой базе**
 
 Создать `tests/db/NewsNoticeCoverageTest.php`:
 
@@ -2133,7 +2133,7 @@ Expected: PASS — 3 проверки. Порядок тестов здесь в
   вернула бы `published`, и ключ `created` остался бы недостижим — а это ровно тот текст, который
   человек видит после «Сохранить черновик».
 
-- [ ] **Шаг 6: HTTP-приёмка собранного стенда (§12.1–§12.5, §12.9)**
+- [x] **Шаг 6: HTTP-приёмка собранного стенда (§12.1–§12.5, §12.9)**
 
 Создать `tests/http/NewsAssemblyTest.php`:
 
@@ -2368,7 +2368,7 @@ Expected: PASS — 6 проверок.
   ведёт человека куда-то ещё — это расхождение с задачей 18, и оно обязано упасть здесь, а не в
   приёмке §12 на хостинге.
 
-- [ ] **Шаг 7: Ворота, руками и коммит**
+- [x] **Шаг 7: Ворота, руками и коммит**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — четыре набора; в `guard` добавились три новых файла.

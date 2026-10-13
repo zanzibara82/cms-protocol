@@ -26,7 +26,7 @@
   - константы `LOGIN_LIMIT_PER_EMAIL = 5`, `LOGIN_WINDOW_EMAIL = 15`, `LOGIN_LIMIT_PER_IP = 20`,
     `LOGIN_WINDOW_IP = 60`, `ROLES = ['admin' => 'admin', 'editor' => 'editor']`.
 
-- [ ] **Шаг 1: Пишем падающие тесты паролей**
+- [x] **Шаг 1: Пишем падающие тесты паролей**
 
 `tests/unit/PasswordTest.php`:
 
@@ -96,7 +96,7 @@ final class PasswordTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter PasswordTest`
 Expected: FAIL — `hashPassword()` не определена.
 
-- [ ] **Шаг 2: Реализуем пароли и право**
+- [x] **Шаг 2: Реализуем пароли и право**
 
 `core/auth.php`:
 
@@ -342,7 +342,7 @@ function revokeSessions(string $userId): void
 }
 ```
 
-- [ ] **Шаг 3: Тесты лимитов входа на базе**
+- [x] **Шаг 3: Тесты лимитов входа на базе**
 
 `tests/db/LoginLimitTest.php`:
 
@@ -533,7 +533,7 @@ final class SessionRevocationTest extends TestCase
 
 Второй тест — контрольный: он обязателен, иначе первый можно было бы пройти «разлогиниваем всех подряд».
 
-- [ ] **Шаг 4: Форма входа и маршруты**
+- [x] **Шаг 4: Форма входа и маршруты**
 
 `core/routes.php`:
 
@@ -681,7 +681,7 @@ require_once __DIR__ . '/routes.php';
 Порядок внутри этой задачи важен в одном месте: `routes.php` обязан идти после `auth.php`, `request.php` и
 `router.php`, потому что его top-level-блок регистрирует обработчики через `addRoute()`.
 
-- [ ] **Шаг 5: HTTP-тесты входа**
+- [x] **Шаг 5: HTTP-тесты входа**
 
 `tests/http/LoginTest.php`:
 
@@ -840,7 +840,7 @@ Expected: PASS. Красным этот набор был до шага 4: ма�
   (`str_starts_with($next, '/') && !str_starts_with($next, '//')`) пропускала `/\evil.com`: после входа такой
   адрес оказывался в `Location:` и уводил пользователя на чужой домен.
 
-- [ ] **Шаг 6: Страж чтения адреса клиента**
+- [x] **Шаг 6: Страж чтения адреса клиента**
 
 `tests/guard/ClientIpTest.php`:
 
@@ -898,7 +898,7 @@ final class ClientIpTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS.
 
-- [ ] **Шаг 7: Ворота и коммит**
+- [x] **Шаг 7: Ворота и коммит**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все наборы. Из `http/LoginTest.php` до задачи 8 не добавляется только тест «Выход гасит сессию» —
@@ -938,7 +938,7 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
   - словарь ядра `CORE_NOTICE_TEXT` с ключами `signed-out` и `site-installed` (последний нужен
     установщику из задачи 9, чтобы не печатать текст «приложение установлено»).
 
-- [ ] **Шаг 1: Пишем падающие тесты помощников формы**
+- [x] **Шаг 1: Пишем падающие тесты помощников формы**
 
 `tests/unit/FormValuesTest.php`:
 
@@ -1016,7 +1016,7 @@ final class FormValuesTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter FormValuesTest`
 Expected: FAIL — функции не определены.
 
-- [ ] **Шаг 2: Реализуем помощники форм и уведомления**
+- [x] **Шаг 2: Реализуем помощники форм и уведомления**
 
 `core/form.php`:
 
@@ -1161,7 +1161,7 @@ require_once __DIR__ . '/form.php';
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter FormValuesTest`
 Expected: PASS (8/8).
 
-- [ ] **Шаг 3: Тест отказа при чужом токене**
+- [x] **Шаг 3: Тест отказа при чужом токене**
 
 Отказ рисует экран 403 и завершает запрос через `exit`. Для PHP это конец запроса, а для PHPUnit — конец процесса:
 остальной набор просто не досчитался бы. Поэтому `respond()` в тестовом окружении бросает сигнал-исключение вместо
@@ -1233,7 +1233,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: FAIL — класса `Cms\Core\ResponseFinished` нет, а `respond()` обрывает процесс через `exit`, поэтому
 тест до проверок не доходит.
 
-- [ ] **Шаг 4: Отвечаем тесту — сигнал вместо выхода**
+- [x] **Шаг 4: Отвечаем тесту — сигнал вместо выхода**
 
 `core/ResponseFinished.php`:
 
@@ -1284,7 +1284,7 @@ define('PHPUNIT_RUNNING', true);
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: PASS.
 
-- [ ] **Шаг 5: Включаем CSRF во вход и выход**
+- [x] **Шаг 5: Включаем CSRF во вход и выход**
 
 Три правки, которые делают задача 6 рабочими с этим помощником. Страж из следующего шага краснеет без любой из
 них: он требует токен и в обработчике, и в форме.
@@ -1372,7 +1372,7 @@ function coreLogout(array $params = []): void
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter LoginTest`
 Expected: PASS — `token()` начинает получать настоящий токен, и проверка формы проходит.
 
-- [ ] **Шаг 6: Страж покрытия CSRF**
+- [x] **Шаг 6: Страж покрытия CSRF**
 
 `tests/guard/CsrfCoverageTest.php`:
 
@@ -1530,7 +1530,7 @@ final class CsrfCoverageTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard`
 Expected: PASS — `coreLoginSubmit()` и `coreLogout()` начинаются с `csrfCheck()`.
 
-- [ ] **Шаг 7: Ворота и коммит**
+- [x] **Шаг 7: Ворота и коммит**
 
 Run: `bash scripts/gate.sh`
 Expected: всё зелёное.

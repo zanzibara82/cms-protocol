@@ -92,7 +92,7 @@ appRoutesSnapshot(): array  // core/apps.php: снимок маршрутов р
 - Кнопки «Новый материал» на сводке и в списке нет до задачи 18: она ведёт на форму, которую эта
   задача не создаёт. Добавляет её задача 18 — одной строкой в каждый из двух шаблонов.
 
-- [ ] **Шаг 1: Написать падающий тест правил экрана**
+- [x] **Шаг 1: Написать падающий тест правил экрана**
 
 Создать `tests/unit/NewsAdminRulesTest.php`:
 
@@ -250,7 +250,7 @@ final class NewsAdminRulesTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsAdminRulesTest`
 Expected: FAIL — `Call to undefined function newsRowActions()`.
 
-- [ ] **Шаг 2: Написать правила экрана**
+- [x] **Шаг 2: Написать правила экрана**
 
 Создать `apps/news/lib/admin.php`:
 
@@ -413,7 +413,7 @@ Expected: `No syntax errors detected`.
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsAdminRulesTest`
 Expected: PASS — 10 проверок.
 
-- [ ] **Шаг 3: Починить повторную регистрацию маршрутов раздела**
+- [x] **Шаг 3: Починить повторную регистрацию маршрутов раздела**
 
 **Здесь всплывает ловушка, заложенная задачей 16.** Наборы тестов идут в одном процессе PHPUnit
 (порядок в `phpunit.xml`: unit → db → guard → http). `tests/db/AppsRegistryTest` вызывает
@@ -510,7 +510,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — `testМаршрутыПриложенийРегистрируютсяСМеткойПриложения` работает по-прежнему
 (он вызывает `registerAppRoutes()` после `routesReset()`, то есть как раз ветку снимка).
 
-- [ ] **Шаг 4: Проверить подключение правил раздела и дочинить склейку адреса**
+- [x] **Шаг 4: Проверить подключение правил раздела и дочинить склейку адреса**
 
 Здесь ловушка того же рода, что и в шаге 3, и она дороже: без неё набор `http` падает на первом же
 запросе в раздел.
@@ -838,7 +838,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — с подключением `boot.php` раздел начинает отвечать в настоящем процессе; до этого
 теста проверка шла вслепую, потому что `unit` и `db` подключают файл сами.
 
-- [ ] **Шаг 5: Написать падающий HTTP-тест двух экранов и кнопок строки**
+- [x] **Шаг 5: Написать падающий HTTP-тест двух экранов и кнопок строки**
 
 Создать `tests/http/NewsAdminTest.php`:
 
@@ -1373,7 +1373,7 @@ Expected: FAIL — `/news/admin` отвечает 404: маршрутов адм
   ошибки в базе нет, он лежит в сессионном flash, и страница без перехода по адресу редиректа показать
   его не обязана. В адресе — только ключ `migration-failed`.
 
-- [ ] **Шаг 6: Контроллеры, действие строки и маршруты**
+- [x] **Шаг 6: Контроллеры, действие строки и маршруты**
 
 Создать `apps/news/admin.php` — контроллеры двух экранов:
 
@@ -1499,7 +1499,7 @@ addRoute('POST', '/news/admin/items', 'newsItemsAction', ['app' => 'news', 'priv
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/admin.php && php -l apps/news/actions/items.php && php -l apps/news/routes.php"`
 Expected: `No syntax errors detected` трижды.
 
-- [ ] **Шаг 7: Шаблоны двух экранов**
+- [x] **Шаг 7: Шаблоны двух экранов**
 
 Оба шаблона собирают строки разметки в PHP и печатают один раз через `adminShell()` — так же, как
 экран ядра `core/templates/admin/apps.php`. Ни один экран не читает базу сам: всё посчитано в
@@ -1763,7 +1763,7 @@ Expected: PASS — 24 проверки.
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/templates/admin/summary.php && php -l apps/news/templates/admin/items.php"`
 Expected: `No syntax errors detected` дважды.
 
-- [ ] **Шаг 8: Прогнать ворота целиком**
+- [x] **Шаг 8: Прогнать ворота целиком**
 
 Run: `bash scripts/gate.sh`
 Expected: `php -l`, PHPStan (уровень 6, без ошибок), PHP-CS-Fixer (без правок) и все четыре набора —
@@ -1794,7 +1794,7 @@ $href = adminItemsHref([
 ]);
 ```
 
-- [ ] **Шаг 9: Проверить экраны руками и закоммитить**
+- [x] **Шаг 9: Проверить экраны руками и закоммитить**
 
 Run:
 ```bash
@@ -1985,7 +1985,7 @@ newsItemSaveAction(array $params = []): void
   которые люди загрузили на сервере. Исключение добавляется в `scripts/deploy.sh` задачей 21, и она же
   ставит этот пункт в чек-лист хостинга §11 — здесь фиксируем это как долг, а не как «сделано».
 
-- [ ] **Шаг 1: Написать падающий unit-тест правил формы и приёмки картинки**
+- [x] **Шаг 1: Написать падающий unit-тест правил формы и приёмки картинки**
 
 Создать `tests/unit/NewsFormRulesTest.php`:
 
@@ -2173,7 +2173,7 @@ final class NewsFormRulesTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsFormRulesTest`
 Expected: FAIL — `Call to undefined function newsFormButtons()`.
 
-- [ ] **Шаг 2: Правила экрана формы и приём файла**
+- [x] **Шаг 2: Правила экрана формы и приём файла**
 
 Создать `apps/news/lib/form.php`:
 
@@ -2410,7 +2410,7 @@ Expected: `No syntax errors detected` дважды.
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsFormRulesTest`
 Expected: PASS — 14 проверок.
 
-- [ ] **Шаг 3: Написать падающий HTTP-тест формы**
+- [x] **Шаг 3: Написать падающий HTTP-тест формы**
 
 Создать `tests/http/NewsItemFormTest.php`:
 
@@ -2952,7 +2952,7 @@ Expected: FAIL — `/news/admin/items/new` отвечает 404: маршрут�
 - `tearDownAfterClass` удалит все картинки из каталога загрузок. Так и задумано: набор `http` —
   единственный, кто туда пишет, а `.gitkeep` расширением не является и остаётся.
 
-- [ ] **Шаг 4: Контроллеры экрана, POST-действие и маршруты**
+- [x] **Шаг 4: Контроллеры экрана, POST-действие и маршруты**
 
 Дополнить `apps/news/admin.php` (после `newsAdminItems()`) тремя функциями:
 
@@ -3154,7 +3154,7 @@ addRoute('POST', '/news/admin/items/{id}', 'newsItemSaveAction', ['app' => 'news
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/admin.php && php -l apps/news/actions/item.php && php -l apps/news/routes.php"`
 Expected: `No syntax errors detected` трижды.
 
-- [ ] **Шаг 5: Шаблон формы**
+- [x] **Шаг 5: Шаблон формы**
 
 Создать `apps/news/templates/admin/item-form.php`. Стиль тот же, что у двух экранов задачи 17: строки
 разметки собираются в PHP, печатается один раз через `adminShell()`, и весь файл живёт в `<?php`-режиме
@@ -3377,7 +3377,7 @@ $notice = $notice === '' ? null : $notice;
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/templates/admin/item-form.php"`
 Expected: `No syntax errors detected`.
 
-- [ ] **Шаг 6: Кнопка «Новый материал» и ссылка «Править»**
+- [x] **Шаг 6: Кнопка «Новый материал» и ссылка «Править»**
 
 Изменить `apps/news/templates/admin/summary.php` — в строку со ссылками после панели добавить создание:
 
@@ -3409,7 +3409,7 @@ Expected: `No syntax errors detected`.
 а адрес правки появится вместе с формой. Он появился: `$item['editHref']` строился `adminItemRow()`
 с задачи 13 и до этого не использовался нигде.
 
-- [ ] **Шаг 7: Каталог загрузок и его защита**
+- [x] **Шаг 7: Каталог загрузок и его защита**
 
 Создать `public/uploads/images/.gitkeep` и `public/uploads/files/.gitkeep` — пустые файлы: каталоги
 загрузок разведены по типу содержимого, и оба обязаны доехать до сервера каркасом.
@@ -3522,7 +3522,7 @@ Expected: PASS — четыре метода (три корневых + ката
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php php -r 'require "config.php"; require "core/bootstrap.php"; echo is_dir("public/uploads/images") && is_dir("public/uploads/files") ? "есть" : "нет", PHP_EOL;'`
 Expected: `есть` (после `git add` каталогов с `.gitkeep`).
 
-- [ ] **Шаг 8: Разрешить `\CURLFile` в транспортном помощнике**
+- [x] **Шаг 8: Разрешить `\CURLFile` в транспортном помощнике**
 
 Изменить аннотацию `Kernel::post()` (`tests/http/Kernel.php:1964`):
 
@@ -3542,7 +3542,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — 24 проверки. Одна из них утверждает, что в списке **нет** ссылки на справочники
 задачи 19; кнопки этой задачи её не ломают.
 
-- [ ] **Шаг 9: Прогнать ворота целиком**
+- [x] **Шаг 9: Прогнать ворота целиком**
 
 Run: `bash scripts/gate.sh`
 Expected: `php -l`, PHPStan (уровень 6, без ошибок), PHP-CS-Fixer (без правок) и все четыре набора —
@@ -3563,7 +3563,7 @@ Expected: `php -l`, PHPStan (уровень 6, без ошибок), PHP-CS-Fixe
   обязана оставаться `isset()`, а не присваиванием `$errors = $parsed['errors'] ?? []`: через переменную
   объединение форм не сужается.
 
-- [ ] **Шаг 10: Проверить экран руками и закоммитить**
+- [x] **Шаг 10: Проверить экран руками и закоммитить**
 
 Run:
 ```bash

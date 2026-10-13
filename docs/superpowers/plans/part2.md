@@ -18,7 +18,7 @@
   - `Cms\Tests\TestDb::reset()` — пересоздаёт схему **только** в `cms_test`;
     `Cms\Tests\TestDb::seedUser(string $email, string $password, string $role): string`.
 
-- [ ] **Шаг 1: Пишем падающий тест экранирования поиска**
+- [x] **Шаг 1: Пишем падающий тест экранирования поиска**
 
 `tests/unit/EscapeLikeTest.php`:
 
@@ -66,7 +66,7 @@ final class EscapeLikeTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter EscapeLikeTest`
 Expected: FAIL — `escapeLike()` не определена.
 
-- [ ] **Шаг 2: Реализуем слой данных**
+- [x] **Шаг 2: Реализуем слой данных**
 
 `core/db.php`:
 
@@ -215,7 +215,7 @@ function splitSql(string $sql): array
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter EscapeLikeTest`
 Expected: PASS (4/4).
 
-- [ ] **Шаг 3: Пишем базовую схему ядра**
+- [x] **Шаг 3: Пишем базовую схему ядра**
 
 `sql/0001_core_baseline.sql`:
 
@@ -278,7 +278,7 @@ CREATE TABLE IF NOT EXISTS tbl_app_migration (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
 
-- [ ] **Шаг 4: Помощник тестовой базы**
+- [x] **Шаг 4: Помощник тестовой базы**
 
 `tests/TestDb.php`:
 
@@ -394,7 +394,7 @@ require dirname(__DIR__) . '/tests/TestDb.php';
 `require core/auth.php` не добавляйте — `core/auth.php` появится в задаче 6, а `require_once` отсутствующего
 файла это фатальная ошибка, и весь набор тестов падёт ещё до первого запуска PHPUnit.
 
-- [ ] **Шаг 5: Пишем падающие тесты слоя данных**
+- [x] **Шаг 5: Пишем падающие тесты слоя данных**
 
 `tests/db/DbLayerTest.php`:
 
@@ -490,7 +490,7 @@ final class DbLayerTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: FAIL — таблицы не созданы (`Base table or view not found`).
 
-- [ ] **Шаг 6: Доводим до зелёного и проверяем схему**
+- [x] **Шаг 6: Доводим до зелёного и проверяем схему**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: PASS (7/7) — `TestDb::reset()` создаёт таблицы из `sql/`.
@@ -566,7 +566,7 @@ final class CoreSchemaTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
 Expected: PASS.
 
-- [ ] **Шаг 7: Страж SQL**
+- [x] **Шаг 7: Страж SQL**
 
 `tests/guard/SqlSafetyTest.php`:
 
@@ -696,7 +696,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS. Если `tests/TestDb.php` попадает под страж — он и не должен: страж сканирует `core/ admin/ theme/
 apps/ public/`, а `DROP TABLE` живёт в `tests/`.
 
-- [ ] **Шаг 8: Ворота и коммит**
+- [x] **Шаг 8: Ворота и коммит**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.
@@ -748,7 +748,7 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
     в `$head` он оказывается после вывода хука `page_head`;
   - тема отдаёт `theme/layout.php` с переменными `$title`, `$description`, `$content`, `$head`, `$noindex`.
 
-- [ ] **Шаг 1: Пишем падающие тесты хуков**
+- [x] **Шаг 1: Пишем падающие тесты хуков**
 
 `tests/unit/HooksTest.php`:
 
@@ -840,7 +840,7 @@ final class HooksTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter HooksTest`
 Expected: FAIL — `addAction()` не определена.
 
-- [ ] **Шаг 2: Реализуем хуки**
+- [x] **Шаг 2: Реализуем хуки**
 
 `core/hooks.php`:
 
@@ -925,7 +925,7 @@ function hooksReset(): void
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter HooksTest`
 Expected: PASS (7/7).
 
-- [ ] **Шаг 3: Пишем падающие тесты шаблонов**
+- [x] **Шаг 3: Пишем падающие тесты шаблонов**
 
 `tests/unit/TemplateTest.php`:
 
@@ -1056,7 +1056,7 @@ echo '<section></section>';
 `resolveTemplate()` ищет тему в двух корнях: обычный `theme/` и каталог из `EXTRA_THEME_DIR` (его подставляют
 тесты, чтобы проверить цепочку, не создавая файлов в настоящей теме).
 
-- [ ] **Шаг 4: Реализуем шаблоны**
+- [x] **Шаг 4: Реализуем шаблоны**
 
 `core/template.php`:
 
@@ -1227,7 +1227,7 @@ require_once __DIR__ . '/template.php';
 После правки `securityHeaders()` и `render()` доступны коду, который подключает `core/bootstrap.php`, а не
 только тестам с их собственными `require_once`.
 
-- [ ] **Шаг 5: Тема — layout, шапка, футер, кот, 404, главная**
+- [x] **Шаг 5: Тема — layout, шапка, футер, кот, 404, главная**
 
 Сначала — побайтовый перенос картинок. Копировать нужно на хосте: контейнер `php` видит только каталог
 `cms/`, путь `../english-portal` из него недоступен. Проверка совпадения — по хешу, а не по размеру:
@@ -1425,7 +1425,7 @@ declare(strict_types=1);
 </section>
 ```
 
-- [ ] **Шаг 6: Стили — Tailwind собирается локально**
+- [x] **Шаг 6: Стили — Tailwind собирается локально**
 
 `package.json`:
 
@@ -1485,7 +1485,7 @@ echo 'Стили собраны в public/assets/app.css — файл лежит
 Run: `bash scripts/css`
 Expected: появился `public/assets/app.css`, `git status` показывает его как новый файл (он обязан быть в репозитории).
 
-- [ ] **Шаг 7: Страж вывода**
+- [x] **Шаг 7: Страж вывода**
 
 `tests/guard/OutputEscapingTest.php`:
 
@@ -1609,7 +1609,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS. Если страж указывает на `<?= $head ?>` — пометьте строку комментарием `/* @safe html */`
 (это разметка, собранная хуками, а не данные пользователя).
 
-- [ ] **Шаг 8: Ворота и коммит**
+- [x] **Шаг 8: Ворота и коммит**
 
 Run: `bash scripts/gate.sh`
 Expected: всё зелёное; PHPStan не ругается на `extract()` в `partial()` (для него добавьте над строкой
@@ -1650,7 +1650,7 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
     `::post(string $path, array $fields, array $options = [])` — каждый возвращает
     `array{status: int, body: string, headers: array<string, string>, redirects: list<string>}`.
 
-- [ ] **Шаг 1: Пишем падающие тесты маршрутизатора**
+- [x] **Шаг 1: Пишем падающие тесты маршрутизатора**
 
 `tests/unit/RouterTest.php`:
 
@@ -1763,7 +1763,7 @@ final class RouterTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter RouterTest`
 Expected: FAIL — `addRoute()` не определена.
 
-- [ ] **Шаг 2: Реализуем маршрутизатор**
+- [x] **Шаг 2: Реализуем маршрутизатор**
 
 `core/router.php`:
 
@@ -1915,7 +1915,7 @@ function dispatch(): void
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter RouterTest`
 Expected: PASS (9/9).
 
-- [ ] **Шаг 3: Запрос и ответ**
+- [x] **Шаг 3: Запрос и ответ**
 
 `core/request.php`:
 
@@ -2130,7 +2130,7 @@ dispatch();
 Run: `curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/` и `curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/нет-такой`
 Expected: `200` и `404`.
 
-- [ ] **Шаг 4: Помощник HTTP-тестов**
+- [x] **Шаг 4: Помощник HTTP-тестов**
 
 `tests/http/Kernel.php`:
 
@@ -2450,7 +2450,7 @@ Expected: PASS. Проверка обязана оставаться точно�
 Run: `bash scripts/gate.sh`
 Expected: всё зелёное.
 
-- [ ] **Шаг 5: Коммит**
+- [x] **Шаг 5: Коммит**
 
 ```bash
 git add core/ public/ theme/ tests/

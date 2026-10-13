@@ -301,7 +301,7 @@ cms/
   переменные окружения `CMS_DB_HOST`, `CMS_DB_PORT`, `CMS_DB_NAME`, `CMS_DB_USER`, `CMS_DB_PASS`, `CMS_SITE_URL`,
   `CMS_TABLE_PREFIX`, `CMS_EXTRA_APPS_DIR`.
 
-- [ ] **Шаг 1: Образ PHP для разработки**
+- [x] **Шаг 1: Образ PHP для разработки**
 
 `docker/php-dev.Dockerfile`:
 
@@ -325,7 +325,7 @@ WORKDIR /app
 `procps` ставится отдельно и только в dev-образ: `pkill` нужен помощнику HTTP-тестов (задача 5), чтобы гасить
 `php -S` на порту 8123; в боевом образе его нет.
 
-- [ ] **Шаг 2: Состав окружения**
+- [x] **Шаг 2: Состав окружения**
 
 `docker-compose.dev.yml`:
 
@@ -428,7 +428,7 @@ CREATE DATABASE IF NOT EXISTS cms_test CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
 «как есть», а `/news/rubrika` просто отдаётся как 404 от сервера. С маршрутизатором весь запрос идёт в ядро, а
 статику он же пропускает правилом `PHP_SAPI === 'cli-server'` (задача 5). На Apache то же делает `public/.htaccess`.
 
-- [ ] **Шаг 3: Инструменты разработчика**
+- [x] **Шаг 3: Инструменты разработчика**
 
 `composer.json`:
 
@@ -552,7 +552,7 @@ return (new PhpCsFixer\Config())
     ->setFinder($finder);
 ```
 
-- [ ] **Шаг 4: Образец настроек и первая точка входа**
+- [x] **Шаг 4: Образец настроек и первая точка входа**
 
 `config.sample.php`:
 
@@ -690,7 +690,7 @@ touch public/uploads/.gitkeep core/storage/.gitkeep
 `public/assets/` появляется здесь, а не в задаче 4: PHPStan и `.gitignore` ссылаются на
 `public/assets/*`, и без каталога первый же прогон ворот упал бы на «path not found», а не на коде.
 
-- [ ] **Шаг 5: Ворота качества и сброс тестовой базы**
+- [x] **Шаг 5: Ворота качества и сброс тестовой базы**
 
 `scripts/gate.sh`:
 
@@ -812,7 +812,7 @@ echo 'cms_test пересоздана.'
 
 `DROP DATABASE` здесь — не миграция: страж проверяет каталоги `sql/`, а не скрипты разработки.
 
-- [ ] **Шаг 6: Пишем падающий тест**
+- [x] **Шаг 6: Пишем падающий тест**
 
 `tests/bootstrap.php`:
 
@@ -869,7 +869,7 @@ final class SmokeTest extends TestCase
 }
 ```
 
-- [ ] **Шаг 7: Красный прогон — тесты падают по причине**
+- [x] **Шаг 7: Красный прогон — тесты падают по причине**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit`
 Expected: FAIL — `Could not open input file: vendor/bin/phpunit`. Зависимостей ещё нет, и это правильное
@@ -879,7 +879,7 @@ Expected: FAIL — `Could not open input file: vendor/bin/phpunit`. Зависи
 Затем: `docker compose -f docker-compose.dev.yml run --rm -T php composer install --no-interaction`
 Эта же команда собирает образ `php-dev` (`build:` в compose), поэтому после неё расширения уже на месте.
 
-- [ ] **Шаг 8: Собираем окружение и доводим тесты до зелёного**
+- [x] **Шаг 8: Собираем окружение и доводим тесты до зелёного**
 
 Run: `docker compose -f docker-compose.dev.yml up -d --build`
 Затем: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit`
@@ -888,12 +888,12 @@ Expected: 3/3 passing, вывод без предупреждений. Если 
 Проверка базы: `docker compose -f docker-compose.dev.yml exec -T db mysql -uroot -e "SHOW DATABASES;"` — в списке
 `cms_dev` и `cms_test`.
 
-- [ ] **Шаг 9: Проверяем заглушку через HTTP**
+- [x] **Шаг 9: Проверяем заглушку через HTTP**
 
 Run: `curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/`
 Expected: `200`.
 
-- [ ] **Шаг 10: Коммит**
+- [x] **Шаг 10: Коммит**
 
 ```bash
 git add docker-compose.dev.yml docker/ composer.json composer.lock phpunit.xml phpstan.neon \
@@ -926,7 +926,7 @@ GIT_COMMITTER_NAME='Алексей' GIT_COMMITTER_EMAIL='zanzibaradevil@gmail.co
   - `plural(int $count, array $forms): string`, `excerpt(string $text, int $limit = 160): string`;
   - `logInfo(string $event, array $context = []): void`, `logWarn(...)`, `logError(...)`.
 
-- [ ] **Шаг 1: Пишем падающие тесты идентификатора**
+- [x] **Шаг 1: Пишем падающие тесты идентификатора**
 
 `tests/unit/IdTest.php`:
 
@@ -980,7 +980,7 @@ final class IdTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter IdTest`
 Expected: FAIL — `Call to undefined function newId()`.
 
-- [ ] **Шаг 2: Реализуем генератор**
+- [x] **Шаг 2: Реализуем генератор**
 
 `core/id.php`:
 
@@ -1026,7 +1026,7 @@ function encodeRandom(string $bytes): string
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter IdTest`
 Expected: PASS (4/4).
 
-- [ ] **Шаг 3: Пишем падающие тесты дат**
+- [x] **Шаг 3: Пишем падающие тесты дат**
 
 `tests/unit/DateTest.php`:
 
@@ -1104,7 +1104,7 @@ final class DateTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --filter DateTest`
 Expected: FAIL — функции не определены.
 
-- [ ] **Шаг 4: Реализуем даты**
+- [x] **Шаг 4: Реализуем даты**
 
 `core/date.php`:
 
@@ -1207,7 +1207,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS (8/8). Если `2026-13-45T99:99` проходит, сравнение формата в `parseFormDateTime` не сработало —
 проверьте, что сравниваете именно первые 16 символов.
 
-- [ ] **Шаг 5: Текст, вывод, журнал и загрузка настроек**
+- [x] **Шаг 5: Текст, вывод, журнал и загрузка настроек**
 
 `core/text.php` — порт `english-portal/src/core/text.ts` (только текстовые функции):
 
@@ -1395,7 +1395,7 @@ function fail(string $message): never
 Настройки читаются один раз за запрос и кешируются в static-переменной; тесты выставляют `CMS_CONFIG_FILE` и
 `CMS_DB_NAME` в `tests/bootstrap.php` — до первого вызова `config()`, поэтому сброс кеша не нужен.
 
-- [ ] **Шаг 6: Тесты настроек, текста и загрузки**
+- [x] **Шаг 6: Тесты настроек, текста и загрузки**
 
 `tests/unit/ConfigLoaderTest.php`:
 
@@ -1484,7 +1484,7 @@ final class TextTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit`
 Expected: PASS — все наборы зелёные.
 
-- [ ] **Шаг 7: Страж дат**
+- [x] **Шаг 7: Страж дат**
 
 `tests/guard/DateUsageTest.php`:
 
@@ -1589,7 +1589,7 @@ function logWrite(string $level, string $event, array $context = []): void
 }
 ```
 
-- [ ] **Шаг 8: Bootstrap и новая точка входа**
+- [x] **Шаг 8: Bootstrap и новая точка входа**
 
 `core/bootstrap.php`:
 
@@ -1709,7 +1709,7 @@ securityHeaders();
 echo 'Ядро загружено. Маршрутизатор появится в задаче 5.';
 ```
 
-- [ ] **Шаг 9: Тест загрузки ядра и коммит**
+- [x] **Шаг 9: Тест загрузки ядра и коммит**
 
 Добавьте в `tests/unit/ConfigLoaderTest.php`:
 

@@ -101,7 +101,7 @@ body, tags, status, publishedAt, pinned, seoTitle, seoDescription, ogImage, noin
 - `updated_at` пишется явно в каждом UPDATE: в схеме PostgreSQL колонку обновляла Prisma (`@updatedAt`),
   в MySQL такого механизма нет, а на этой колонке держится порядок списка.
 
-- [ ] **Шаг 1: Написать падающий тест правил**
+- [x] **Шаг 1: Написать падающий тест правил**
 
 Создать `tests/unit/NewsPublishRulesTest.php`:
 
@@ -391,7 +391,7 @@ final class NewsPublishRulesTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsPublishRulesTest`
 Expected: FAIL — `Call to undefined function parseAdminFilters()`.
 
-- [ ] **Шаг 2: Написать `apps/news/lib/items.php`**
+- [x] **Шаг 2: Написать `apps/news/lib/items.php`**
 
 ```php
 <?php
@@ -1322,7 +1322,7 @@ Expected: ошибок нет. Если PHPStan не принимает форм
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsPublishRulesTest`
 Expected: PASS — 15 проверок.
 
-- [ ] **Шаг 3: Написать падающий тест на базе**
+- [x] **Шаг 3: Написать падающий тест на базе**
 
 Создать `tests/db/NewsItemsTest.php`:
 
@@ -1852,7 +1852,7 @@ final class NewsItemsTest extends NewsDbTestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsItemsTest`
 Expected: FAIL — `Call to undefined function adminItemPage()`.
 
-- [ ] **Шаг 4: Прогнать тесты правил редактора**
+- [x] **Шаг 4: Прогнать тесты правил редактора**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsItemsTest`
 Expected: PASS — 24 проверки. Если падает проверка, правка делается в `items.php`, а не в тесте:
@@ -1862,7 +1862,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Expected: PASS — все четыре набора зелёные. `CatalogTest` и `NewsFeedTest` не зависят от `items.php`;
 `NewsItemsTest` читает `findFeed()` из задачи 14, поэтому прогоняет и её запросы.
 
-- [ ] **Шаг 5: Ворота и фиксация**
+- [x] **Шаг 5: Ворота и фиксация**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки.
@@ -1939,7 +1939,7 @@ git commit -m "Правила редактора раздела «Новости
 - **`?cat=` у ленты остаётся рабочим** (как в портале), но каноник ведёт на `/news/c/…`: одна лента под двумя
   адресами — два одинаковых списка в индексе.
 
-- [ ] **Шаг 1: Написать падающий тест метаданных**
+- [x] **Шаг 1: Написать падающий тест метаданных**
 
 Создать `tests/unit/NewsSeoTest.php`:
 
@@ -2160,7 +2160,7 @@ final class NewsSeoTest extends TestCase
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
 Expected: FAIL — `Call to undefined function newsTitle()`.
 
-- [ ] **Шаг 2: Реализуем метаданные раздела**
+- [x] **Шаг 2: Реализуем метаданные раздела**
 
 `apps/news/lib/seo.php`:
 
@@ -2486,7 +2486,7 @@ require_once __DIR__ . '/seo.php';
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
 Expected: PASS — 13 проверок.
 
-- [ ] **Шаг 3: Рисуем фирменное превью**
+- [x] **Шаг 3: Рисуем фирменное превью**
 
 `scripts/make-og-default.php`:
 
@@ -2544,7 +2544,7 @@ Expected: `1200 630 3 …` (ширина, высота, тип PNG).
 
 Файл коммитится вместе с задачей — на хостинге его никто не перерисовывает.
 
-- [ ] **Шаг 4: Написать падающий тест публичных страниц**
+- [x] **Шаг 4: Написать падающий тест публичных страниц**
 
 Создать `tests/http/NewsPublicTest.php`:
 
@@ -2852,7 +2852,7 @@ Expected: FAIL — `/news` отвечает 404: маршрутов раздел
   `$message`. Поэтому все три контроллера вызывают `notFound()` **без аргумента**: свой текст у 404 снова сделает
   черновик узнаваемым.
 
-- [ ] **Шаг 5: Маршруты и контроллеры публичных страниц**
+- [x] **Шаг 5: Маршруты и контроллеры публичных страниц**
 
 Создать `apps/news/routes.php`:
 
@@ -3077,7 +3077,7 @@ registerAppRoutes();
 появляется». Проверкой в этой задаче служит тест набора `http`, который доходит до ленты по `/news`
 без ручного вызова `registerAppRoutes()`.
 
-- [ ] **Шаг 6: Шаблоны страниц**
+- [x] **Шаг 6: Шаблоны страниц**
 
 Заменить `apps/news/templates/feed.php` (заглушку задачи 4) целиком:
 
@@ -3427,7 +3427,7 @@ declare(strict_types=1);
 - `partials/body.php` печатает текст через `richText()`: сырого HTML в материале нет, а `**выделение**`
   превращается в `<strong>` внутри уже экранированного текста.
 
-- [ ] **Шаг 7: Прогнать тесты**
+- [x] **Шаг 7: Прогнать тесты**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsSeoTest`
 Expected: PASS — 13 проверок.
@@ -3443,13 +3443,13 @@ Expected: PASS. Здесь ловятся три вещи: `RouteHandlersTest` �
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit`
 Expected: PASS — все четыре набора. Набор `db` зелёный без изменений: эта задача не трогает слой данных.
 
-- [ ] **Шаг 8: Ворота**
+- [x] **Шаг 8: Ворота**
 
 Run: `bash scripts/gate.sh`
 Expected: зелёные все четыре проверки. Если PHP-CS-Fixer показывает правку в `apps/news/lib/seo.php` —
 это перенос длинной строки `json_encode(...)`; принять её и повторить ворота.
 
-- [ ] **Шаг 9: Коммит**
+- [x] **Шаг 9: Коммит**
 
 ```bash
 git add apps/news/routes.php apps/news/lib/seo.php apps/news/lib/boot.php apps/news/templates/ \
