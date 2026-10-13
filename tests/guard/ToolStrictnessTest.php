@@ -35,7 +35,11 @@ use PHPUnit\Framework\TestCase;
 // взаимоисключающими — маски собираются из обоих видов сразу; ключ подавления ошибок виден и в
 // поточной форме (после `{`, `[` или `- `), а разбиение поточного списка учитывает кавычки и
 // фигурные скобки, поэтому искалеченная маска не становится молчаливой зеленью; форма записи,
-// которую разбор не понял, краснит вместо тишины.
+// которую разбор не понял, краснит вместо тишины. Пункт Ф2 того же фикс-раунда: подключения
+// обходятся в ширину (цепочка `phpstan.neon` → `a.neon` → `b.neon` с подавлением в `b.neon`
+// читается целиком, а повторное попадание файла краснится циклом), уровень строгости сверяется по
+// всем собранным файлам, а путь подключения разрешается относительно каталога включающего файла и
+// очищается от хвостового комментария.
 final class ToolStrictnessTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
@@ -124,6 +128,16 @@ final class ToolStrictnessTest extends TestCase
     {
         $neon = $this->read('phpstan.neon');
 
+        // Пункт Ф2: уровень сверяется по всем собранным файлам, поэтому список подключений обязан
+        // быть разобранным до первой проверки уровня.
+        $configs = $this->phpstanCheckedConfigs($neon);
+
+        self::assertSame(
+            [],
+            $configs['problems'],
+            'Подключение `includes` в `phpstan.neon` разобрано с проблемой: ' . implode('; ', $configs['problems']) . ': такой конфигурации страж не доверяет'
+        );
+
         $matched = [];
         if (preg_match('/^\s*level:\s*(\d+)/m', $neon, $matched) !== 1) {
             self::fail('В `phpstan.neon` не найдена строка `level` — уровень анализа обязан быть задан явно, молчаливое значение по умолчанию недопустимо');
@@ -134,6 +148,34 @@ final class ToolStrictnessTest extends TestCase
             self::PHPSTAN_MIN_LEVEL,
             $level,
             'В `phpstan.neon` уровень анализа опущен до ' . $level . ': требуется не ниже ' . self::PHPSTAN_MIN_LEVEL
+        );
+
+        // Пункт Ф2: `includes: [ a.neon ]` с `level: 4` внутри `a.neon` понижал строгость всего
+        // анализа, а проверка читала только `phpstan.neon` — то есть понижение уровня через
+        // подключаемый файл оставалось зелёным. Отсутствие уровня в подключаемом файле не падение:
+        // он наследуется от основного, и требовать его значило бы краснить легальную запись.
+        $weakened = [];
+        foreach ($configs['files'] as $source) {
+            if ($source === 'phpstan.neon') {
+                continue;
+            }
+
+            $found = [];
+            if (preg_match('/^\s*level:\s*(\d+)/m', $this->read($source), $found) !== 1) {
+                continue;
+            }
+
+            $inherited = (int) $found[1];
+            if ($inherited < self::PHPSTAN_MIN_LEVEL) {
+                $weakened[] = 'в файле `' . $source . '` уровень анализа опущен до ' . $inherited
+                    . ': требуется не ниже ' . self::PHPSTAN_MIN_LEVEL;
+            }
+        }
+
+        self::assertSame(
+            [],
+            $weakened,
+            'Уровень анализа понижен в подключаемом файле: ' . implode('; ', $weakened) . ': анализатор применяет его к тому же коду, что и уровень основного файла'
         );
     }
 
@@ -652,29 +694,73 @@ final class ToolStrictnessTest extends TestCase
     /**
      * Подключённые файлы из ключа `includes`: значения собираются разборами, усиленными в M3-1, —
      * блоком (ключ отдельной строкой + список `- путь`) и строчной формой `includes: [ a.neon, b.neon ]`,
-     * оба варианта с очисткой значений от кавычек. (Пункт M3-2.)
+     * оба варианта с очисткой значений от кавычек. (Пункт M3-2.) Пункт Ф2: формы собираются вместе,
+     * как в `excludePaths`, а признак «ключ в файле объявлен» возвращается отдельно — пустой при
+     * объявленном ключе список больше не молчит.
      *
-     * @return list<string>
+     * @return array{paths: list<string>, malformed: list<string>, declared: bool}
      */
     private function phpstanIncludes(string $neon): array
     {
+        $paths = [];
+        $malformed = [];
+        $declared = false;
+
         $block = $this->keyBlock($neon, 'includes');
         if ($block !== null) {
-            return $this->listItemsFrom($neon, $block['indent'], $block['line']);
+            $declared = true;
+            $paths = array_merge($paths, $this->listItemsFrom($neon, $block['indent'], $block['line']));
         }
 
         $inline = $this->inlineFlowList($neon, 'includes');
+        if ($inline !== null) {
+            $declared = true;
+            $paths = array_merge($paths, $inline['values']);
+            $malformed = array_merge($malformed, $inline['malformed']);
+        }
 
-        return $inline === null ? [] : $inline['values'];
+        return ['paths' => $paths, 'malformed' => $malformed, 'declared' => $declared];
+    }
+
+    /**
+     * Путь подключаемого файла (пункт Ф2): у значения срезается хвостовой комментарий после символа
+     * `#` — в `neon` это комментарий, и без срезания легальная запись `- config.neon # пояснение`
+     * давала бы ложную красноту «файл не найден». Относительный путь разрешается относительно
+     * каталога включающего файла, а не корня проекта: подключение второго уровня лежит рядом со
+     * своим включающим файлом, и прежняя база его просто не находила. Для самого `phpstan.neon`
+     * база — корень проекта, как раньше. Абсолютный путь и путь с `..` возвращаются без изменений:
+     * их классифицирует вызывающая проверка, и сверка остаётся внутри дерева.
+     */
+    private function includedConfigPath(string $includingFile, string $value): string
+    {
+        $path = trim($value);
+        $comment = strpos($path, '#');
+        if ($comment !== false) {
+            $path = rtrim(substr($path, 0, $comment));
+        }
+
+        if ($path === '' || $path[0] === '/' || $path[0] === '\\' || preg_match('/^[a-zA-Z]:/', $path) === 1 || str_contains($path, '..')) {
+            return $path;
+        }
+
+        $directory = $includingFile === 'phpstan.neon' ? '' : trim(str_replace('\\', '/', dirname($includingFile)), '.');
+        if ($directory === '') {
+            return $path;
+        }
+
+        return $directory . '/' . $path;
     }
 
     /**
      * Файлы конфигурации, которые страж обязан разобрать: сам `phpstan.neon` и каждый подключаемый
-     * им существующий файл (пункт M3-2). Каждый путь из `includes` разрешается относительно корня
-     * проекта, где лежит `phpstan.neon`. Абсолютный путь или путь с `..` краснится отдельной
-     * строкой: проверка остаётся в границах проекта, иначе страж читает файлы вне дерева.
-     * Отсутствующий подключённый файл — тоже падение с именем пути: нельзя проверить то, чего нет,
-     * и молча зелёный прогон тут не подходит.
+     * им существующий файл. Пункт M3-2 собирал один уровень подключений, и этого мало (пункт Ф2):
+     * цепочка `phpstan.neon` → `a.neon` → `b.neon` с подавлением в `b.neon` оставалась зелёной,
+     * потому что `b.neon` не читался вовсе. Поэтому обход в ширину: очередь файлов и множество уже
+     * посещённых, для каждого файла собираются и его собственные `includes`. Повторное попадание
+     * того же файла — не зацикливание, а цикл: он краснится, и обход этого плеча прекращается.
+     * Ключ `includes` объявлен, а путей собрано ноль — тоже падение: молча зелёного прогона тут быть
+     * не должно, как и для отсутствующего файла. Абсолютный путь или путь с `..` — прежняя отдельная
+     * строка проблемы: проверка остаётся в границах проекта.
      *
      * @return array{files: list<string>, problems: list<string>}
      */
@@ -682,23 +768,51 @@ final class ToolStrictnessTest extends TestCase
     {
         $files = ['phpstan.neon'];
         $problems = [];
+        $visited = ['phpstan.neon' => true];
 
-        foreach ($this->phpstanIncludes($neon) as $path) {
-            if ($path === '') {
-                continue;
+        /** @var list<array{source: string, text: string}> $queue */
+        $queue = [['source' => 'phpstan.neon', 'text' => $neon]];
+
+        for ($position = 0; $position < count($queue); $position++) {
+            $entry = $queue[$position];
+            $source = $entry['source'];
+            $collected = $this->phpstanIncludes($entry['text']);
+
+            foreach ($collected['malformed'] as $value) {
+                $problems[] = 'В `' . $source . '` подключение записано с незакрытой кавычкой: `'
+                    . $value . '` — страж не считает его путём и не молчит';
             }
 
-            if ($path[0] === '/' || $path[0] === '\\' || preg_match('/^[a-zA-Z]:/', $path) === 1 || str_contains($path, '..')) {
-                $problems[] = 'подключение `' . $path . '` ведёт за границы проекта: страж проверяет только файлы внутри дерева';
-                continue;
+            if ($collected['declared'] && $collected['paths'] === [] && $collected['malformed'] === []) {
+                $problems[] = 'В `' . $source . '` ключ `includes` найден, но ни одного файла не собрано: разбор не понял форму записи';
             }
 
-            if (!is_file(self::ROOT . '/' . $path)) {
-                $problems[] = 'подключённый файл `' . $path . '` не найден: нельзя проверить то, чего нет';
-                continue;
-            }
+            foreach ($collected['paths'] as $path) {
+                $resolved = $this->includedConfigPath($source, $path);
 
-            $files[] = $path;
+                if ($resolved === '') {
+                    continue;
+                }
+
+                if ($resolved[0] === '/' || $resolved[0] === '\\' || preg_match('/^[a-zA-Z]:/', $resolved) === 1 || str_contains($resolved, '..')) {
+                    $problems[] = 'подключение `' . $path . '` ведёт за границы проекта: страж проверяет только файлы внутри дерева';
+                    continue;
+                }
+
+                if (isset($visited[$resolved])) {
+                    $problems[] = 'В `' . $source . '` цикл подключаемых файлов: ' . $resolved . ' подключается из ' . $source;
+                    continue;
+                }
+
+                if (!is_file(self::ROOT . '/' . $resolved)) {
+                    $problems[] = 'подключённый файл `' . $resolved . '` не найден: нельзя проверить то, чего нет';
+                    continue;
+                }
+
+                $visited[$resolved] = true;
+                $files[] = $resolved;
+                $queue[] = ['source' => $resolved, 'text' => $this->read($resolved)];
+            }
         }
 
         return ['files' => $files, 'problems' => $problems];
