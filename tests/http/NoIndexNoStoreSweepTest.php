@@ -52,7 +52,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
     private const NOT_INSTALLED_STATUS = 503;
     private const NOT_INSTALLED_FILE_ADDRESSES = ['вне таблицы: установщик' => 200];
 
-    /** @var array<string, list<array{path: string, outcome: string, status: int}>> позиция обхода: ключ => варианты */
+    /** @var array<string, list<array{path: string, outcome: string, status: int, target?: string}>> позиция обхода: ключ => варианты */
     private static array $addresses = [];
 
     /** @var array<string, string> токены адресов: имя подстановки => значение из базы после посадки */
@@ -279,6 +279,32 @@ final class NoIndexNoStoreSweepTest extends TestCase
                     );
                 }
 
+                if ($actual === self::REDIRECT) {
+                    // План обязан назвать цель перенаправления: сверка идёт по префиксу заголовка
+                    // `Location`, а не по точному равенству — ядро дописывает в адрес параметр
+                    // уведомления (`core/response.php:34-45`), и голый префикс цели остаётся честным
+                    // требованием, тогда как точное равенство краснело бы на законном усилении
+                    // редиректа. Пустая цель — нарушение само по себе, оно ловит и второй адрес с
+                    // исходом «перенаправление», если план забыт.
+                    $expectedTarget = $variant['target'] ?? '';
+                    if ($expectedTarget === '') {
+                        $violations[] = sprintf(
+                            '%s: адрес с исходом «перенаправление» не называет цель — у строки плана обязан быть ожидаемый префикс заголовка `Location`',
+                            $identity
+                        );
+                    } else {
+                        $location = $response['headers']['location'] ?? '';
+                        if (!str_starts_with($location, $expectedTarget)) {
+                            $violations[] = sprintf(
+                                '%s: перенаправление ведёт не в цель — `Location` «%s» не начинается с ожидаемого префикса «%s»',
+                                $identity,
+                                $location,
+                                $expectedTarget
+                            );
+                        }
+                    }
+                }
+
                 if ($actual !== self::MARKED) {
                     continue;
                 }
@@ -334,7 +360,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
      * Пути вариантов пишутся токенами (`{item}`, `{category}` и далее), которые разлагает
      * `buildTokens()` по данным из базы.
      *
-     * @return array<string, list<array{path: string, outcome: string, status: int}>>
+     * @return array<string, list<array{path: string, outcome: string, status: int, target?: string}>>
      */
     private static function plan(): array
     {
@@ -346,7 +372,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ['path' => '/', 'outcome' => self::OPEN, 'status' => 200],
             ],
             'GET /login' => [
-                ['path' => '/login', 'outcome' => self::REDIRECT, 'status' => 302],
+                ['path' => '/login', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/admin'],
             ],
             'GET /admin' => [
                 ['path' => '/admin', 'outcome' => self::MARKED, 'status' => 200],
@@ -430,7 +456,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
      * обработчиком регистрируется на сервере только при отметке окружения — в таблице процесса
      * тестера его нет.
      *
-     * @return array<string, list<array{path: string, outcome: string, status: int}>>
+     * @return array<string, list<array{path: string, outcome: string, status: int, target?: string}>>
      */
     private static function additions(): array
     {
@@ -524,8 +550,8 @@ final class NoIndexNoStoreSweepTest extends TestCase
      * Подстановка токенов в пути вариантов: неразложенный плейсхолдер остаётся в списке и краснит
      * проверку полноты, а не превращает адрес в молчаливый пропуск.
      *
-     * @param list<array{path: string, outcome: string, status: int}> $variants
-     * @return list<array{path: string, outcome: string, status: int}>
+     * @param list<array{path: string, outcome: string, status: int, target?: string}> $variants
+     * @return list<array{path: string, outcome: string, status: int, target?: string}>
      */
     private static function resolveTokens(array $variants, string $key): array
     {
@@ -541,7 +567,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 self::$unresolved[] = $key . ' → ' . $path;
             }
 
-            $resolved[] = ['path' => $path, 'outcome' => $variant['outcome'], 'status' => $variant['status']];
+            $resolved[] = ['path' => $path, 'outcome' => $variant['outcome'], 'status' => $variant['status'], 'target' => $variant['target'] ?? ''];
         }
 
         return $resolved;
