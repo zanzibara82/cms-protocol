@@ -264,6 +264,82 @@ final class SetupConfigTest extends TestCase
         self::assertArrayNotHasKey('КЛЮЧ_КОТОРОГО_НИГДЕ_НЕТ', $out, 'В собранный набор уехал посторонний ключ');
     }
 
+    /**
+     * Годный к запису собранный набор: каждый обязательный ключ скалярный и непустой.
+     *
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function assembledConfig(array $overrides = []): array
+    {
+        $config = [];
+
+        foreach (CONFIG_REQUIRED_KEYS as $key) {
+            $config[$key] = 'значение-' . $key;
+        }
+
+        $config['SMTP_PORT'] = 587;
+        $config['DB_PASS'] = 'пароль базы';
+
+        /** @var array<string, mixed> $merged */
+        $merged = array_merge($config, $overrides);
+
+        return $merged;
+    }
+
+    public function testГодныйСобранныйНаборНеДаётНиОдногоНарушения(): void
+    {
+        self::assertSame([], setupCheckAssembled($this->assembledConfig()), 'Годный набор помечен нарушенным');
+
+        // Пустой пароль базы — валидное значение (правило F9): ключа нет в списке обязательных, и
+        // нарушение по пустоте для него добавлять нельзя.
+        self::assertSame([], setupCheckAssembled($this->assembledConfig(['DB_PASS' => ''])), 'Пустой пароль базы помечен нарушенным');
+    }
+
+    public function testПустойОбязательныйКлючСобранныхНастроекНазван(): void
+    {
+        self::assertSame(['TIMEZONE'], setupCheckAssembled($this->assembledConfig(['TIMEZONE' => ''])), 'Пустой обязательный ключ не назван');
+    }
+
+    public function testНескалярныеЗначенияОбязательныхКлючейНазваны(): void
+    {
+        $cases = [
+            'значение null' => ['DB_HOST' => null],
+            'пустой набор' => ['DB_NAME' => []],
+            'непустой набор' => ['SITE_URL' => ['http://example.com']],
+            'объект' => ['TABLE_PREFIX' => new \stdClass()],
+            // Скаляр, который пустой: приведение лжи к строке даёт пустоту, и ключ нарушен.
+            'ложь' => ['SITE_NAME' => false],
+        ];
+
+        foreach ($cases as $what => $override) {
+            $keys = array_keys($override);
+            self::assertSame(
+                [$keys[0]],
+                setupCheckAssembled($this->assembledConfig($override)),
+                'Нескалярное значение (' . $what . ') не названо нарушением'
+            );
+        }
+    }
+
+    public function testНесколькоНарушенийДаётПолныйСписокВПорядкеОбязательныхКлючей(): void
+    {
+        $violations = setupCheckAssembled($this->assembledConfig([
+            'SITE_NAME' => '',
+            'DB_HOST' => [],
+            'TIMEZONE' => null,
+            'SITE_URL' => false,
+            // Ноль — непустое скалярное значение: ядро считает заданным всё, что приводится к
+            // непустой строке, поэтому нарушения здесь нет.
+            'DB_PORT' => 0,
+        ]));
+
+        // Список полный и в порядке списка обязательных ключей ядра, а не в порядке нарушения.
+        self::assertSame(['DB_HOST', 'SITE_URL', 'SITE_NAME', 'TIMEZONE'], $violations, 'Список нарушений неполный или не в порядке ядра');
+        // Экрану показывается первый по порядку ключ: именно он попадёт в текст отказа.
+        self::assertSame('DB_HOST', $violations[0], 'Первым показывается не первый по порядку ключ');
+    }
+
     public function testРендерДержитЧислоЧисломАСтрокуВОдинарныхКавычках(): void
     {
         $content = setupRenderConfig(['SMTP_PORT' => 587, 'DB_HOST' => 'db', 'TABLE_PREFIX' => 'tbl_']);

@@ -269,19 +269,30 @@ if (setupStep() === SETUP_STEP_DB) {
                     $dbErrors['form'] = $dbError;
                 } else {
                     $config = setupBuildConfig($setupRawConfig, setupSampleConfig(), $values);
-                    $written = setupWriteConfig(setupRenderConfig($config), configPath());
+                    $assembled = setupCheckAssembled($config);
 
-                    if ($written['error'] !== '') {
-                        $dbErrors['form'] = $written['error'];
+                    if ($assembled !== []) {
+                        // Собранное не записано. Проверка идёт ДО записи, ДО отметки сессии и ДО
+                        // редиректа: не-скаляр или пустой обязательный ключ иначе уехал бы на диск
+                        // и обнаружился бы только на шаге 2 — после редиректа и с ощущением успеха.
+                        // Отказ того же уровня формы, что отказ сети и отказ диска; показывается
+                        // первый по порядку обязательных ключей, а список в возврате полный.
+                        $dbErrors['form'] = 'Собранные настройки не записаны: ключ ' . $assembled[0] . ' обязан содержать непустое скалярное значение — поправьте его в файле настроек и повторите шаг.';
                     } else {
-                        setupMarkSession($values);
+                        $written = setupWriteConfig(setupRenderConfig($config), configPath());
 
-                        // Предупреждение о правах человек видит плашкой на шаге 2 (PRG).
-                        if ($written['warning'] !== '') {
-                            redirectWithNotice('/setup.php?step=admin', 'config-permissions');
+                        if ($written['error'] !== '') {
+                            $dbErrors['form'] = $written['error'];
+                        } else {
+                            setupMarkSession($values);
+
+                            // Предупреждение о правах человек видит плашкой на шаге 2 (PRG).
+                            if ($written['warning'] !== '') {
+                                redirectWithNotice('/setup.php?step=admin', 'config-permissions');
+                            }
+
+                            redirect('/setup.php?step=admin');
                         }
-
-                        redirect('/setup.php?step=admin');
                     }
                 }
             }

@@ -221,6 +221,36 @@ function setupBuildConfig(array $raw, array $sample, array $posted): array
 }
 
 /**
+ * Проверка собранного набора перед записью: каждый обязательный ключ обязан быть скаляром и
+ * непустым. Возврат — список имён нарушенных ключей в порядке CONFIG_REQUIRED_KEYS; пустой список
+ * значит, что набор годится к записи.
+ *
+ * @param array<string, mixed> $config
+ * @return list<string>
+ */
+function setupCheckAssembled(array $config): array
+{
+    $violations = [];
+
+    // Пустого пароля базы здесь нет нарочно: ключа DB_PASS в CONFIG_REQUIRED_KEYS нет, и это не
+    // недосмотр, а свойство (правило F9) — пустой пароль базы является валидным значением.
+    // Исключение для него добавлять нельзя.
+    foreach (CONFIG_REQUIRED_KEYS as $key) {
+        $value = $config[$key] ?? null;
+
+        // Порядок операндов значим: configHasKey() внутри делает (string) $config[$key], а для
+        // массива или объекта это предупреждение, которое обработчик ошибок ядра
+        // (core/bootstrap.php:58-63) превращает в ErrorException. Проверка типа стоит первой и
+        // коротко замыкает ||, поэтому до приведения типа не-скаляр не доходит.
+        if (!is_scalar($value) || !configHasKey($config, $key)) {
+            $violations[] = $key;
+        }
+    }
+
+    return $violations;
+}
+
+/**
  * Рендер файла настроек: по строке на ключ, var_export() на ключе и значении (тип сохраняется —
  * в образце SMTP_PORT это число). Никакой интерполяции текста в PHP-исходник: var_export() обязан
  * экранировать и кавычки, и переносы строк — это защита от записи исполняемого кода через поле.

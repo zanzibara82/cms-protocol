@@ -294,6 +294,41 @@ final class SetupDbStepTest extends TestCase
         self::assertFileDoesNotExist(self::tempConfigPath(), 'При отказе полей файл настроек появился на диске');
     }
 
+    public function testПустойОбязательныйКлючФайлаОтказываетсяБезЗаписиНаДиск(): void
+    {
+        $path = self::tempConfigPath();
+
+        // Собранный набор берёт TIMEZONE из файла: заготовка для пустого значения уходит к образцу и
+        // не будит исключения, а сборка использует проверку наличия ключа и берёт пустую строку
+        // файла. Поэтому случай «пустой обязательный ключ» через http достижим, а не-скаляр — нет:
+        // непустой не-скаляр отсекается самой заготовкой, которая приводит значение к строке.
+        /** @var array<string, mixed> $sample */
+        $sample = require dirname(__DIR__, 2) . '/config.sample.php';
+        $sample['TIMEZONE'] = '';
+        $prewritten = "<?php\n\nreturn " . var_export($sample, true) . ";\n";
+        file_put_contents($path, $prewritten);
+
+        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+
+        self::assertSame(200, $response['status'], 'Пустой обязательный ключ файла не вернулся формой отказа');
+        self::assertStringContainsString('Собранные настройки не записаны', $response['body'], 'Нет текста отказа собранного набора');
+        self::assertStringContainsString('ключ TIMEZONE', $response['body'], 'Отказ собранного набора не называет ключ');
+
+        // Записи не было: предзаписанный файл остался таким же, каким его оставил тест. Утверждение
+        // «файла по временному пути нет» здесь невозможно: этот файл и есть источник пустого ключа,
+        // он обязан существовать до запроса.
+        self::assertTrue(is_file($path), 'Файл настроек исчез с диска');
+        self::assertSame($prewritten, (string) file_get_contents($path), 'Отказ собранного набора всё-таки перезаписал файл');
+        $contents = (string) file_get_contents($path);
+        self::assertStringNotContainsString('tbl_setup_test_', $contents, 'Введённый префикс записан при отказе');
+        self::assertStringNotContainsString('Школа с шага первого', $contents, 'Введённое название сайта записано при отказе');
+        self::assertSame([], glob('/tmp/.cms-config-*'), 'При отказе собранного набора остались временные файлы');
+
+        // Отказ уровня формы: плашка на месте. Прежней проверке это не противоречит: там отсутствие
+        // role="alert" доказывает, что до обращения к базе дело не дошло, а здесь дошло до сборки.
+        self::assertStringContainsString('role="alert"', $response['body'], 'Отказ собранного набора не напечатан плашкой уровня формы');
+    }
+
     public function testВторойЗаходПерекрываетЗаписанноеИНеОставляетВременныхФайлов(): void
     {
         $first = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
