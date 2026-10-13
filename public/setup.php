@@ -510,7 +510,8 @@ function setupRenderConfig(array $config): string
 
 /**
  * Атомарная запись: временный файл рядом с целью → chmod 600 → rename. Порядок строгий; ранний
- * отказ по имени цели происходит ДО любого обращения к диску.
+ * отказ по имени цели происходит ДО любого обращения к диску. Причина отказа уровня диска уходит
+ * в журнал, содержимое файла и пароли — никогда.
  *
  * @return array{error: string, warning: string}
  */
@@ -531,6 +532,9 @@ function setupWriteConfig(string $content, string $target): array
     $tmp = dirname($target) . '/.cms-config-' . bin2hex(random_bytes(6));
 
     if (@file_put_contents($tmp, $content) === false) {
+        // Подавленное предупреждение иначе теряется без следа: человек видит только «каталог
+        // недоступен для записи», а причину знает лишь журнал. Ни содержимого файла, ни паролей.
+        logWarn('setup.config_write_failed', ['path' => dirname($target), 'reason' => (string) (error_get_last()['message'] ?? '')]);
         $result['error'] = 'Не удалось подготовить файл настроек: каталог ' . dirname($target) . ' недоступен для записи.';
         // Временный файл удаляем, если он всё-таки появился на диске.
         if (is_file($tmp)) {
@@ -544,6 +548,8 @@ function setupWriteConfig(string $content, string $target): array
     $chmodOk = @chmod($tmp, 0600);
 
     if (@rename($tmp, $target) === false) {
+        // Причина та же, что и выше: без журнала отказ уровня диска неотличим от сотен других.
+        logWarn('setup.config_write_failed', ['path' => dirname($target), 'reason' => (string) (error_get_last()['message'] ?? '')]);
         $result['error'] = 'Не удалось записать файл настроек по адресу ' . $target . ': проверьте права на каталог.';
         // Временный файл обязан удалиться — иначе повторный заход оставляет мусор.
         if (is_file($tmp)) {
