@@ -15,7 +15,7 @@ $fields = [
 ?>
 <section class="mx-auto max-w-xl py-10">
     <h1 class="text-2xl font-bold">Установка сайта</h1>
-    <p class="mt-2 text-sm text-ink/70">Шаг первый из двух: здесь появляются таблицы ядра и первый администратор. Разделы устанавливаются потом, на странице «Приложения».</p>
+    <p class="mt-2 text-sm text-ink/70">Шаг второй из двух: здесь появляются таблицы ядра и первый администратор. Разделы устанавливаются потом, на странице «Приложения».</p>
 
     <?php if ($problems !== []): ?>
         <ul class="mt-4 space-y-1 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert">
