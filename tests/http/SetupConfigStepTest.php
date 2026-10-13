@@ -27,7 +27,16 @@ final class SetupConfigStepTest extends TestCase
             unlink(self::$tempConfigPath);
         }
 
-        Kernel::start(['CMS_CONFIG_FILE' => self::$tempConfigPath]);
+        // Пустые значения в окружении: config-loader.php считает пустую строку незаданным
+        // значением (core/config-loader.php:54), поэтому после сида файл и образец остаются
+        // источниками, и проверка «файл перекрывает образец» остаётся содержательной. Без явных
+        // пустых значений экран наследовал бы CMS_DB_HOST из процесса PHPUnit
+        // (tests/bootstrap.php:11) и проходил бы из-за унаследованного адреса контейнера.
+        Kernel::start([
+            'CMS_CONFIG_FILE' => self::$tempConfigPath,
+            'CMS_DB_HOST' => '',
+            'CMS_SITE_URL' => '',
+        ]);
     }
 
     public static function tearDownAfterClass(): void
@@ -129,14 +138,24 @@ final class SetupConfigStepTest extends TestCase
         self::assertStringContainsString('name="db_host"', $garbage['body'], 'Мусорная отметка шага не открыла экран шага 1');
     }
 
+    // Фикстура временного файла одна на обе проверки приоритета: непустые DB_HOST и DB_NAME,
+    // пустой SITE_URL (упадёт на образец) и непустой DB_USER.
+    /** @return array<string, string> */
+    private static function tempFixture(): array
+    {
+        return [
+            'DB_HOST' => 'mysql.example-host.test',
+            'SITE_URL' => '',
+            'DB_NAME' => 'имя-из-файла',
+            'DB_USER' => 'пользователь-из-файла',
+        ];
+    }
+
     public function testЗначенияИзФайлаПерекрываютОбразец(): void
     {
         file_put_contents(
             self::$tempConfigPath,
-            "<?php\n\nreturn " . var_export([
-                'DB_HOST' => 'mysql.example-host.test',
-                'SITE_URL' => '',
-            ], true) . ";\n"
+            "<?php\n\nreturn " . var_export(self::tempFixture(), true) . ";\n"
         );
 
         try {
@@ -145,6 +164,26 @@ final class SetupConfigStepTest extends TestCase
             self::assertSame(200, $page['status']);
             self::assertSame('mysql.example-host.test', self::renderedValue($page['body'], 'db_host'), 'Значение из файла не перекрывает образец');
             self::assertSame('http://localhost:8080', self::renderedValue($page['body'], 'site_url'), 'Пустой ключ файла не упал на образец');
+        } finally {
+            unlink(self::$tempConfigPath);
+        }
+    }
+
+    // Находка Р1: http-харнес передаёт подпроцессу CMS_DB_NAME=cms_test (tests/http/Kernel.php),
+    // и ядро обещает, что непустое окружение пересиливает файл. Заготовка установщика обязана
+    // держать тот же приоритет, иначе экран шага 1 покажет боевое имя базы из файла.
+    public function testОкружениеНеПересиливаетсяЗаготовкой(): void
+    {
+        file_put_contents(
+            self::$tempConfigPath,
+            "<?php\n\nreturn " . var_export(self::tempFixture(), true) . ";\n"
+        );
+
+        try {
+            $page = Kernel::get('/setup.php');
+
+            self::assertSame(200, $page['status']);
+            self::assertSame('cms_test', self::renderedValue($page['body'], 'db_name'), 'Непустое окружение пересиливается заготовкой');
         } finally {
             unlink(self::$tempConfigPath);
         }
