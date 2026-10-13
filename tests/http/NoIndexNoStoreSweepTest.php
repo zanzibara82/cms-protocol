@@ -292,7 +292,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
                     $expectedTarget = $variant['target'] ?? '';
                     if ($expectedTarget === '') {
                         $violations[] = sprintf(
-                            '%s: адрес с исходом «перенаправление» не называет цель — у строки плана обязан быть ожидаемый префикс заголовка `Location`',
+                            '%s: адрес с исходом «перенаправление» не называет цель — у строки плана обязана быть указана ожидаемая цель заголовка `Location`',
                             $identity
                         );
                     } else {
