@@ -31,6 +31,11 @@ use PHPUnit\Framework\TestCase;
 // признака, а признак вида `vendor/bin/…` — только формой полной команды. Пакет M3-5 потребовал от
 // строки `set -euo pipefail` не только наличия, но и позиции: первой рабочей строки файла ворот
 // (перенос её перед последним вызовом обесценивает четыре шага, а текстовый поиск его не видел).
+// Фикс-раунд M3а-1 (пункт Ф1): блок и строчная форма `excludePaths` перестали быть
+// взаимоисключающими — маски собираются из обоих видов сразу; ключ подавления ошибок виден и в
+// поточной форме (после `{`, `[` или `- `), а разбиение поточного списка учитывает кавычки и
+// фигурные скобки, поэтому искалеченная маска не становится молчаливой зеленью; форма записи,
+// которую разбор не понял, краснит вместо тишины.
 final class ToolStrictnessTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
@@ -170,7 +175,9 @@ final class ToolStrictnessTest extends TestCase
         // и из строчной (поточной) формы, а значения очищаются от одной пары обрамляющих кавычек
         // до сравнения — иначе маска `"core/**"` уходила в регулярку с кавычками и не накрывала
         // ни одного файла, оставляя стража зелёным при исключённом каталоге `core`. Пункт M3-2:
-        // те же маски собираются и из подключаемых через `includes` файлов.
+        // те же маски собираются и из подключаемых через `includes` файлов. Пункт Ф1: блок и
+        // строчная форма собираются вместе, а непонятая форма записи (ключ есть, масок ноль;
+        // значение с незакрытой кавычкой) краснит сама — раньше она молчала.
         $neon = $this->read('phpstan.neon');
         $configs = $this->phpstanCheckedConfigs($neon);
         $phpFiles = $this->analysedPhpFiles();
@@ -182,9 +189,13 @@ final class ToolStrictnessTest extends TestCase
         );
 
         $covering = [];
+        $unparsed = [];
         foreach ($configs['files'] as $source) {
             $text = $source === 'phpstan.neon' ? $neon : $this->read($source);
-            foreach ($this->excludeAnalyseMasks($text) as $mask) {
+            $collected = $this->excludeAnalyseMasks($source, $text);
+            $unparsed = array_merge($unparsed, $collected['problems']);
+
+            foreach ($collected['masks'] as $mask) {
                 foreach ($phpFiles as $file) {
                     if (preg_match($this->globToRegex($mask), $file) === 1) {
                         $covering[] = 'в файле `' . $source . '` маска `' . $mask . '` накрывает ' . $file;
@@ -193,6 +204,12 @@ final class ToolStrictnessTest extends TestCase
                 }
             }
         }
+
+        self::assertSame(
+            [],
+            $unparsed,
+            'Разбор `excludePaths` не понял форму записи, а молчаливый прогон тут не подходит: ' . implode('; ', $unparsed)
+        );
 
         self::assertSame(
             [],
@@ -548,42 +565,63 @@ final class ToolStrictnessTest extends TestCase
     }
 
     /**
-     * Значения `excludePaths: analyse:` — список масок исключения файлов из анализа. Блок не найден —
-     * маски собираются из строчной (поточной) формы (пункт M3-1).
+     * Значения `excludePaths: analyse:` — список масок исключения файлов из анализа. Пункт Ф1:
+     * блок и строчная форма не исключают друг друга, а дополняют, поэтому собираются оба вида
+     * сразу и без повторов; внутри найденного блока значение `analyse:` разбирается и как блок,
+     * и как строчная строка на любой строке файла (вторая строчная строка при уже найденном блоке
+     * и `excludePaths: {` с переносом списка на следующую строку — тоже). Если ключ `excludePaths`
+     * в проверяемом файле есть, а масок не собрано ни одной, — это падение с именем файла:
+     * молчаливый зелёный прогон означал бы, что разбор не понял форму записи, а анализатор тем
+     * временем исключает целый каталог.
      *
-     * @return list<string>
+     * @return array{masks: list<string>, problems: list<string>}
      */
-    private function excludeAnalyseMasks(string $neon): array
+    private function excludeAnalyseMasks(string $source, string $neon): array
     {
+        $masks = [];
+        $malformed = [];
+        $declared = false;
+
         $exclude = $this->keyBlock($neon, 'excludePaths');
-        if ($exclude === null) {
-            return $this->excludePathsInlineMasks($neon);
+        if ($exclude !== null) {
+            $declared = true;
+            $analyse = $this->keyBlock($neon, 'analyse', $exclude['indent'] + 1);
+            if ($analyse !== null) {
+                $masks = array_merge($masks, $this->listItemsFrom($neon, $analyse['indent'], $analyse['line']));
+            }
         }
 
-        $analyse = $this->keyBlock($neon, 'analyse', $exclude['indent'] + 1);
-        if ($analyse === null) {
-            return [];
+        // Строчная форма в дополнение к блоку: и `{ analyse: [ … ] }` на строке ключа, и `[ … ]`
+        // без ключа `analyse`, и `analyse: [ … ]` отдельной строкой внутри блока или в перенесённом
+        // потоке. Каждое вхождение ключа, а не первое: `preg_match()` оставлял вторую строчную
+        // строку невидимой при уже найденном блоке.
+        foreach ([
+            $this->inlineFlowList($neon, 'excludePaths', 'analyse'),
+            $this->inlineFlowList($neon, 'excludePaths'),
+            $this->inlineFlowList($neon, 'analyse'),
+        ] as $inline) {
+            if ($inline === null) {
+                continue;
+            }
+
+            $declared = true;
+            $masks = array_merge($masks, $inline['values']);
+            $malformed = array_merge($malformed, $inline['malformed']);
         }
 
-        return $this->listItemsFrom($neon, $analyse['indent'], $analyse['line']);
-    }
+        $masks = array_values(array_unique($masks));
 
-    /**
-     * Строчная (поточная) форма `excludePaths` (пункт M3-1): `excludePaths: { analyse: [ … ] }` и
-     * `excludePaths: [ … ]` — список без ключа `analyse`, который анализатор тоже понимает.
-     * Вызывается, когда блок не найден; собранные значения проходят ту же проверку накрывания,
-     * что и значения из блока.
-     *
-     * @return list<string>
-     */
-    private function excludePathsInlineMasks(string $neon): array
-    {
-        $analyse = $this->inlineFlowList($neon, 'excludePaths', 'analyse');
-        if ($analyse !== null) {
-            return $analyse;
+        $problems = [];
+        foreach (array_unique($malformed) as $value) {
+            $problems[] = 'В `' . $source . '` значение `excludePaths` записано с незакрытой кавычкой: `'
+                . $value . '` — страж не считает его маской и не молчит: искалеченный огрызок не накрывает ни одного файла';
         }
 
-        return $this->inlineFlowList($neon, 'excludePaths') ?? [];
+        if ($declared && $masks === [] && $problems === []) {
+            $problems[] = 'В `' . $source . '` ключ `excludePaths` найден, но ни одной маски не собрано: разбор не понял форму записи';
+        }
+
+        return ['masks' => $masks, 'problems' => $problems];
     }
 
     /**
@@ -591,7 +629,10 @@ final class ToolStrictnessTest extends TestCase
      * каноническое `ignoreErrors` и ключи сохранённого эталона (пункт Т1), — прежний набор ловил
      * только написания, которых у анализатора нет. Пункт M3-1: ключ допускается в одинарных или
      * двойных кавычках сразу после ведущих пробелов — анализатор читает `"ignoreErrors":` как то же
-     * самое подавление, а прежний поиск оставлял такую строку невидимой.
+     * самое подавление, а прежний поиск оставлял такую строку невидимой. Пункт Ф1: ключ ищется и в
+     * поточной форме — сразу после `{`, `[` или `- `, а не только с начала строки, — иначе строка
+     * `parameters: { ignoreErrors: [ … ] }` оставалась невидимой ровно тем же способом, что и
+     * подавление в кавычках до M3-1.
      *
      * @return list<string>
      */
@@ -600,7 +641,7 @@ final class ToolStrictnessTest extends TestCase
         $suppressions = [];
         foreach (self::PHPSTAN_SUPPRESSION_KEYS as $key) {
             $quoted = preg_quote($key, '/');
-            if (preg_match('/^[ \t]*(?:(["\'])' . $quoted . '\1|' . $quoted . ')[ \t]*:/mi', $neon) === 1) {
+            if (preg_match('/(?:^|[{[-])[ \t]*(?:(["\'])' . $quoted . '\1|' . $quoted . ')[ \t]*:/mi', $neon) === 1) {
                 $suppressions[] = $key;
             }
         }
@@ -622,7 +663,9 @@ final class ToolStrictnessTest extends TestCase
             return $this->listItemsFrom($neon, $block['indent'], $block['line']);
         }
 
-        return $this->inlineFlowList($neon, 'includes') ?? [];
+        $inline = $this->inlineFlowList($neon, 'includes');
+
+        return $inline === null ? [] : $inline['values'];
     }
 
     /**
@@ -664,38 +707,116 @@ final class ToolStrictnessTest extends TestCase
     /**
      * Значения списка, записанного на одной строке с ключом (пункт M3-1): `ключ: [ a, b ]` или
      * `ключ: { вложенный: [ a, b ] }`. Ключ и вложенный ключ допускаются в одинарных или двойных
-     * кавычках; каждое значение очищается от одной пары обрамляющих кавычек. Возвращает `null`,
-     * когда ключа со строчным значением нет: блок ищется отдельно методом `keyBlock()`.
+     * кавычках; каждое значение очищается от одной пары обрамляющих кавычек. Пункт Ф1: собираются
+     * все вхождения ключа, а не первое (иначе вторая строчная строка при уже найденном блоке
+     * оставалась невидимой), и разбиение по запятым учитывает кавычки и фигурные скобки.
+     * Возвращает `null`, когда ключа со строчным значением нет: блок ищется отдельно методом
+     * `keyBlock()`.
      *
-     * @return list<string>|null
+     * @return array{values: list<string>, malformed: list<string>}|null
      */
     private function inlineFlowList(string $text, string $key, ?string $inner = null): ?array
     {
         $quotedKey = preg_quote($key, '/');
         $found = [];
-        if (preg_match('/^[ \t]*(?:(["\'])' . $quotedKey . '\1|' . $quotedKey . ')[ \t]*:[ \t]*(?P<rest>\S.*)$/m', $text, $found) !== 1) {
-            return null;
-        }
-
-        $body = [];
-        if ($inner !== null) {
-            $quotedInner = preg_quote($inner, '/');
-            if (preg_match('/(?:(["\'])' . $quotedInner . '\1|' . $quotedInner . ')[ \t]*:[ \t]*\[(?P<items>[^\]]*)\]/', $found['rest'], $body) !== 1) {
-                return null;
-            }
-        } elseif (preg_match('/\[(?P<items>[^\]]*)\]/', $found['rest'], $body) !== 1) {
+        if (preg_match_all('/^[ \t]*(?:(["\'])' . $quotedKey . '\1|' . $quotedKey . ')[ \t]*:[ \t]*(?P<rest>\S.*)$/m', $text, $found, PREG_SET_ORDER) === false) {
             return null;
         }
 
         $values = [];
-        foreach (explode(',', $body['items']) as $item) {
-            $value = $this->unquote($item);
-            if ($value !== '') {
-                $values[] = $value;
+        $malformed = [];
+        $collected = 0;
+
+        foreach ($found as $occurrence) {
+            $rest = (string) ($occurrence['rest'] ?? '');
+            $body = null;
+            $items = [];
+
+            if ($inner !== null) {
+                $quotedInner = preg_quote($inner, '/');
+                if (preg_match('/(?:(["\'])' . $quotedInner . '\1|' . $quotedInner . ')[ \t]*:[ \t]*\[(?P<items>[^\]]*)\]/', $rest, $items) === 1) {
+                    $body = (string) $items['items'];
+                }
+            } elseif (preg_match('/\[(?P<items>[^\]]*)\]/', $rest, $items) === 1) {
+                $body = (string) $items['items'];
+            }
+
+            if ($body === null) {
+                continue;
+            }
+
+            $collected++;
+            $split = $this->flowValues($body);
+            $values = array_merge($values, $split['values']);
+            $malformed = array_merge($malformed, $split['malformed']);
+        }
+
+        if ($collected === 0) {
+            return null;
+        }
+
+        return ['values' => $values, 'malformed' => $malformed];
+    }
+
+    /**
+     * Значения поточного списка, разбитые по запятым только там, где запятая стоит вне кавычки и
+     * вне фигурной скобки (пункт Ф1): маска вида `"core/{ct,or}/**"` оставалась двумя обрывками,
+     * `globToRegex()` якорил их на начало и конец строки и не накрывал ни одного файла — молчаливая
+     * зелень при живом подавлении. Значение с незакрытой (или сиротливой) кавычкой не чистится и не
+     * считается маской: оно уходит в список проблем того же вида, что и путь подключения вне
+     * дерева, — разбор не притворяется, что понял запись.
+     *
+     * @return array{values: list<string>, malformed: list<string>}
+     */
+    private function flowValues(string $body): array
+    {
+        $parts = [];
+        $current = '';
+        $quote = null;
+        $depth = 0;
+        $length = strlen($body);
+
+        for ($position = 0; $position < $length; $position++) {
+            $char = $body[$position];
+            if ($quote === null && ($char === '"' || $char === "'")) {
+                $quote = $char;
+            } elseif ($quote !== null && $char === $quote) {
+                $quote = null;
+            } elseif ($quote === null && $char === '{') {
+                $depth++;
+            } elseif ($quote === null && $char === '}') {
+                $depth = $depth > 0 ? $depth - 1 : 0;
+            } elseif ($quote === null && $depth === 0 && $char === ',') {
+                $parts[] = $current;
+                $current = '';
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        $parts[] = $current;
+
+        $values = [];
+        $malformed = [];
+        foreach ($parts as $part) {
+            $value = trim($part);
+            if ($value === '') {
+                continue;
+            }
+
+            if ((substr_count($value, '"') + substr_count($value, "'")) % 2 === 1) {
+                $malformed[] = $value;
+                continue;
+            }
+
+            $clean = $this->unquote($value);
+            if ($clean !== '') {
+                $values[] = $clean;
             }
         }
 
-        return $values;
+        return ['values' => $values, 'malformed' => $malformed];
     }
 
     /**
