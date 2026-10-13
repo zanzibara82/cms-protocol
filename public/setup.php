@@ -531,7 +531,14 @@ function setupWriteConfig(string $content, string $target): array
     // непроверяемой.
     $tmp = dirname($target) . '/.cms-config-' . bin2hex(random_bytes(6));
 
-    if (@file_put_contents($tmp, $content) === false) {
+    // umask(0o077) поднят ровно на время создания файла и сразу восстановлен: на виртуальном
+    // хостинге файл с паролем базы иначе был бы читаем другим локальным пользователям (0644)
+    // в окне между созданием и закрытием прав.
+    $previousUmask = umask(0o077);
+    $writtenBytes = @file_put_contents($tmp, $content);
+    umask($previousUmask);
+
+    if ($writtenBytes === false) {
         // Подавленное предупреждение иначе теряется без следа: человек видит только «каталог
         // недоступен для записи», а причину знает лишь журнал. Ни содержимого файла, ни паролей.
         logWarn('setup.config_write_failed', ['path' => dirname($target), 'reason' => (string) (error_get_last()['message'] ?? '')]);
@@ -544,7 +551,8 @@ function setupWriteConfig(string $content, string $target): array
         return $result;
     }
 
-    // Права выставляются до rename(): между созданием и закрытием окна виден файл 0644.
+    // umask уже закрыл окно видимости файла; chmod остаётся явным требованием §3 (права задаются
+    // явно, а не наследуются от окружения процесса), а не единственной защитой.
     $chmodOk = @chmod($tmp, 0600);
 
     if (@rename($tmp, $target) === false) {
