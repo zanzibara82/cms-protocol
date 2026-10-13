@@ -20,13 +20,23 @@ final class SetupSampleTargetTest extends TestCase
     {
         self::unlock();
 
+        // Уборка осколков ДО прогона, симметрично уборке после: прогон, убитый между
+        // file_put_contents() и rename(), иначе краснит следующий прогон по чужой вине.
+        foreach (glob('/tmp/.cms-config-*') ?: [] as $stray) {
+            @unlink($stray);
+        }
+
         $dir = dirname(self::targetPath());
-        if (!is_dir($dir)) {
-            mkdir($dir, 0700, true);
+        if (!is_dir($dir) && !@mkdir($dir, 0700, true) && !is_dir($dir)) {
+            self::fail('Харнес не создал каталог ' . $dir . ' — копию образца некуда положить');
         }
 
         // Копия боевого образца: отказ уровня цели проверяется на ней, реальный файл не трогается.
-        copy(dirname(__DIR__, 2) . '/config.sample.php', self::targetPath());
+        // Возврат copy() проверяется: без него недоступный /tmp молча переносил бы падение на
+        // filemtime() несуществующего файла.
+        if (!@copy(dirname(__DIR__, 2) . '/config.sample.php', self::targetPath())) {
+            self::fail('Харнес не скопировал образец в ' . self::targetPath() . ' — цель проверки не готова');
+        }
 
         Kernel::start(['CMS_CONFIG_FILE' => self::targetPath()]);
     }

@@ -20,7 +20,13 @@ final class SetupDbStepTest extends TestCase
     {
         self::unlock();
 
-        // Все обязательные ключи обнулены в окружении: иначе харнес передаёт CMS_DB_NAME=cms_test
+        // Уборка осколков ДО прогона, симметрично уборке после: прогон, убитый между
+        // file_put_contents() и rename(), иначе краснит следующий прогон по чужой вине.
+        foreach (glob('/tmp/.cms-config-*') ?: [] as $stray) {
+            @unlink($stray);
+        }
+
+        // Все обязательные ключи обнулены в окружении: иначе помощник передаёт CMS_DB_NAME=cms_test
         // (tests/http/Kernel.php:51) и унаследованный CMS_DB_HOST=db, а проверка «значение из формы
         // перекрывает окружение» стала бы бутафорской. Пустая строка для ядра — не значение
         // (core/config-loader.php:54), поэтому источниками остаются файл и образец.
@@ -70,7 +76,7 @@ final class SetupDbStepTest extends TestCase
         }
     }
 
-    // GET открывает сессию и печатает токен; POST идёт в тот же jar, поэтому отметка сессии
+    // GET открывает сессию и печатает токен; POST идёт с теми же куки, поэтому отметка сессии
     // достаётся проверке 3 по тому же идентификатору.
     private static function freshToken(): string
     {
@@ -179,7 +185,7 @@ final class SetupDbStepTest extends TestCase
 
         // Отметка сессии читается из файла сессии: пароль в сессию не уходит.
         $sid = Kernel::sessionId();
-        self::assertNotSame('', $sid, 'Идентификатор сессии не прочитан из jar');
+        self::assertNotSame('', $sid, 'Идентификатор сессии не прочитан из файла куки');
 
         $savePath = session_save_path();
         $dir = $savePath !== '' ? $savePath : '/tmp';

@@ -83,7 +83,7 @@ function setupSeedConfig(array $raw): void
 
     foreach (CONFIG_REQUIRED_KEYS as $key) {
         // Непустое окружение первее файла и образца: без этого пропуска сид внутри установщика
-        // пересилил бы боевое значение (например CMS_DB_NAME=cms_test из http-харнеса) и
+        // пересилил бы боевое значение (например CMS_DB_NAME=cms_test из http-тестов) и
         // приоритет ядра перевёрнулся бы. Пустая строка в окружении — не значение, ключ сидится дальше.
         $fromEnv = getenv(CONFIG_ENV_PREFIX . $key);
         if ($fromEnv !== false && $fromEnv !== '') {
@@ -357,8 +357,10 @@ function setupValidateDb(array $values): array
     if ($prefix === '') {
         $errors['table_prefix'] = 'Укажите префикс таблиц, например tbl_.';
     } elseif (preg_match('/^[a-z][a-z0-9_]*$/', $prefix) !== 1 || strlen($prefix) > 30) {
-        // Префикс читает t() (core/db.php): она ждёт именно такой узор и иначе падает в fail()
-        // уже на установленном сайте, поэтому ограничение строже, чем у хоста.
+        // Префикс читает t() (core/db.php): она ждёт именно такой узор и иначе бросает
+        // InvalidArgumentException («Недопустимое имя таблицы», core/db.php:41-43) уже на
+        // установленном сайте — в fail() падает только db() (core/db.php:31), поэтому
+        // ограничение строже, чем у хоста.
         $errors['table_prefix'] = 'Префикс таблиц — строчные латинские буквы, цифры и подчёркивание, начинается с буквы, до 30 символов.';
     }
 
@@ -519,8 +521,8 @@ function setupWriteConfig(string $content, string $target): array
 {
     $result = ['error' => '', 'warning' => ''];
 
-    // Тестовый харнес передаёт подпроцессу CMS_CONFIG_FILE=<корень>/config.sample.php, и без отказа
-    // первый же тест стёр бы версионированный образец. Выход ДО любого обращения к диску.
+    // Общий помощник http-тестов передаёт подпроцессу CMS_CONFIG_FILE=<корень>/config.sample.php, и
+    // без отказа здесь первый же тест стёр бы версионированный образец. Выход ДО любого обращения к диску.
     if (basename($target) === 'config.sample.php') {
         $result['error'] = 'Настройки не записаны: цель установки называется config.sample.php — это образец, а не рабочий файл. Укажите верный путь в CMS_CONFIG_FILE.';
 
