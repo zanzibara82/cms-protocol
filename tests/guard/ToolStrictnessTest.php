@@ -39,7 +39,10 @@ use PHPUnit\Framework\TestCase;
 // обходятся в ширину (цепочка `phpstan.neon` → `a.neon` → `b.neon` с подавлением в `b.neon`
 // читается целиком, а повторное попадание файла краснится циклом), уровень строгости сверяется по
 // всем собранным файлам, а путь подключения разрешается относительно каталога включающего файла и
-// очищается от хвостового комментария.
+// очищается от хвостового комментария. Пункт Ф3 того же фикс-раунда: разборы проверяются на образцах
+// строки прямо в дереве (новый тест `testPhpstanРазборыПонимаютКавычкиИСтрочнуюФорму`), поэтому снятие
+// очистки кавычек больше не возвращает зелёный прогон незамеченным; непустота списка проверяемых
+// файлов утверждена, а недоверие к списку подключений падает одним способом вместо трёх копий.
 final class ToolStrictnessTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
@@ -132,11 +135,7 @@ final class ToolStrictnessTest extends TestCase
         // быть разобранным до первой проверки уровня.
         $configs = $this->phpstanCheckedConfigs($neon);
 
-        self::assertSame(
-            [],
-            $configs['problems'],
-            'Подключение `includes` в `phpstan.neon` разобрано с проблемой: ' . implode('; ', $configs['problems']) . ': такой конфигурации страж не доверяет'
-        );
+        $this->assertConfigsTrustworthy($configs);
 
         $matched = [];
         if (preg_match('/^\s*level:\s*(\d+)/m', $neon, $matched) !== 1) {
@@ -185,11 +184,7 @@ final class ToolStrictnessTest extends TestCase
 
         // Пункт M3-2: проверка идёт по всем собираемым файлам, а не только по самому `phpstan.neon`:
         // подключение через `includes` переносит подавление за пределы видимого текста конфигурации.
-        self::assertSame(
-            [],
-            $configs['problems'],
-            'Подключение `includes` в `phpstan.neon` разобрано с проблемой: ' . implode('; ', $configs['problems']) . ': такой конфигурации страж не доверяет'
-        );
+        $this->assertConfigsTrustworthy($configs);
 
         $flagged = [];
         foreach ($configs['files'] as $file) {
@@ -224,10 +219,16 @@ final class ToolStrictnessTest extends TestCase
         $configs = $this->phpstanCheckedConfigs($neon);
         $phpFiles = $this->analysedPhpFiles();
 
-        self::assertSame(
+        $this->assertConfigsTrustworthy($configs);
+
+        // Пункт Ф3: сравнение маски с файлами опирается на `$phpFiles`, а ни одна проверка его
+        // непустоту не утверждала. Каталог исчезает — `analysedPhpFiles()` молча пропускает его,
+        // внутренний цикл не выполняется ни разу, и прогон зелёный без единой проверки накрывания.
+        self::assertNotSame(
             [],
-            $configs['problems'],
-            'Подключение `includes` в `phpstan.neon` разобрано с проблемой: ' . implode('; ', $configs['problems']) . ': такой конфигурации страж не доверяет'
+            $phpFiles,
+            'Список проверяемых файлов пуст (' . implode(', ', self::PHPSTAN_ANALYSED_PATHS) . ' не дали ни одного `.php`-файла): '
+                . 'сверке маски с файлом не на чем строиться, и зелёный прогон ничего бы не проверял'
         );
 
         $covering = [];
@@ -587,6 +588,79 @@ final class ToolStrictnessTest extends TestCase
             [],
             $flagProblems,
             'В эталоне флагов строгости появились ключи, не похожие на флаги: ' . implode(', ', $flagProblems)
+        );
+    }
+
+    public function testPhpstanРазборыПонимаютКавычкиИСтрочнуюФорму(): void
+    {
+        // Пункт Ф3: ни одно усиление разборов не оставляло закреплённого в дереве доказательства —
+        // снятие `unquote()` или огрубление регулярки вернуло бы зелёный прогон, и заметили бы это
+        // только на следующем ручном замере. Поэтому разборы проверяются на образцах строки прямо
+        // здесь: ни чтения файлов дерева, ни записи на диск, и каждый кейс с утверждением.
+        $quoted = $this->excludeAnalyseMasks('phpstan.neon', "parameters:\n  excludePaths:\n    analyse:\n      - \"core/**\"\n");
+        $plain = $this->excludeAnalyseMasks('phpstan.neon', "parameters:\n  excludePaths:\n    analyse:\n      - core/**\n");
+
+        self::assertSame(
+            ['core/**'],
+            $quoted['masks'],
+            'Разбор блока `excludePaths` не почистил кавычки: значение `"core/**"` собрано как ' . implode(', ', $quoted['masks'])
+                . ' — маска с кавычкой не накрывает ни одного файла, и исключённый каталог остаётся невидимым'
+        );
+
+        // Кейс 1: значение в кавычках после очистки совпадает с блочным.
+        self::assertSame(
+            $plain['masks'],
+            $quoted['masks'],
+            'Маска `"core/**"` и маска `core/**` разошлись после разбора: без кавычек собрано ' . implode(', ', $plain['masks'])
+        );
+
+        // Кейс 2: строчная (поточная) форма блока `excludePaths` даёт собранную маску.
+        $inline = $this->excludeAnalyseMasks('phpstan.neon', "parameters:\n  excludePaths: { analyse: [ \"vendor/**\" ] }\n");
+        self::assertSame(
+            ['vendor/**'],
+            $inline['masks'],
+            'Строчная форма `excludePaths: { analyse: [ … ] }` не собрана методом `inlineFlowList()`: ' . implode(', ', $inline['masks'])
+        );
+        self::assertSame([], $inline['problems'], 'Понятая строчная форма записи не должна попадать в список проблем: ' . implode('; ', $inline['problems']));
+
+        // Тот же кейс в смешанной форме: блок на месте, а `analyse:` внутри него записан строчной
+        // строкой — именно этот случай прежний разбор считал взаимоисключающими формами.
+        $mixed = $this->excludeAnalyseMasks('phpstan.neon', "  excludePaths:\n    analyse:\n      - public/assets/*\n        analyse: [ \"core/**\" ]\n");
+        self::assertContains(
+            'core/**',
+            $mixed['masks'],
+            'Строчная строка `analyse:` внутри найденного блока не собрана: собрано только ' . implode(', ', $mixed['masks'])
+        );
+
+        // Кейс 3: подключение второго уровня разрешается относительно каталога включающего файла,
+        // а не корня проекта, и хвостовой комментарий у значения срезается.
+        self::assertSame(
+            'config/b.neon',
+            $this->includedConfigPath('config/a.neon', 'b.neon'),
+            'Относительный путь подключения второго уровня разрешился вне каталога включающего файла'
+        );
+        self::assertSame(
+            'phpstan.neon',
+            $this->includedConfigPath('phpstan.neon', 'phpstan.neon # пояснение'),
+            'Хвостовой комментарий после `#` не срезан у значения `includes`: легальная запись давала бы ложное «файл не найден»'
+        );
+    }
+
+    /**
+     * Список подключений — причина отдельной проверки (пункт Ф3): дословно повторяющаяся строка
+     * `assertSame([], $configs['problems'])` с одинаковым текстом сообщения жила в двух тестах, а
+     * после пункта Ф2 прожила бы в трёх. Результат проверок подавлений и масок не должен
+     * смешиваться с недоверием к самому списку файлов: испорченный список больше не может быть
+     * отчитан как «подавлений не найдено».
+     *
+     * @param array{files: list<string>, problems: list<string>} $configs
+     */
+    private function assertConfigsTrustworthy(array $configs): void
+    {
+        self::assertSame(
+            [],
+            $configs['problems'],
+            'Подключение `includes` в `phpstan.neon` разобрано с проблемой: ' . implode('; ', $configs['problems']) . ': такой конфигурации страж не доверяет'
         );
     }
 
