@@ -12,6 +12,99 @@ const SETUP_LOCK = __DIR__ . '/install.lock';
 const SETUP_REQUIRED_EXTENSIONS = ['pdo_mysql', 'mbstring', 'openssl', 'fileinfo', 'json', 'gd'];
 const SETUP_MIN_PHP = '8.1.0';
 const SETUP_PASSWORD_MIN = 10;
+const SETUP_STEP_DB = 'db';
+const SETUP_STEP_ADMIN = 'admin';
+
+/**
+ * Помощники сида и шага объявлены в начале файла, а не в общем списке ниже: их вызов обязан
+ * состояться до securityHeaders() и до любого config(), поэтому и определение держится рядом —
+ * без надежды на hoisting читатель видит весь механизм заготовки настроек одним блоком.
+ */
+
+/**
+ * Источник значений по умолчанию для шага 1: тот же файл, который оператор копирует в config.php
+ * на хостинге. Возврат не-массива трактуется как пустой набор, чтобы сид не падал на битом образце.
+ *
+ * @return array<string, mixed>
+ */
+function setupSampleConfig(): array
+{
+    $sample = require dirname(__DIR__) . '/config.sample.php';
+
+    if (!is_array($sample)) {
+        return [];
+    }
+
+    /** @var array<string, mixed> $sample */
+    return $sample;
+}
+
+/**
+ * Сырой файл настроек с диска. Вызывается строго до любого putenv(): после сида тот же config()
+ * вернул бы значения окружения, и будущая запись «сохранила» бы подставленное образцом, а не боевые
+ * значения. Нет файла или require отдал не массив — пустой набор.
+ *
+ * @return array<string, mixed>
+ */
+function setupReadRawConfig(): array
+{
+    $path = configPath();
+
+    if (!is_file($path)) {
+        return [];
+    }
+
+    $raw = require $path;
+
+    if (!is_array($raw)) {
+        return [];
+    }
+
+    /** @var array<string, mixed> $raw */
+    return $raw;
+}
+
+/**
+ * Кормит загрузчик через CMS_* до первого обращения к config(): экран шага 1 обязан открыться даже
+ * без файла настроек на диске. Для каждого обязательного ключа приоритет — значение из файла, иначе
+ * значение образца; пустое не сидится. Ядро core/config-loader.php при этом не меняется.
+ *
+ * @param array<string, mixed> $raw
+ */
+function setupSeedConfig(array $raw): void
+{
+    $sample = setupSampleConfig();
+
+    foreach (CONFIG_REQUIRED_KEYS as $key) {
+        $value = '';
+
+        if (configHasKey($raw, (string) $key)) {
+            $value = (string) $raw[$key];
+        } elseif (configHasKey($sample, (string) $key)) {
+            $value = (string) $sample[$key];
+        }
+
+        if ($value !== '') {
+            putenv(CONFIG_ENV_PREFIX . $key . '=' . $value);
+        }
+    }
+}
+
+/**
+ * Шаг установщика читается только из GET: admin даёт шаг 2, всё остальное (пусто, мусор, ADMIN) —
+ * шаг 1. Из POST шаг не берётся, иных шагов нет.
+ */
+function setupStep(): string
+{
+    $step = $_GET['step'] ?? '';
+
+    return is_string($step) && $step === SETUP_STEP_ADMIN ? SETUP_STEP_ADMIN : SETUP_STEP_DB;
+}
+
+// Сид обязан предшествовать первому вызову config(): она кэшируется статически
+// (core/config-loader.php), и вызванная без заготовки экран шага 1 не открылся бы вовсе.
+$setupRawConfig = setupReadRawConfig();
+setupSeedConfig($setupRawConfig);
 
 securityHeaders();
 
@@ -188,6 +281,37 @@ if (setupLocked()) {
 }
 
 startSession();
+
+// Шаг 1 отделяется отдельной веткой ДО прежней разметки шага 2: при шаге 1 прежняя POST-обработка
+// администратора не выполняется. Здесь параметры только собираются — запись config.php, зонд базы
+// и отметка сессии перехода появятся в M6-2 и M6-3, поэтому корректный POST шага 1 возвращает ту же
+// форму с прежними значениями из файла и образца, ничего не сохраняя и не трогая базу.
+if (setupStep() === SETUP_STEP_DB) {
+    $dbErrors = [];
+
+    if (isPost()) {
+        csrfCheck();
+    }
+
+    render('setup-db', [
+        'errors' => $dbErrors,
+        'values' => [
+            // Белый список значений формы: db_pass сюда не попадает и в разметку уходит пустым.
+            'db_host' => (string) configValue('DB_HOST', ''),
+            'db_port' => (string) configValue('DB_PORT', ''),
+            'db_name' => (string) configValue('DB_NAME', ''),
+            'db_user' => (string) configValue('DB_USER', ''),
+            'table_prefix' => (string) configValue('TABLE_PREFIX', ''),
+            'site_url' => (string) configValue('SITE_URL', ''),
+            'site_name' => (string) configValue('SITE_NAME', ''),
+        ],
+    ], [
+        'title' => 'Настройка базы данных',
+        'noindex' => true,
+    ]);
+
+    return;
+}
 
 $problems = setupProblems();
 $errors = [];
