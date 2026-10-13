@@ -9,6 +9,8 @@ use PHPUnit\Framework\TestCase;
 
 final class SetupTest extends TestCase
 {
+    private static string $tempConfigPath = '';
+
     public static function setUpBeforeClass(): void
     {
         TestDb::reset();
@@ -19,13 +21,24 @@ final class SetupTest extends TestCase
         optionsReset();
 
         self::unlock();
-        Kernel::start();
+
+        // Пакет M6-1: установщик заготавливает загрузчик из файла настроек (setupSeedConfig), и
+        // сервер php -S обязан читать боевые для теста значения. Без отдельного файла сид подставил
+        // бы образец (localhost/cms_dev), и установщик стучался бы не в cms_test.
+        self::$tempConfigPath = sys_get_temp_dir() . '/cms-setup-test-config.php';
+        self::writeReachableConfig();
+
+        Kernel::start(['CMS_CONFIG_FILE' => self::$tempConfigPath]);
     }
 
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
         self::unlock();
+
+        if (self::$tempConfigPath !== '' && is_file(self::$tempConfigPath)) {
+            unlink(self::$tempConfigPath);
+        }
     }
 
     protected function setUp(): void
@@ -47,9 +60,28 @@ final class SetupTest extends TestCase
         }
     }
 
+    // Файл возвращает те же обязательные ключи, что читает процесс PHPUnit: хост и имя базы берутся
+    // из окружения контейнера, чтобы сервер php -S попал ровно в cms_test с тем же префиксом таблиц.
+    private static function writeReachableConfig(): void
+    {
+        $config = [
+            'DB_HOST' => (string) (getenv('CMS_DB_HOST') ?: 'db'),
+            'DB_PORT' => (string) (getenv('CMS_DB_PORT') ?: '3306'),
+            'DB_NAME' => 'cms_test',
+            'DB_USER' => (string) (getenv('CMS_DB_USER') ?: 'root'),
+            'DB_PASS' => (string) (getenv('CMS_DB_PASS') ?: ''),
+            'TABLE_PREFIX' => 'tbl_',
+            'SITE_URL' => 'http://127.0.0.1:8123',
+            'SITE_NAME' => 'Тестовая школа',
+            'TIMEZONE' => 'Europe/Moscow',
+        ];
+
+        file_put_contents(self::$tempConfigPath, "<?php\n\nreturn " . var_export($config, true) . ";\n");
+    }
+
     public function testФормаУстановкиОткрывается(): void
     {
-        $page = Kernel::get('/setup.php');
+        $page = Kernel::get('/setup.php?step=admin');
 
         self::assertSame(200, $page['status']);
         self::assertStringContainsString('Установка сайта', $page['body']);
@@ -64,8 +96,8 @@ final class SetupTest extends TestCase
 
     public function testКороткийПарольНеСоздаётАдминистратора(): void
     {
-        $page = Kernel::get('/setup.php');
-        $response = Kernel::post('/setup.php', [
+        $page = Kernel::get('/setup.php?step=admin');
+        $response = Kernel::post('/setup.php?step=admin', [
             '_token' => Kernel::tokenFrom($page['body']),
             'site_name' => 'Школа английского',
             'admin_email' => 'admin@school.dev',
@@ -82,8 +114,8 @@ final class SetupTest extends TestCase
 
     public function testНесовпавшиеПаролиОтклоняются(): void
     {
-        $page = Kernel::get('/setup.php');
-        $response = Kernel::post('/setup.php', [
+        $page = Kernel::get('/setup.php?step=admin');
+        $response = Kernel::post('/setup.php?step=admin', [
             '_token' => Kernel::tokenFrom($page['body']),
             'site_name' => 'Школа английского',
             'admin_email' => 'admin@school.dev',
@@ -102,7 +134,7 @@ final class SetupTest extends TestCase
 
     public function testЧужойТокенОтклоняется(): void
     {
-        $response = Kernel::post('/setup.php', [
+        $response = Kernel::post('/setup.php?step=admin', [
             '_token' => str_repeat('0', 64),
             'site_name' => 'Школа английского',
             'admin_email' => 'admin@school.dev',
@@ -117,8 +149,8 @@ final class SetupTest extends TestCase
 
     public function testУстановкаСоздаётЯдроАдминистратораИЗамок(): void
     {
-        $page = Kernel::get('/setup.php');
-        $response = Kernel::post('/setup.php', [
+        $page = Kernel::get('/setup.php?step=admin');
+        $response = Kernel::post('/setup.php?step=admin', [
             '_token' => Kernel::tokenFrom($page['body']),
             'site_name' => 'Школа английского',
             'admin_email' => 'admin@school.dev',
