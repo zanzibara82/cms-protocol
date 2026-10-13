@@ -9,8 +9,6 @@ use PHPUnit\Framework\TestCase;
 
 final class SetupTest extends TestCase
 {
-    private static string $tempConfigPath = '';
-
     public static function setUpBeforeClass(): void
     {
         TestDb::reset();
@@ -22,23 +20,13 @@ final class SetupTest extends TestCase
 
         self::unlock();
 
-        // Пакет M6-1: установщик заготавливает загрузчик из файла настроек (setupSeedConfig), и
-        // сервер php -S обязан читать боевые для теста значения. Без отдельного файла сид подставил
-        // бы образец (localhost/cms_dev), и установщик стучался бы не в cms_test.
-        self::$tempConfigPath = sys_get_temp_dir() . '/cms-setup-test-config.php';
-        self::writeReachableConfig();
-
-        Kernel::start(['CMS_CONFIG_FILE' => self::$tempConfigPath]);
+        Kernel::start();
     }
 
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
         self::unlock();
-
-        if (self::$tempConfigPath !== '' && is_file(self::$tempConfigPath)) {
-            unlink(self::$tempConfigPath);
-        }
     }
 
     protected function setUp(): void
@@ -58,25 +46,6 @@ final class SetupTest extends TestCase
         if (is_file(self::lockPath())) {
             unlink(self::lockPath());
         }
-    }
-
-    // Файл возвращает те же обязательные ключи, что читает процесс PHPUnit: хост и имя базы берутся
-    // из окружения контейнера, чтобы сервер php -S попал ровно в cms_test с тем же префиксом таблиц.
-    private static function writeReachableConfig(): void
-    {
-        $config = [
-            'DB_HOST' => (string) (getenv('CMS_DB_HOST') ?: 'db'),
-            'DB_PORT' => (string) (getenv('CMS_DB_PORT') ?: '3306'),
-            'DB_NAME' => 'cms_test',
-            'DB_USER' => (string) (getenv('CMS_DB_USER') ?: 'root'),
-            'DB_PASS' => (string) (getenv('CMS_DB_PASS') ?: ''),
-            'TABLE_PREFIX' => 'tbl_',
-            'SITE_URL' => 'http://127.0.0.1:8123',
-            'SITE_NAME' => 'Тестовая школа',
-            'TIMEZONE' => 'Europe/Moscow',
-        ];
-
-        file_put_contents(self::$tempConfigPath, "<?php\n\nreturn " . var_export($config, true) . ";\n");
     }
 
     public function testФормаУстановкиОткрывается(): void
