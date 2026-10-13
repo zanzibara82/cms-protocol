@@ -67,6 +67,7 @@ set_exception_handler(static function (Throwable $error): void {
     if (!headers_sent()) {
         http_response_code(500);
         header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store');
     }
     require dirname(__DIR__) . '/core/templates/error.php';
 });

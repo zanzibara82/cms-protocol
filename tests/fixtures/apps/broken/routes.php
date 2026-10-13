@@ -17,6 +17,22 @@ if (getenv('CMS_TEST_OMITTED_HANDLER') === '1') {
     addRoute('GET', '/test-omitted-handler', 'cmsTestOmittedHandler');
 }
 
+// Фикстура экрана непойманного исключения (пакет M5): обработчик бросает исключение, которое
+// не перехватывает ни диспетчер, ни ядро, — управление уходит в `set_exception_handler` из
+// `core/bootstrap.php`, а тот печатает тот же шаблон `core/templates/error.php`, минуя
+// маршрутизатор. Маршрут регистрируется только по отметке окружения: обычный прогон ворот не
+// должен видеть этот маршрут в реестре (тот же мотив, что у фиксации выше), а http-класс
+// ErrorScreenTest передаёт отметку в `php -S` явно.
+if (getenv('CMS_TEST_THROWING_ROUTE') === '1') {
+    addRoute('GET', '/test-throwing-handler', 'cmsTestThrowingHandler');
+}
+
+/** @param array<string, string> $params */
+function cmsTestThrowingHandler(array $params = []): void
+{
+    throw new \RuntimeException('Заведомо непойманное исключение теста.');
+}
+
 /** @param array<string, string> $params */
 function brokenFeed(array $params = []): void
 {

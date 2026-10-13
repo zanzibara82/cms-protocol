@@ -23,6 +23,7 @@ final class ErrorScreenTest extends TestCase
         Kernel::start([
             'CMS_EXTRA_APPS_DIR' => dirname(__DIR__, 2) . '/tests/fixtures/apps',
             'CMS_TEST_OMITTED_HANDLER' => '1',
+            'CMS_TEST_THROWING_ROUTE' => '1',
         ]);
     }
 
@@ -46,5 +47,20 @@ final class ErrorScreenTest extends TestCase
         // что запрет кэширования пришёл от правила пакета, а не от лимитера сессии. Тем же точным
         // утверждением закрыт второй автономный экран — «Сайт не установлен» (SiteNotInstalledTest).
         self::assertSame('no-store', $response['headers']['cache-control'], 'Экран 500 не отдал собственный запрет кэширования');
+    }
+
+    // Тот же шаблон печатает и обработчик непойманного исключения в `core/bootstrap.php`: он
+    // минуя `respond()` собирает заголовки собственными вызовами `header()`, поэтому связка
+    // «`noindex` ⇒ `no-store`» проверяется на этом пути отдельно.
+    public function testЭкранНепойманногоИсключенияТожеОтдаётNoStore(): void
+    {
+        $response = Kernel::get('/test-throwing-handler');
+
+        self::assertSame(500, $response['status']);
+        self::assertStringContainsString('<meta name="robots" content="noindex, nofollow">', $response['body']);
+        self::assertStringContainsString('Что-то сломалось', $response['body']);
+        // Точное утверждение, как в проверке выше: лимитер сессии в контейнере даёт комбинированное
+        // значение, и «содержит» зеленело бы без нашей строки заголовка.
+        self::assertSame('no-store', $response['headers']['cache-control'], 'Экран непойманного исключения не отдал собственный запрет кэширования');
     }
 }
