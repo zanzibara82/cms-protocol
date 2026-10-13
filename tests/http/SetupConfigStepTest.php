@@ -19,7 +19,7 @@ final class SetupConfigStepTest extends TestCase
     {
         self::unlock();
 
-        // Файл на диске отсутствует: харнес передаёт CMS_CONFIG_FILE поверх обязательного префикса
+        // Файл на диске отсутствует: общий помощник передаёт CMS_CONFIG_FILE поверх обязательного
         // config.sample.php (tests/http/Kernel.php), и присваивание идёт позже префикса, поэтому
         // сервер читает именно отсутствующий путь.
         self::$tempConfigPath = sys_get_temp_dir() . '/cms-setup-config-step-config.php';
@@ -169,9 +169,9 @@ final class SetupConfigStepTest extends TestCase
         }
     }
 
-    // Находка Р1: http-харнес передаёт подпроцессу CMS_DB_NAME=cms_test (tests/http/Kernel.php),
-    // и ядро обещает, что непустое окружение пересиливает файл. Заготовка установщика обязана
-    // держать тот же приоритет, иначе экран шага 1 покажет боевое имя базы из файла.
+    // Находка Р1: общий помощник http-тестов (tests/http/Kernel.php) передаёт подпроцессу
+    // CMS_DB_NAME=cms_test, и ядро обещает, что непустое окружение пересиливает файл. Заготовка
+    // установщика обязана держать тот же приоритет, иначе экран шага 1 покажет боевое имя базы.
     public function testОкружениеНеПересиливаетсяЗаготовкой(): void
     {
         file_put_contents(
