@@ -45,7 +45,10 @@ use PHPUnit\Framework\TestCase;
 // файлов утверждена, а недоверие к списку подключений падает одним способом вместо трёх копий.
 // Пункт Ф5 того же фикс-раунда: отмена остановки на ошибке ниже по файлу ворот краснится — строка
 // `set +e` сразу за первой рабочей строкой снимала режим со всех пяти шагов, а проверка позиции
-// этого не видела.
+// этого не видела. Пункт Ф6 того же фикс-раунда: ожидаемые строки запуска шагов закреплены от дерева
+// третьим списком, независимым от признака шага и от его регулярки, — согласованная подмена обоих
+// эталонов (`vendor/bin/phpunit tests/guard` в страже и в воротах) краснит, а не уходит зелёным
+// прогоном, за который перестают исполняться наборы `unit`, `db` и `http`.
 final class ToolStrictnessTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
@@ -128,6 +131,20 @@ final class ToolStrictnessTest extends TestCase
         'статический анализ' => ['#^run vendor/bin/phpstan analyse --no-progress$#'],
         'стиль' => ['#^run vendor/bin/php-cs-fixer fix --dry-run --diff$#'],
         'тесты' => ['#^run vendor/bin/phpunit$#'],
+    ];
+
+    // Закреплённый от дерева список ожидаемых строк запуска каждого шага (пункт Ф6): признак шага и
+    // его регулярку нельзя подменить синхронно, потому что этот список живёт в файле независимо от
+    // `GATE_STEPS` и `GATE_STEP_LAUNCHES` и сверяется с обоими. Значения — дословно те строки,
+    // которыми шаги запускаются в `scripts/gate.sh`; для четырёх шагов инструментов признак записан
+    // без приставки `run`, потому что приставку добавляет `signLaunchForms()`.
+    /** @var array<string, list<string>> */
+    private const GATE_STEP_LAUNCH_SIGNS = [
+        'свежесть стилей' => ['node_modules/.bin/tailwindcss -i ./src-css/app.css', 'cmp -s "$css_tmp/app.css" public/assets/app.css'],
+        'синтаксис' => ['xargs -0 -r -n1 php -l'],
+        'статический анализ' => ['vendor/bin/phpstan analyse --no-progress'],
+        'стиль' => ['vendor/bin/php-cs-fixer fix --dry-run --diff'],
+        'тесты' => ['vendor/bin/phpunit'],
     ];
 
     public function testPhpstanУровеньНеНижеШести(): void
@@ -543,11 +560,21 @@ final class ToolStrictnessTest extends TestCase
     // Собственный список стража — тоже цель атаки: урезанный эталон зелёного прогона ничего не
     // доказывает. Пункт Т6: сверяется не только длина, но и состав — каждое значение обязано
     // называть инструмент своего шага и встречаться в живом файле ворот строкой запуска команды.
+    // Пункт Ф6: добавлен третий список, закреплённый от дерева, — он сверяется и с признаком шага, и
+    // с регуляркой строки запуска, поэтому оба эталона одного шага больше нельзя подменить синхронно.
     public function testЭталонСтражаНеУрезан(): void
     {
         self::assertCount(5, self::PHPUNIT_STRICT_FLAGS, 'Список флагов строгости в самом страже урезан');
         self::assertCount(4, self::PHPUNIT_SUITES, 'Список наборов в самом страже урезан');
         self::assertCount(5, self::GATE_STEPS, 'Список шагов ворот в самом страже урезан');
+        self::assertCount(5, self::GATE_STEP_LAUNCH_SIGNS, 'Закреплённый от дерева список ожидаемых строк запуска ворот урезан (пункт Ф6)');
+
+        $fixed = 0;
+        foreach (self::GATE_STEP_LAUNCH_SIGNS as $signs) {
+            $fixed += count($signs);
+        }
+
+        self::assertSame(6, $fixed, 'Закреплённых ожидаемых строк запуска ворот стало не шесть: ' . $fixed);
         self::assertSame(6, self::PHPSTAN_MIN_LEVEL, 'Минимальный уровень в самом страже понижен');
         self::assertSame(
             array_keys(self::GATE_STEPS),
@@ -559,6 +586,11 @@ final class ToolStrictnessTest extends TestCase
             array_keys(self::GATE_STEP_LAUNCHES),
             'Названия шагов ворот в самом страже разошлись с эталоном строк запуска'
         );
+        self::assertSame(
+            array_keys(self::GATE_STEPS),
+            array_keys(self::GATE_STEP_LAUNCH_SIGNS),
+            'Названия шагов ворот в самом страже разошлись с закреплённым списком ожидаемых строк запуска'
+        );
 
         $gate = $this->stripShellComments($this->read('scripts/gate.sh'));
         $heads = $this->commandHeads($gate);
@@ -566,9 +598,26 @@ final class ToolStrictnessTest extends TestCase
         $bad = [];
         foreach (self::GATE_STEPS as $name => $signs) {
             $launches = self::GATE_STEP_LAUNCHES[$name];
+            // Пункт Ф6: сверка идёт с закреплённым от дерева списком, а не с тем же признаком, из
+            // которого собрана регулярка, — иначе признак и регулярку подменяют синхронно.
+            $fixed = self::GATE_STEP_LAUNCH_SIGNS[$name];
 
             if (count($signs) !== count($launches)) {
                 $bad[] = 'шаг «' . $name . '»: признаков работы ' . count($signs) . ', а строк запуска ' . count($launches);
+            }
+
+            // Пункт Ф6, требование 4: по одному закреплённому значению на признак своего шага.
+            if (count($signs) !== count($fixed)) {
+                $bad[] = 'шаг «' . $name . '»: признаков работы ' . count($signs)
+                    . ', а закреплённых ожидаемых строк запуска ' . count($fixed);
+            }
+
+            // Пункт Ф6, требование 2а: состав и порядок закреплённого значения и признака шага обязаны
+            // совпадать побайтово — падение называет шаг, закреплённое значение и подменённое.
+            if ($signs !== $fixed) {
+                $bad[] = 'шаг «' . $name . '»: признак работы не совпадает с закреплённым значением — закреплено `'
+                    . implode('` + `', $fixed) . '`, а в списке шагов `' . implode('` + `', $signs)
+                    . '`: шаг ворот можно сузить аргументом, синхронно переписав оба эталона';
             }
 
             $named = false;
@@ -590,21 +639,24 @@ final class ToolStrictnessTest extends TestCase
             // текста своего признака (одна из двух форм), иначе два эталона шага живут независимо:
             // признак подменяют безобидной подстрокой либо снимают у регулярки якорь конца строки, и
             // оба класса проверки остаются зелёными. Признак вида `vendor/bin/…` — только форма
-            // полной команды.
+            // полной команды. Пункт Ф6, требование 2б: формы собираются из закреплённого значения, а
+            // не из признака `GATE_STEPS` — подмена обоих эталонов одним и тем же сузывающим путём
+            // перестаёт быть зелёной. Живая сверка с воротами остаётся в одном месте: `headMatching()`
+            // ниже, файл ворот читается один раз до цикла.
             foreach ($launches as $index => $launch) {
-                if (!isset($signs[$index])) {
+                if (!isset($fixed[$index])) {
                     continue;
                 }
 
-                $forms = $this->signLaunchForms($signs[$index]);
+                $forms = $this->signLaunchForms($fixed[$index]);
                 if (!in_array($launch, $forms, true)) {
-                    $bad[] = 'шаг «' . $name . '»: регулярка `' . $launch . '` не собрана из признака `'
-                        . $signs[$index] . '`, разрешённые формы — `' . implode('` или `', $forms) . '`';
+                    $bad[] = 'шаг «' . $name . '»: регулярка `' . $launch . '` не собрана из закреплённого значения `'
+                        . $fixed[$index] . '`, разрешённые формы — `' . implode('` или `', $forms) . '`';
                     continue;
                 }
 
                 if ($this->headMatching($heads, $launch) === null) {
-                    $bad[] = 'шаг «' . $name . '»: признак `' . $signs[$index] . '` не встречается в `scripts/gate.sh` строкой запуска';
+                    $bad[] = 'шаг «' . $name . '»: закреплённое значение `' . $fixed[$index] . '` не встречается в `scripts/gate.sh` строкой запуска';
                 }
             }
         }
