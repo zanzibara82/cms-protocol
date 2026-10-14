@@ -333,6 +333,12 @@ final class SetupDbStepTest extends TestCase
 
     public function testПлашкаУведомленияОПравахЖивётНаШагеВтором(): void
     {
+        // Шаг 2 закрыт гейтом отметки сессии (§2.1): предваряем прохождение шага 1 в том же сеансе —
+        // временный путь настроек у класса уже есть, повторный шаг 1 идемпотентен. Попутно это
+        // доказывает, что шаг 2 под отметкой открывается, поэтому оба утверждения ниже нетронуты.
+        $passed = Kernel::passStepOne(self::freshToken());
+        self::assertSame(302, $passed['status'], 'Шаг 1 не прошёл — шаг 2 под гейтом не открылся бы');
+
         $notice = Kernel::get('/setup.php?step=admin&notice=config-permissions');
         self::assertSame(200, $notice['status']);
         self::assertStringContainsString('права 600 выставить не удалось', $notice['body'], 'Плашка о правах не напечатана на шаге 2');

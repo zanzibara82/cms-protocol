@@ -9,6 +9,11 @@ use PHPUnit\Framework\TestCase;
 
 final class SetupTest extends TestCase
 {
+    private static function tempConfigPath(): string
+    {
+        return '/tmp/cms-setup-test-config.php';
+    }
+
     public static function setUpBeforeClass(): void
     {
         TestDb::reset();
@@ -20,12 +25,36 @@ final class SetupTest extends TestCase
 
         self::unlock();
 
-        Kernel::start();
+        // Уборка осколков ДО прогона, симметрично уборке после: прогон, убитый между
+        // file_put_contents() и rename(), иначе краснит следующий прогон по чужой вине.
+        foreach (glob('/tmp/.cms-config-*') ?: [] as $stray) {
+            @unlink($stray);
+        }
+
+        $path = self::tempConfigPath();
+        if (is_file($path)) {
+            unlink($path);
+        }
+
+        // Набор CMS_* обнулён через Kernel::installerEnv(): причина — в самом помощнике, а здесь важно
+        // только то, что шаг 1 пишет временный файл настроек и сервер после записи читает его, поэтому
+        // CMS_DB_NAME из префикса команды (Kernel.php:51) не должен пересиливать записанное значение.
+        Kernel::start(Kernel::installerEnv($path));
     }
 
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
+
+        $path = self::tempConfigPath();
+        if (is_file($path)) {
+            unlink($path);
+        }
+
+        foreach (glob('/tmp/.cms-config-*') ?: [] as $stray) {
+            @unlink($stray);
+        }
+
         self::unlock();
     }
 
@@ -48,8 +77,67 @@ final class SetupTest extends TestCase
         }
     }
 
+    // Проходит шаг 1 в текущем (свежем) сеансе, чтобы шаг 2 открылся под гейтом отметки сессии
+    // (public/setup.php). Префикс tbl_ совпадает с config.sample.php: сервер после записи читает
+    // временный файл именно с этим префиксом, а тест-процесс читает config.sample.php; при разных
+    // префиксах t('user') в проверке и таблицы, созданные установкой, разошлись бы, и ассерты по
+    // количеству администраторов смотрели бы в несуществующую таблицу.
+    private function enterStepTwo(): void
+    {
+        $page = Kernel::get('/setup.php?step=db');
+        $response = Kernel::passStepOne(Kernel::tokenFrom($page['body']), ['table_prefix' => 'tbl_']);
+
+        self::assertSame(302, $response['status'], 'Шаг 1 не прошёл — шаг 2 под гейтом не открылся бы');
+    }
+
+    // Первая по объявлению: замок выставляют только последующие проверки, а порядок исполнения —
+    // порядок объявления, поэтому здесь сеанс гарантированно без отметки, без замка и без записей.
+    public function testБезОтметкиСессииШагВторойВозвращаетНаПервыйШаг(): void
+    {
+        $blocked = Kernel::get('/setup.php?step=admin');
+
+        self::assertSame(302, $blocked['status'], 'Шаг 2 без отметки сессии не вернул редирект на шаг 1');
+        $target = $blocked['headers']['location'] ?? '';
+        // queryAppend() дописывает notice к уже имеющемуся step, поэтому сверяем вхождением, а не
+        // равенством всей строки: цель — /setup.php?step=db&notice=db-step-required.
+        self::assertStringContainsString('/setup.php?step=db', $target, 'Отказ шага 2 ведёт не на шаг 1');
+        self::assertStringContainsString('notice=db-step-required', $target, 'Отказ шага 2 не нёс ключ объяснения');
+
+        $explained = Kernel::get($target);
+        self::assertSame(200, $explained['status'], 'Цель редиректа отказа не открыла экран шага 1');
+        self::assertStringContainsString(
+            (string) CORE_NOTICE_TEXT['db-step-required'],
+            $explained['body'],
+            'Экран шага 1 не напечатал текст объяснения'
+        );
+
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('user')), 'Отказ шага 2 создал пользователя');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('app_installation')), 'Отказ шага 2 создал запись установки');
+
+        // Вторая половина держит порядок гейта: мусорный токен на шаге 2 без отметки даёт 302, а не
+        // 403 — это единственная проверка, отличающая «гейт до csrfCheck()» от «гейт после неё».
+        $posted = Kernel::post('/setup.php?step=admin', [
+            '_token' => str_repeat('0', 64),
+            'site_name' => 'Школа английского',
+            'admin_email' => 'admin@school.dev',
+            'admin_name' => 'Алексей',
+            'password' => 'длинный-тестовый-пароль',
+            'password_again' => 'длинный-тестовый-пароль',
+        ]);
+
+        self::assertSame(302, $posted['status'], 'POST шага 2 без отметки вернул не редирект (ожидался 302 до токена)');
+        $postedTarget = $posted['headers']['location'] ?? '';
+        self::assertStringContainsString('/setup.php?step=db', $postedTarget, 'POST-отказ шага 2 ведёт не на шаг 1');
+        self::assertStringContainsString('notice=db-step-required', $postedTarget, 'POST-отказ шага 2 не нёс ключ объяснения');
+
+        // Отказ по течению не тратит замок и не трогает базу: файл замка отсутствует после того же POST.
+        self::assertFileDoesNotExist(self::lockPath(), 'Отказ шага 2 выставил замок');
+    }
+
     public function testФормаУстановкиОткрывается(): void
     {
+        // Шаг 2 закрыт гейтом отметки сессии (§2.1): сеанс обязан предварительно пройти шаг 1.
+        $this->enterStepTwo();
         $page = Kernel::get('/setup.php?step=admin');
 
         self::assertSame(200, $page['status']);
@@ -65,6 +153,7 @@ final class SetupTest extends TestCase
 
     public function testКороткийПарольНеСоздаётАдминистратора(): void
     {
+        $this->enterStepTwo();
         $page = Kernel::get('/setup.php?step=admin');
         $response = Kernel::post('/setup.php?step=admin', [
             '_token' => Kernel::tokenFrom($page['body']),
@@ -83,6 +172,7 @@ final class SetupTest extends TestCase
 
     public function testНесовпавшиеПаролиОтклоняются(): void
     {
+        $this->enterStepTwo();
         $page = Kernel::get('/setup.php?step=admin');
         $response = Kernel::post('/setup.php?step=admin', [
             '_token' => Kernel::tokenFrom($page['body']),
@@ -103,6 +193,9 @@ final class SetupTest extends TestCase
 
     public function testЧужойТокенОтклоняется(): void
     {
+        // Сеанс прошёл шаг 1, поэтому отметка есть и гейт шага 2 пропускает запрос к csrfCheck():
+        // отказ обязан остаться 403 — это доказывает, что гейт не отменил барьер токена.
+        $this->enterStepTwo();
         $response = Kernel::post('/setup.php?step=admin', [
             '_token' => str_repeat('0', 64),
             'site_name' => 'Школа английского',
@@ -118,6 +211,9 @@ final class SetupTest extends TestCase
 
     public function testУстановкаСоздаётЯдроАдминистратораИЗамок(): void
     {
+        // Боевая установка живёт на шаге 2 и закрыта гейтом: сначала прохождается шаг 1 в том же
+        // сеансе, затем POST шага 2 создаёт ядро, администратора и замок.
+        $this->enterStepTwo();
         $page = Kernel::get('/setup.php?step=admin');
         $response = Kernel::post('/setup.php?step=admin', [
             '_token' => Kernel::tokenFrom($page['body']),

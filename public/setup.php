@@ -302,12 +302,25 @@ if (setupStep() === SETUP_STEP_DB) {
     render('setup-db', [
         'errors' => $dbErrors,
         'values' => $dbValues,
+        'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
     ], [
         'title' => 'Настройка базы данных',
         'noindex' => true,
     ]);
 
     return;
+}
+
+// Гейт шага 2: без отметки перехода с шага 1 второй шаг недоступен. Порядок — предмет решения, а
+// не вкуса: стоит ДО csrfCheck() и ДО setupAcquireLock(), поэтому отказ по течению потока не
+// тратит токен и не занимается замок — между «проверил отметку» и «создал install.lock» не
+// появляется ничего, что пришлось бы откатывать. Проверка одна: наличие отметки, которую ставит
+// setupMarkSession(); срока годности (checked_at) в спецификации нет, а непроверяемый порог был бы
+// фиктивным свойством. Отметка НЕ снимается ни при отказе шага 2, ни после успеха: закрытие
+// установки — дело замка. Прежняя проверка замка (setupLocked()) остаётся выше, до startSession()
+// и до разбора шага, — она закрывает оба экрана и здесь не нужна.
+if (!isset($_SESSION[SETUP_SESSION_DB])) {
+    redirectWithNotice('/setup.php?step=db', 'db-step-required');
 }
 
 $problems = setupProblems();

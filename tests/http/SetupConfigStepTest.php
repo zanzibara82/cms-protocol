@@ -126,6 +126,13 @@ final class SetupConfigStepTest extends TestCase
 
     public function testШагВторойЖивётПодОтметкойStepAdmin(): void
     {
+        // Шаг 2 закрыт гейтом отметки сессии (§2.1): в свежем сеансе (setUp уже снял куки) сначала
+        // проходится шаг 1, и только затем проверяется маршрутизация шага по GET-отметке. Половины
+        // про step=db и про мусорную отметку остаются как есть — они и так ведут на шаг 1.
+        $opened = Kernel::get('/setup.php?step=db');
+        $passed = Kernel::passStepOne(Kernel::tokenFrom($opened['body']));
+        self::assertSame(302, $passed['status'], 'Шаг 1 не прошёл — шаг 2 под гейтом не открылся бы');
+
         $admin = Kernel::get('/setup.php?step=admin');
         self::assertStringContainsString('Установка сайта', $admin['body'], 'Шаг 2 не открылся под отметкой step=admin');
         self::assertStringContainsString('name="admin_email"', $admin['body'], 'Шаг 2 не печатает поле администратора');
