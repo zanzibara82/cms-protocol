@@ -26,15 +26,9 @@ final class SetupDbStepTest extends TestCase
             @unlink($stray);
         }
 
-        // Все обязательные ключи обнулены в окружении: иначе помощник передаёт CMS_DB_NAME=cms_test
-        // (tests/http/Kernel.php:51) и унаследованный CMS_DB_HOST=db, а проверка «значение из формы
-        // перекрывает окружение» стала бы бутафорской. Пустая строка для ядра — не значение
-        // (core/config-loader.php:54), поэтому источниками остаются файл и образец.
-        Kernel::start([
-            'CMS_CONFIG_FILE' => self::tempConfigPath(),
-            'CMS_DB_HOST' => '', 'CMS_DB_PORT' => '', 'CMS_DB_NAME' => '', 'CMS_DB_USER' => '',
-            'CMS_TABLE_PREFIX' => '', 'CMS_SITE_URL' => '', 'CMS_SITE_NAME' => '',
-        ]);
+        // Набор CMS_* обнулён через Kernel::installerEnv(): комментарий с причиной переехал в сам
+        // помощник, а здесь остаётся только временный путь настроек этого класса.
+        Kernel::start(Kernel::installerEnv(self::tempConfigPath()));
     }
 
     public static function tearDownAfterClass(): void
@@ -85,30 +79,6 @@ final class SetupDbStepTest extends TestCase
         return Kernel::tokenFrom($page['body']);
     }
 
-    /**
-     * Эталон корректного запроса. Учётные данные корня с пустым паролем — свойство контейнера
-     * (MYSQL_ALLOW_EMPTY_PASSWORD, docker-compose.dev.yml:44): корректный POST использует пустой
-     * db_pass, непустой пароль база не примет.
-     *
-     * @param array<string, string> $overrides
-     * @return array<string, string>
-     */
-    private static function validPost(string $token, array $overrides = []): array
-    {
-        $fields = [
-            'db_host' => 'db',
-            'db_port' => '3306',
-            'db_name' => 'cms_test',
-            'db_user' => 'root',
-            'db_pass' => '',
-            'table_prefix' => 'tbl_setup_test_',
-            'site_url' => 'http://localhost:8080/',
-            'site_name' => 'Школа с шага первого',
-        ];
-
-        return array_merge($fields, $overrides, ['_token' => $token]);
-    }
-
     // Значение поля читается из его же тега: name= и value= в шаблоне идут в одном <input>.
     private static function renderedValue(string $body, string $field): string
     {
@@ -124,7 +94,7 @@ final class SetupDbStepTest extends TestCase
 
     public function testУспешныйШагПервыйЗаписываетНастройкиИВедётНаШагВторой(): void
     {
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+        $response = Kernel::passStepOne(self::freshToken());
 
         self::assertSame(302, $response['status'], 'Корректный POST шага 1 не ответил редиректом');
         self::assertSame('/setup.php?step=admin', $response['headers']['location'] ?? '', 'Редирект ведёт не на шаг 2');
@@ -158,7 +128,7 @@ final class SetupDbStepTest extends TestCase
     {
         // db_pass пустой, db_user=root — это и есть корректный запрос контейнера; отказа «нужен
         // пароль» ни в одном ключе быть не должно.
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+        $response = Kernel::passStepOne(self::freshToken());
 
         self::assertSame(302, $response['status'], 'Пустой пароль при непустом пользователе отклонён');
         self::assertFileExists(self::tempConfigPath(), 'При пустом пароле файл настроек не записан');
@@ -175,7 +145,7 @@ final class SetupDbStepTest extends TestCase
         $sample['SMTP_HOST'] = 'smtp-из-файла';
         file_put_contents($path, "<?php\n\nreturn " . var_export($sample, true) . ";\n");
 
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+        $response = Kernel::passStepOne(self::freshToken());
         self::assertSame(302, $response['status'], 'Корректный POST при предзаписанном файле не прошёл');
 
         $contents = (string) file_get_contents($path);
@@ -208,11 +178,11 @@ final class SetupDbStepTest extends TestCase
     public function testНедостижимыйХостОтклоняетсяБезЗаписиНаДиск(): void
     {
         $secret = 'секрет-базы-который-нельзя-показать';
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
+        $response = Kernel::passStepOne(self::freshToken(), [
             'db_host' => '127.0.0.1',
             'db_port' => '1',
             'db_pass' => $secret,
-        ]));
+        ]);
 
         self::assertSame(200, $response['status'], 'Недостижимый хост не вернулся формой отказа');
         self::assertStringContainsString('Сервер базы недоступен по адресу 127.0.0.1:1', $response['body'], 'Нет текста зонда сети');
@@ -229,9 +199,9 @@ final class SetupDbStepTest extends TestCase
 
     public function testНесуществующуюБазуПросятСоздатьВПанели(): void
     {
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
+        $response = Kernel::passStepOne(self::freshToken(), [
             'db_name' => 'cms_missing_db_test',
-        ]));
+        ]);
 
         self::assertSame(200, $response['status'], 'Несуществующая база не вернулась формой отказа');
         self::assertStringContainsString('Создайте её в панели хостинга', $response['body'], 'Нет текста про панель хостинга');
@@ -246,9 +216,9 @@ final class SetupDbStepTest extends TestCase
         // с MYSQL_ALLOW_EMPTY_PASSWORD (docker-compose.dev.yml:44), поэтому непустой пароль даёт
         // ровно 1045 и ведёт ту самую ветку «сервер отклонил пользователя или пароль», до этого
         // не достигавшуюся ни одной проверкой.
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
+        $response = Kernel::passStepOne(self::freshToken(), [
             'db_pass' => $secret,
-        ]));
+        ]);
 
         self::assertSame(200, $response['status'], 'Отказ аутентификации не вернулся формой отказа');
         self::assertStringContainsString('Сервер базы отклонил пользователя или пароль', $response['body'], 'Нет текста ветки отказа аутентификации');
@@ -264,14 +234,14 @@ final class SetupDbStepTest extends TestCase
 
     public function testНевалидныеПоляОтклоняютсяБезОбращенияКБазе(): void
     {
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
+        $response = Kernel::passStepOne(self::freshToken(), [
             'db_host' => 'http://bad host/',
             'db_port' => '0',
             'db_name' => 'имя с пробелом',
             'table_prefix' => '1bad',
             'site_url' => 'ftp://example.com',
             'site_name' => 'А',
-        ]));
+        ]);
 
         self::assertSame(200, $response['status'], 'Невалидные поля не вернулись формой отказа');
         foreach ([
@@ -308,7 +278,7 @@ final class SetupDbStepTest extends TestCase
         $prewritten = "<?php\n\nreturn " . var_export($sample, true) . ";\n";
         file_put_contents($path, $prewritten);
 
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+        $response = Kernel::passStepOne(self::freshToken());
 
         self::assertSame(200, $response['status'], 'Пустой обязательный ключ файла не вернулся формой отказа');
         self::assertStringContainsString('Собранные настройки не записаны', $response['body'], 'Нет текста отказа собранного набора');
@@ -331,7 +301,7 @@ final class SetupDbStepTest extends TestCase
 
     public function testВторойЗаходПерекрываетЗаписанноеИНеОставляетВременныхФайлов(): void
     {
-        $first = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+        $first = Kernel::passStepOne(self::freshToken());
         self::assertSame(302, $first['status'], 'Первый корректный POST не прошёл');
 
         // Инода цели после первого захода: rename() из временного файла всегда даёт новую иноду,
@@ -341,10 +311,10 @@ final class SetupDbStepTest extends TestCase
         $inodeAfterFirst = fileinode(self::tempConfigPath());
         self::assertIsInt($inodeAfterFirst, 'Инода файла настроек после первого захода не прочитана');
 
-        $second = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken(), [
+        $second = Kernel::passStepOne(self::freshToken(), [
             'site_name' => 'Школа со второго захода',
             'table_prefix' => 'tbl_second_test_',
-        ]));
+        ]);
         self::assertSame(302, $second['status'], 'Второй корректный POST не прошёл');
 
         clearstatcache();

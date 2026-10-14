@@ -92,29 +92,6 @@ final class SetupWriteFailureTest extends TestCase
         return Kernel::tokenFrom($page['body']);
     }
 
-    /**
-     * Корректный запрос шага 1: оба зонда обязаны пройти, чтобы дело дошло до записи — а падает
-     * именно запись. db_pass пустой: это свойство контейнера (MYSQL_ALLOW_EMPTY_PASSWORD,
-     * docker-compose.dev.yml:44). Название сайта содержит «секрет», чтобы проверка журнала была
-     * не пустой: значение не должно попасть в журнал ни в каком виде.
-     *
-     * @return array<string, string>
-     */
-    private static function validPost(string $token): array
-    {
-        return [
-            '_token' => $token,
-            'db_host' => 'db',
-            'db_port' => '3306',
-            'db_name' => 'cms_test',
-            'db_user' => 'root',
-            'db_pass' => '',
-            'table_prefix' => 'tbl_m62fail_',
-            'site_url' => 'http://localhost:8080/',
-            'site_name' => 'Школа с секрет-названием',
-        ];
-    }
-
     // Последняя непустая строка журнала разбирается как json: без exec и без вызова оболочки.
     /** @return array<string, mixed> */
     private static function lastLogEntry(string $log): array
@@ -134,7 +111,14 @@ final class SetupWriteFailureTest extends TestCase
 
     public function testЦельВНедоступномКаталогеОтклоняетсяИПишетПричинуВЖурнал(): void
     {
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+        // Корректный POST шага 1 (Kernel::stepOneFields через passStepOne): оба зонда обязаны пройти,
+        // чтобы дело дошло до записи — а падает именно запись. Свой префикс класса и название сайта с
+        // подстрокой «секрет» (чтобы проверка журнала была не пустой: значение не должно попасть в
+        // журнал ни в каком виде) передаются через $overrides — так отличие от эталона видно читателю.
+        $response = Kernel::passStepOne(self::freshToken(), [
+            'table_prefix' => 'tbl_m62fail_',
+            'site_name' => 'Школа с секрет-названием',
+        ]);
 
         self::assertSame(200, $response['status'], 'Отказ записи в недоступный каталог не вернулся формой');
         self::assertStringContainsString('Не удалось подготовить файл настроек', $response['body'], 'Нет текста отказа записи');

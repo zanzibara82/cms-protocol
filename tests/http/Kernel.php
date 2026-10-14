@@ -151,6 +151,70 @@ final class Kernel
     }
 
     /**
+     * Окружение установщика для start(): CMS_CONFIG_FILE с указанным путём плюс пустые строки во
+     * всех обязательных CMS_* — ровно тот набор, что передают классы шага 1.
+     *
+     * Порядок присваивания в start() таков, что этот массив перекрывает CMS_DB_NAME=cms_test из
+     * префикса команды (Kernel.php:51) и унаследованный из контейнера CMS_DB_HOST=db. Без обнуления
+     * проверка «значение из формы перекрывает окружение» стала бы бутафорской: это не деталь сборки,
+     * а причина существования помощника. Пустая строка для ядра — не значение
+     * (core/config-loader.php:54), поэтому источниками значений остаются файл и образец.
+     *
+     * @return array<string, string>
+     */
+    public static function installerEnv(string $configPath): array
+    {
+        return [
+            'CMS_CONFIG_FILE' => $configPath,
+            'CMS_DB_HOST' => '',
+            'CMS_DB_PORT' => '',
+            'CMS_DB_NAME' => '',
+            'CMS_DB_USER' => '',
+            'CMS_TABLE_PREFIX' => '',
+            'CMS_SITE_URL' => '',
+            'CMS_SITE_NAME' => '',
+        ];
+    }
+
+    /**
+     * Эталон корректного POST шага 1 — перенесён дословно из SetupDbStepTest::validPost(). Учётные
+     * данные корня с пустым паролем — свойство контейнера (MYSQL_ALLOW_EMPTY_PASSWORD,
+     * docker-compose.dev.yml:44): корректный POST использует пустой db_pass, непустой пароль база
+     * не примет. Значения, чуждые эталону (несуществующий хост и порт 1, плохой table_prefix, секрет
+     * в db_pass), передаются через $overrides на месте вызова — именно так отличие видно читателю.
+     *
+     * @param array<string, string> $overrides
+     * @return array<string, string>
+     */
+    public static function stepOneFields(string $token, array $overrides = []): array
+    {
+        $fields = [
+            'db_host' => 'db',
+            'db_port' => '3306',
+            'db_name' => 'cms_test',
+            'db_user' => 'root',
+            'db_pass' => '',
+            'table_prefix' => 'tbl_setup_test_',
+            'site_url' => 'http://localhost:8080/',
+            'site_name' => 'Школа с шага первого',
+        ];
+
+        return array_merge($fields, $overrides, ['_token' => $token]);
+    }
+
+    /**
+     * Корректный POST шага 1 на /setup.php?step=db. Возвращает ответ как есть, чтобы вызывающий сам
+     * проверил код состояния: успех — 302 на шаг 2, отказ — 200 с формой.
+     *
+     * @param array<string, string> $overrides
+     * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}
+     */
+    public static function passStepOne(string $token, array $overrides = []): array
+    {
+        return self::post('/setup.php?step=db', self::stepOneFields($token, $overrides));
+    }
+
+    /**
      * @param array<string, mixed> $options
      * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}
      */

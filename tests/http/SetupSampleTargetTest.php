@@ -86,28 +86,6 @@ final class SetupSampleTargetTest extends TestCase
         return Kernel::tokenFrom($page['body']);
     }
 
-    /**
-     * Корректный запрос: отказ уровня цели не опережает зонд (порядок общий — валидация, зонд,
-     * запись), поэтому параметры базы обязаны пройти оба зонда. Пустой пароль — свойство
-     * контейнера (MYSQL_ALLOW_EMPTY_PASSWORD, docker-compose.dev.yml:44).
-     *
-     * @return array<string, string>
-     */
-    private static function validPost(string $token): array
-    {
-        return [
-            '_token' => $token,
-            'db_host' => 'db',
-            'db_port' => '3306',
-            'db_name' => 'cms_test',
-            'db_user' => 'root',
-            'db_pass' => '',
-            'table_prefix' => 'tbl_setup_test_',
-            'site_url' => 'http://localhost:8080/',
-            'site_name' => 'Школа с шага первого',
-        ];
-    }
-
     public function testОбразецНаПутиЦелиНеПерезаписывается(): void
     {
         $target = self::targetPath();
@@ -115,7 +93,10 @@ final class SetupSampleTargetTest extends TestCase
         $mtimeBefore = (int) filemtime($target);
         $hashBefore = (string) hash_file('sha256', $target);
 
-        $response = Kernel::post('/setup.php?step=db', self::validPost(self::freshToken()));
+        // Корректный POST шага 1 (Kernel::stepOneFields через passStepOne): отказ уровня цели не
+        // опережает зонд (порядок общий — валидация, зонд, запись), поэтому параметры базы обязаны
+        // пройти оба зонда, иначе проверка упала бы на отказе сети, а не на отказе записи в цель.
+        $response = Kernel::passStepOne(self::freshToken());
 
         self::assertSame(200, $response['status'], 'Запись в цель-образец не вернулась формой отказа');
         self::assertStringContainsString('это образец, а не рабочий файл', $response['body'], 'Нет текста отказа по имени цели');
