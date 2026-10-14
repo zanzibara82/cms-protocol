@@ -17,10 +17,20 @@ final class SetupConfigTest extends TestCase
     /** @var list<string> каталоги во временной области, созданные проверками этого класса */
     private array $createdDirs = [];
 
+    /** @var string|false значение CMS_CONFIG_FILE, данное процессу бутстрапом; false — переменная не установлена */
+    private static string|false $bootstrapConfigFile = false;
+
     public static function setUpBeforeClass(): void
     {
         // Отказ записи идёт через logWarn(): боевой журнал набора остаётся чистым.
         putenv('CMS_LOG_PATH=/tmp/m6-2c-unit-errors.log');
+
+        // Запоминание до первой подстановки и ровно один раз на класс: tests/bootstrap.php
+        // поставил CMS_CONFIG_FILE = <корень>/config.sample.php на весь процесс, и уборка
+        // обязана возвращать к этому значению. Если брать его в setUp(), то после первой же
+        // уборки переменная уже снята, и следующая проверка сохранит false — это и есть
+        // отложенный риск находки Н1, поэтому захват здесь.
+        self::$bootstrapConfigFile = getenv('CMS_CONFIG_FILE');
     }
 
     public static function tearDownAfterClass(): void
@@ -30,9 +40,15 @@ final class SetupConfigTest extends TestCase
 
     protected function tearDown(): void
     {
-        // Соседний набор читает файл настроек по пути из окружения: оставленная переменная
-        // перенаправила бы его в наш временный файл.
-        putenv('CMS_CONFIG_FILE');
+        // Соседний набор читает файл настроек по пути из окружения: подставленный путь обязан
+        // вернуться к значению бутстрапа, а не сняться — иначе следующий вызов configPath() или
+        // config() прочитает боевой config.php разработчика. Если класс идёт отдельно без
+        // бутстрапа (переменная не установлена) — снимаем, как раньше.
+        if (self::$bootstrapConfigFile === false) {
+            putenv('CMS_CONFIG_FILE');
+        } else {
+            putenv('CMS_CONFIG_FILE=' . self::$bootstrapConfigFile);
+        }
 
         foreach ($this->createdDirs as $dir) {
             foreach (glob($dir . '/*') ?: [] as $stray) {
@@ -352,7 +368,9 @@ final class SetupConfigTest extends TestCase
 
     public function testОпасноеЗначениеЗаписываетсяКакДанныеИЧитаетсяОбратно(): void
     {
-        $dangerous = "доля '); system(\$_GET['команда']);//первая\nвторая строка";
+        // Побайтово то же значение, что одним литералом: перевод строки вынесен отдельным
+        // фрагментом конкатенации, чтобы служебный символ в исходнике не склеивался со следующим словом.
+        $dangerous = "доля '); system(\$_GET['команда']);//первая" . "\n" . "вторая строка";
         $content = setupRenderConfig(['ОПАСНЫЙ_КЛЮЧ' => $dangerous, 'ДРУГОЙ' => 'ещё "двойные" кавычки']);
 
         $path = $this->tempDir() . '/rendered.php';
@@ -391,6 +409,29 @@ final class SetupConfigTest extends TestCase
         self::assertSame([], glob('/tmp/.cms-config-*'), 'После отказа в несуществующем каталоге остались осколки');
     }
 
+    public function testОтказПеремещенияНеОставляетВременногоМусора(): void
+    {
+        // Отказ rename() достижим поведением, без правки продукта: цель записи — уже
+        // существующий непустой каталог. Временный файл лежит в dirname(цели), поэтому создание
+        // файла и chmod проходят штатно, а отказывает ровно сам перенос на каталог.
+        $dir = $this->tempDir();
+        $target = $dir . '/цель-каталог';
+        self::assertTrue(mkdir($target, 0775, true), 'Каталог-цель ' . $target . ' не создан');
+        file_put_contents($target . '/holder.txt', 'заполнитель');
+        // Уборка обязана сначала снести внутренний каталог, поэтому он в списке первым.
+        array_unshift($this->createdDirs, $target);
+
+        $result = setupWriteConfig("<?php\n\nreturn ['КЛЮЧ' => 'значение'];\n", $target);
+
+        self::assertStringStartsWith('Не удалось записать файл настроек по адресу', $result['error'], 'Отказ перемещения на каталог не назван ошибкой');
+        self::assertStringContainsString($target, $result['error'], 'Отказ перемещения не назвал путь цели');
+        self::assertSame('', $result['warning'], 'Отказ перемещения выдал предупреждение');
+        // Временный файл лежит в каталоге, содержащем путь цели: осколков после отказа не должно остаться.
+        self::assertSame([], glob($dir . '/.cms-config-*'), 'Отказ перемещения оставил временные осколки');
+        // Каталог-цель пережил попытку записи нетронутым: в нём ровно прежний заполнитель.
+        self::assertSame(['holder.txt'], array_map('basename', glob($target . '/*') ?: []), 'Содержимое каталога цели изменилось');
+    }
+
     public function testУспешнаяЗаписьДаётПраваШестьсотИНовуюИноду(): void
     {
         $dir = $this->tempDir();
@@ -414,5 +455,21 @@ final class SetupConfigTest extends TestCase
         self::assertNotSame($inodeAfterFirst, $this->inodeOf($path), 'Вторая запись заменила файл на месте');
         self::assertSame('0600', substr(sprintf('%o', (int) fileperms($path)), -4), 'Права после второй записи не 600');
         self::assertSame([], glob('/tmp/.cms-config-*'), 'После успешных записей остались осколки');
+    }
+
+    public function testСнятиеПодставленногоПутиВозвращаетЗначениеБутстрапа(): void
+    {
+        // Свойство уборки, которое обязано краснеть при снятии переменной вместо возврата:
+        // подставленный путь после tearDown() возвращается к значению бутстрапа, а не снимается.
+        $dir = $this->tempDir();
+        putenv('CMS_CONFIG_FILE=' . $dir . '/подставленный-путь.php');
+        self::assertNotSame(self::$bootstrapConfigFile, getenv('CMS_CONFIG_FILE'), 'Подставленный путь совпал со значением бутстрапа');
+
+        // Собственный tearDown этого класса: метод защищён, но изнутри класса вызывается.
+        // Штатным механизмом PHPUnit он после этого будет вызван ещё раз, поэтому заодно
+        // проверяем идемпотентность уборки: вторая волна не должна ронять набор.
+        self::tearDown();
+
+        self::assertSame(self::$bootstrapConfigFile, getenv('CMS_CONFIG_FILE'), 'Подставленный путь снят вместо возврата к значению бутстрапа');
     }
 }
