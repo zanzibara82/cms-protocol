@@ -185,4 +185,4 @@ docs/deploy-checklist.md.», ноль строк «Отказ:» и нулево
 
 Боевая база не пересоздаётся никогда: миграции раздела дополняющие (Global Constraints), а
 `scripts/db-reset` трогает только `cms_test`. Откат выкладки файлов — повторный `rsync` из коммита
-прошлой версии (`git worktree add ../old <commit>` и `CMS_DEPLOY_PATH=… bash ../old/cms/scripts/deploy.sh`).
+прошлой версии (`git worktree add ../old <commit>` и `CMS_DEPLOY_PATH=… bash ../old/scripts/deploy.sh`).
