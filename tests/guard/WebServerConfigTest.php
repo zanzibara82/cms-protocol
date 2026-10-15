@@ -271,6 +271,33 @@ final class WebServerConfigTest extends TestCase
 
         self::assertSame([], $this->violations($crlf, 'probe'), 'Корректный образец с CRLF дал находки');
         self::assertSame([], $this->uploadsViolations($crlf, 'probe'), 'Корректный образец с CRLF дал находки в проверке каталога загрузок');
+
+        // Отрицательная ветка переноса: снятый барьер каталога загрузок обязан найтись и на LF, и на
+        // CRLF. Два утверждения выше проверяют только пустой список, а он остаётся зелёным и тогда,
+        // когда читатель слепнет на переносе. Барьер снимается блоком целиком, вместе со строкой
+        // `FilesMatch`: якорь по слову отказа снял бы оба блока образца разом.
+        $phpBarrier = '<FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phar)$">' . "\n"
+            . '    <IfModule mod_authz_core.c>' . "\n"
+            . '        Require all denied' . "\n"
+            . '    </IfModule>' . "\n"
+            . '    <IfModule !mod_authz_core.c>' . "\n"
+            . '        Order allow,deny' . "\n"
+            . '        Deny from all' . "\n"
+            . '    </IfModule>' . "\n"
+            . '</FilesMatch>';
+        $withoutPhpBarrier = $this->without($this->correctSample(), $phpBarrier);
+
+        self::assertSame(
+            ['probe: отказ не накрывает php-расширения — файл, переименованный в .php, остаётся исполняемым'],
+            $this->uploadsViolations($withoutPhpBarrier, 'probe'),
+            'Снятый барьер отказа по php-расширениям не найден на LF'
+        );
+
+        self::assertSame(
+            ['probe: отказ не накрывает php-расширения — файл, переименованный в .php, остаётся исполняемым'],
+            $this->uploadsViolations(str_replace("\n", "\r\n", $withoutPhpBarrier), 'probe'),
+            'Снятый барьер отказа по php-расширениям не найден на CRLF'
+        );
     }
 
     /**
@@ -281,10 +308,11 @@ final class WebServerConfigTest extends TestCase
     private function violations(string $config, string $relative): array
     {
         // Читатели заякорены на конце строки, а PCRE без модификатора `D` не ставит `$` перед
-        // CRLF: нормализуем перенос один раз на входе, и весь набор проверок видит LF. `offset()`
-        // сравнивает только относительный порядок двух правил в одном и том же тексте, номера
-        // строк и позиции в сообщениях не выдаются; `withoutForwardedHeaders()` ищет подстроки
-        // ключей, которые через перенос не пишутся. Смысл обоих после нормализации не меняется.
+        // CRLF: нормализуем перенос один раз на входе, и все проверки этой функции видят LF.
+        // `offset()` сравнивает только относительный порядок двух правил в одном и том же тексте,
+        // номера строк и позиции в сообщениях не выдаются; `withoutForwardedHeaders()` ищет
+        // подстроки ключей, которые через перенос не пишутся. Смысл обоих после нормализации не
+        // меняется. Та же строка нормализации стоит на входе `uploadsViolations()`.
         $config = str_replace("\r\n", "\n", $config);
 
         $found = [];
@@ -371,6 +399,11 @@ final class WebServerConfigTest extends TestCase
     /** @return list<string> */
     private function uploadsViolations(string $config, string $relative): array
     {
+        // Три нынешних читателя переноса не боятся: `[^\n]*` захватывает `\r`, а заякоренных на конце
+        // строки здесь нет. Следующий барьер этой функции, заякоренный на `$`, стал бы слепнуть на
+        // CRLF, а тест этого бы не заметил — нормализация на входе снимает весь класс таких ошибок.
+        $config = str_replace("\r\n", "\n", $config);
+
         $found = [];
 
         if (preg_match('/^\s*Options\b[^\n]*-Indexes/m', $config) !== 1) {
