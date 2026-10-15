@@ -120,6 +120,23 @@ final class LoginLimitTest extends TestCase
         self::assertSame($before, $after, 'Попытка по заведомо неизвестному адресу не пишется в журнал');
     }
 
+    // Вторая половина границы из находки рецензии М7-1а: код отсекает строго больше порога, поэтому
+    // адрес длиной ровно LOGIN_EMAIL_MAX обязан дойти до обычной ветки отказа — с тем же общим
+    // текстом и с записью попытки в журнал, как любой другой неизвестный адрес.
+    public function testАдресРовноНаГраницеПорогаДоходитДоОбычнойВетки(): void
+    {
+        $email = str_repeat('a', LOGIN_EMAIL_MAX - 11) . '@school.dev';
+        self::assertSame(LOGIN_EMAIL_MAX, mb_strlen($email), 'Замер собран: адрес ровно на границе порога');
+
+        $before = (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'), []);
+        $result = attemptLogin($email, 'любой-пароль');
+        $after = (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'), []);
+
+        self::assertFalse($result['ok'], 'Аккаунта с таким адресом нет, вход не открывается');
+        self::assertSame(LOGIN_ERROR_GENERIC, $result['error'], 'Текст отказа общий, как при неизвестном адресе');
+        self::assertSame($before + 1, $after, 'Адрес на границе порога дописывает строку в журнал попыток');
+    }
+
     public function testВерныйПарольВпускаетРедактора(): void
     {
         TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
