@@ -213,6 +213,54 @@ final class WebServerConfigTest extends TestCase
         );
     }
 
+    // Значение имеет не первая строка, а весь список: Apache складывает несколько директив
+    // DirectoryIndex одного контекста в общий список, а ключевое слово disabled сбрасывает уже
+    // накопленное (https://httpd.apache.org/docs/2.4/mod/mod_dir.html#directoryindex). Поэтому
+    // проверка обязана ходить по всем директивам — иначе «disabled» после нашей строки оставляет
+    // страж зелёным, хотя запрос «/» уже ничего не отдаёт. Заодно и терпимость к форме: пробел
+    // перед «>» и закрывающий тег без регистра конфигурация допустимы, а краснить на них живой
+    // конфиг значит приучать человека не верить стражу.
+    public function testНесколькоДирективИндексаСчитываютсяОднимСписком(): void
+    {
+        $correct = $this->correctSample();
+
+        self::assertSame(
+            ['probe: DirectoryIndex обнулила директива disabled — список mod_dir пуст, и запрос / отвечает 403 или 404, как без директивы'],
+            $this->violations($this->without(
+                $correct,
+                "    DirectoryIndex index.php\n",
+                "    DirectoryIndex index.php\n    DirectoryIndex disabled\n"
+            ), 'probe'),
+            'Сброшенный список индексов пропущен'
+        );
+
+        self::assertSame(
+            [],
+            $this->violations($this->without(
+                $correct,
+                "    DirectoryIndex index.php\n",
+                "    DirectoryIndex index.html\n    DirectoryIndex index.php\n"
+            ), 'probe'),
+            'index.php назван второй директивой: mod_dir его найдёт, и краснить нельзя'
+        );
+
+        self::assertSame(
+            [],
+            $this->violations($this->without($correct, '<IfModule mod_dir.c>', '<IfModule mod_dir.c >'), 'probe'),
+            'Открывающий тег с пробелом перед «>» — конфигурация живая, краснить нельзя'
+        );
+
+        self::assertSame(
+            ['probe: DirectoryIndex стоит вне обёртки IfModule mod_dir.c — хостинг без модуля падает 500-м на неизвестной директиве'],
+            $this->violations($this->without(
+                $correct,
+                "<IfModule mod_dir.c>\n    DirectoryIndex index.php\n</IfModule>\n",
+                "<IfModule mod_dir.c>\n</ifmodule>\n    DirectoryIndex index.php\n"
+            ), 'probe'),
+            'Директива после закрывающего тега без регистра пропущена'
+        );
+    }
+
     /**
      * Находки в тексте конфигурации: каждый барьер — отдельной проверкой.
      *
@@ -226,14 +274,23 @@ final class WebServerConfigTest extends TestCase
             $found[] = $relative . ': нет Options -Indexes — содержимое каталогов отдаётся списком';
         }
 
-        $dirIndex = $this->line($config, '/^\s*DirectoryIndex\s+[^\n]*/mi');
+        // Список индексов читается всеми директивами сразу: mod_dir складывает несколько
+        // DirectoryIndex одного контекста в общий список, а disabled сбрасывает накопленное.
+        $indexes = $this->directoryIndexLists($config);
+        $named = in_array('index.php', $indexes['named'], true);
+        $survives = in_array('index.php', $indexes['effective'], true);
 
-        if ($dirIndex === null || $this->find($dirIndex, '/\bindex\.php\b/') === null) {
+        if (! $named) {
             $found[] = $relative . ': нет DirectoryIndex index.php — запрос / отдаёт конфигурация хостинга,'
                 . ' без директивы главная отвечает 403 или 404';
         }
 
-        if ($dirIndex !== null && $this->hasDirectoryIndexOutsideDirWrapper($config)) {
+        if ($named && ! $survives) {
+            $found[] = $relative . ': DirectoryIndex обнулила директива disabled — список mod_dir пуст,'
+                . ' и запрос / отвечает 403 или 404, как без директивы';
+        }
+
+        if ($this->hasDirectoryIndexOutsideDirWrapper($config)) {
             $found[] = $relative . ': DirectoryIndex стоит вне обёртки IfModule mod_dir.c'
                 . ' — хостинг без модуля падает 500-м на неизвестной директиве';
         }
@@ -393,23 +450,78 @@ final class WebServerConfigTest extends TestCase
         return false;
     }
 
+    /**
+     * Имена из всех директив DirectoryIndex: `named` — что названо хоть раз, `effective` — что
+     * дошло до конца списка так, как его собирает mod_dir.
+     *
+     * Смысл нужен, а не форма одной строки: несколько директив одного контекста складываются в
+     * общий список, а ключевое слово `disabled` сбрасывает уже накопленное
+     * (https://httpd.apache.org/docs/2.4/mod/mod_dir.html#directoryindex). Значит директива
+     * `index.html` до нашей — не поломка (индекс по-прежнему находится), а `disabled` после неё —
+     * поломка, хотя наша строка на месте и первая.
+     *
+     * @return array{effective: list<string>, named: list<string>}
+     */
+    private function directoryIndexLists(string $config): array
+    {
+        $effective = [];
+        $named = [];
+
+        if (preg_match_all('/^[ \t]*DirectoryIndex[ \t]+([^\r\n]*)$/mi', $config, $matches) < 1) {
+            return ['effective' => $effective, 'named' => $named];
+        }
+
+        $bodies = $matches[1] ?? [];
+
+        if (! is_array($bodies)) {
+            return ['effective' => $effective, 'named' => $named];
+        }
+
+        foreach ($bodies as $body) {
+            if (! is_string($body)) {
+                continue;
+            }
+
+            $words = preg_split('/[ \t]+/', trim($body, " \t\r\n"), -1, PREG_SPLIT_NO_EMPTY);
+
+            if (! is_array($words)) {
+                continue;
+            }
+
+            foreach ($words as $word) {
+                if (strcasecmp($word, 'disabled') === 0) {
+                    $effective = [];
+
+                    continue;
+                }
+
+                $effective[] = $word;
+                $named[] = $word;
+            }
+        }
+
+        return ['effective' => $effective, 'named' => $named];
+    }
+
     // DirectoryIndex обязан стоять внутри обёртки mod_dir.c по той же причине, что и правила
     // mod_rewrite: на хостинге без модуля неизвестная директива обваливает весь сайт 500-м ещё на
     // разборе конфигурации. Обёртка ищется по тексту, а не по отступам, и ведёт себя как
     // hasRewriteOutsideWrapper: флаг «внутри» ставится только на открытии mod_dir.c и снимается
-    // любым закрывающим </IfModule>.
+    // любым закрывающим </IfModule>. Регистр тега и пробел перед «>» Apache допускает, поэтому
+    // образец читается без чувства регистра: иначе страж краснит живой конфиг и его начинают
+    // игнорировать.
     private function hasDirectoryIndexOutsideDirWrapper(string $config): bool
     {
         $inside = false;
 
         foreach (explode("\n", $config) as $line) {
-            if ($this->find($line, '/<IfModule\s+mod_dir\.c>/i') !== null) {
+            if ($this->find($line, '/<IfModule\s+mod_dir\.c\s*>/i') !== null) {
                 $inside = true;
 
                 continue;
             }
 
-            if ($this->find($line, '/<\/IfModule>/') !== null) {
+            if ($this->find($line, '/<\/IfModule>/i') !== null) {
                 $inside = false;
 
                 continue;
