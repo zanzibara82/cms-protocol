@@ -48,13 +48,14 @@ final class WebServerConfigTest extends TestCase
         );
     }
 
-    // Пустой конфиг обязан выдать все четыре находки: если проверка на пустом файле молчит,
+    // Пустой конфиг обязан выдать все пять находок: если проверка на пустом файле молчит,
     // она молчит и на испорченном, а зелёный результат ничего не значит.
     public function testПустойКонфигНеПроходитНиОднуПроверку(): void
     {
         self::assertSame(
             [
                 self::ROOT_CONFIG . ': нет Options -Indexes — содержимое каталогов отдаётся списком',
+                self::ROOT_CONFIG . ': нет DirectoryIndex index.php — запрос / отдаёт конфигурация хостинга, без директивы главная отвечает 403 или 404',
                 self::ROOT_CONFIG . ': замок установщика не переведён в 404 — его текст может уйти наружу',
                 self::ROOT_CONFIG . ': нет отказа с обёрткой mod_authz_core и запасной веткой — неизвестная директива роняет сайт 500-м',
                 self::ROOT_CONFIG . ': нет редиректа http на https — первый заход даёт сессию, в которую Secure-кука не ляжет',
@@ -75,6 +76,22 @@ final class WebServerConfigTest extends TestCase
             ['probe: нет Options -Indexes — содержимое каталогов отдаётся списком'],
             $this->violations($this->without($correct, "Options -Indexes\n"), 'probe'),
             'Отсутствующий Options -Indexes не найден'
+        );
+
+        self::assertSame(
+            ['probe: нет DirectoryIndex index.php — запрос / отдаёт конфигурация хостинга, без директивы главная отвечает 403 или 404'],
+            $this->violations($this->without($correct, "    DirectoryIndex index.php\n", "    DirectoryIndex index.html\n"), 'probe'),
+            'DirectoryIndex с чужим значением вместо index.php не найден'
+        );
+
+        self::assertSame(
+            ['probe: DirectoryIndex стоит вне обёртки IfModule mod_dir.c — хостинг без модуля падает 500-м на неизвестной директиве'],
+            $this->violations($this->without(
+                $correct,
+                "<IfModule mod_dir.c>\n    DirectoryIndex index.php\n</IfModule>\n",
+                "    DirectoryIndex index.php\n"
+            ), 'probe'),
+            'DirectoryIndex вне обёртки mod_dir.c пропущен'
         );
 
         self::assertSame(
@@ -207,6 +224,18 @@ final class WebServerConfigTest extends TestCase
 
         if (preg_match('/^\s*Options\b[^\n]*-Indexes/m', $config) !== 1) {
             $found[] = $relative . ': нет Options -Indexes — содержимое каталогов отдаётся списком';
+        }
+
+        $dirIndex = $this->line($config, '/^\s*DirectoryIndex\s+[^\n]*/mi');
+
+        if ($dirIndex === null || $this->find($dirIndex, '/\bindex\.php\b/') === null) {
+            $found[] = $relative . ': нет DirectoryIndex index.php — запрос / отдаёт конфигурация хостинга,'
+                . ' без директивы главная отвечает 403 или 404';
+        }
+
+        if ($dirIndex !== null && $this->hasDirectoryIndexOutsideDirWrapper($config)) {
+            $found[] = $relative . ': DirectoryIndex стоит вне обёртки IfModule mod_dir.c'
+                . ' — хостинг без модуля падает 500-м на неизвестной директиве';
         }
 
         if ($this->hasRewriteOutsideWrapper($config)) {
@@ -364,6 +393,36 @@ final class WebServerConfigTest extends TestCase
         return false;
     }
 
+    // DirectoryIndex обязан стоять внутри обёртки mod_dir.c по той же причине, что и правила
+    // mod_rewrite: на хостинге без модуля неизвестная директива обваливает весь сайт 500-м ещё на
+    // разборе конфигурации. Обёртка ищется по тексту, а не по отступам, и ведёт себя как
+    // hasRewriteOutsideWrapper: флаг «внутри» ставится только на открытии mod_dir.c и снимается
+    // любым закрывающим </IfModule>.
+    private function hasDirectoryIndexOutsideDirWrapper(string $config): bool
+    {
+        $inside = false;
+
+        foreach (explode("\n", $config) as $line) {
+            if ($this->find($line, '/<IfModule\s+mod_dir\.c>/i') !== null) {
+                $inside = true;
+
+                continue;
+            }
+
+            if ($this->find($line, '/<\/IfModule>/') !== null) {
+                $inside = false;
+
+                continue;
+            }
+
+            if ($this->find($line, '/^\s*DirectoryIndex\b/i') !== null && ! $inside) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Первая строка, подходящая под образец, или null, если такой нет.
      */
@@ -455,6 +514,9 @@ final class WebServerConfigTest extends TestCase
     {
         return <<<'HTACCESS'
 Options -Indexes
+<IfModule mod_dir.c>
+    DirectoryIndex index.php
+</IfModule>
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteRule ^install\.lock$ - [R=404,L,NC]
