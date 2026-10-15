@@ -90,10 +90,19 @@ final class SqlSafetyTest extends TestCase
     private function schemaSqlFiles(): array
     {
         $root = dirname(__DIR__, 2);
-        $out = glob($root . '/sql/*.sql') ?: [];
-        foreach (glob($root . '/tests/fixtures/apps/*/sql/*.sql') ?: [] as $file) {
-            $out[] = $file;
+        $out = [];
+
+        // Каждый узор обязан отдать хотя бы один файл: пустой список означает, что каталог
+        // миграций исчез, и без этой строки страж схемы проверял бы ноль файлов молча.
+        // Число файлов не закрепляется — его прибавляет каждый релиз схемы.
+        foreach (['sql/*.sql', 'tests/fixtures/apps/*/sql/*.sql'] as $pattern) {
+            $found = glob($root . '/' . $pattern) ?: [];
+            self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного SQL-файла — каталог миграций исчез');
+            foreach ($found as $file) {
+                $out[] = $file;
+            }
         }
+
         sort($out);
 
         return $out;
@@ -203,10 +212,18 @@ final class SqlSafetyTest extends TestCase
     private function sqlFiles(): array
     {
         $root = dirname(__DIR__, 2);
-        $out = glob($root . '/sql/*.sql') ?: [];
-        foreach (glob($root . '/apps/*/sql/*.sql') ?: [] as $file) {
-            $out[] = $file;
+        $out = [];
+
+        // Тот же порог, что и у `schemaSqlFiles()`: обход по списку узоров, и каждый узор обязан
+        // отдать файл. Пустой ответ glob — исчезнувший каталог миграций, а не «нечего проверять».
+        foreach (['sql/*.sql', 'apps/*/sql/*.sql'] as $pattern) {
+            $found = glob($root . '/' . $pattern) ?: [];
+            self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного SQL-файла — каталог миграций исчез');
+            foreach ($found as $file) {
+                $out[] = $file;
+            }
         }
+
         sort($out);
 
         return $out;
@@ -221,15 +238,24 @@ final class SqlSafetyTest extends TestCase
         $root = dirname(__DIR__, 2);
         $out = [];
         foreach ($dirs as $dir) {
-            if (!is_dir($root . '/' . $dir)) {
-                continue;
-            }
+            self::assertDirectoryExists(
+                $root . '/' . $dir,
+                $dir . ': каталог исчез из дерева — страж проверял бы меньше, чем требует правило'
+            );
+
+            $found = [];
             $items = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root . '/' . $dir));
             foreach ($items as $item) {
                 if ($item->isFile() && $item->getExtension() === $extension) {
-                    $out[] = $item->getPathname();
+                    $found[] = $item->getPathname();
                 }
             }
+
+            self::assertNotEmpty(
+                $found,
+                $dir . ': каталог не отдал ни одного файла с расширением ' . $extension . ' — проверять нечего'
+            );
+            $out = array_merge($out, $found);
         }
         sort($out);
 

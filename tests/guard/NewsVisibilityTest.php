@@ -364,21 +364,28 @@ final class NewsVisibilityTest extends TestCase
         $out = [];
 
         foreach ([$root . '/apps/news/lib', $root . '/apps/news/actions', $root . '/apps/news/templates'] as $dir) {
-            if (!is_dir($dir)) {
-                continue;
-            }
+            self::assertDirectoryExists(
+                $dir,
+                $dir . ': каталог исходников раздела исчез из дерева — страж видимости проверял бы меньше, чем требует правило'
+            );
 
+            $found = [];
             foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir)) as $item) {
                 if ($item->isFile() && $item->getExtension() === 'php') {
-                    $out[] = $item->getPathname();
+                    $found[] = $item->getPathname();
                 }
             }
+
+            self::assertNotEmpty($found, $dir . ': каталог не отдал ни одного PHP-файла — проверять нечего');
+            $out = array_merge($out, $found);
         }
 
         foreach ([$root . '/apps/news/admin.php', $root . '/apps/news/routes.php'] as $file) {
-            if (is_file($file)) {
-                $out[] = $file;
-            }
+            self::assertFileExists(
+                $file,
+                $file . ': файл раздела исчез из дерева — страж видимости не увидел бы эту точку выдачи'
+            );
+            $out[] = $file;
         }
 
         sort($out);

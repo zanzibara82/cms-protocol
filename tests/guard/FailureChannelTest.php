@@ -75,16 +75,21 @@ final class FailureChannelTest extends TestCase
         $out = [];
 
         foreach (self::ROOTS as $dir) {
-            if (!is_dir($root . '/' . $dir)) {
-                continue;
-            }
+            self::assertDirectoryExists(
+                $root . '/' . $dir,
+                $dir . ': корень кода исчез из дерева — страж канала отказа проверял бы меньше, чем требует правило'
+            );
 
+            $found = [];
             $items = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root . '/' . $dir));
             foreach ($items as $item) {
                 if ($item instanceof \SplFileInfo && $item->getExtension() === 'php') {
-                    $out[] = $item->getPathname();
+                    $found[] = $item->getPathname();
                 }
             }
+
+            self::assertNotEmpty($found, $dir . ': корень не отдал ни одного PHP-файла — проверять нечего');
+            $out = array_merge($out, $found);
         }
 
         sort($out);

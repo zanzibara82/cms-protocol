@@ -97,15 +97,21 @@ final class OutputEscapingTest extends TestCase
         $root = dirname(__DIR__, 2);
         $out = [];
         foreach (['theme', 'admin', 'apps', 'core/templates'] as $dir) {
-            if (!is_dir($root . '/' . $dir)) {
-                continue;
-            }
+            self::assertDirectoryExists(
+                $root . '/' . $dir,
+                $dir . ': каталог разметки исчез из дерева — страж экранирования проверял бы меньше, чем требует правило'
+            );
+
+            $found = [];
             $items = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root . '/' . $dir));
             foreach ($items as $item) {
                 if ($item->isFile() && $item->getExtension() === 'php') {
-                    $out[] = $item->getPathname();
+                    $found[] = $item->getPathname();
                 }
             }
+
+            self::assertNotEmpty($found, $dir . ': каталог не отдал ни одного PHP-файла — проверять нечего');
+            $out = array_merge($out, $found);
         }
         sort($out);
 

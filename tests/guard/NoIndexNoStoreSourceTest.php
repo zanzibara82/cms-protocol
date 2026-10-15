@@ -279,10 +279,24 @@ final class NoIndexNoStoreSourceTest extends TestCase
     private function autonomousTemplates(): array
     {
         $root = dirname(__DIR__, 2);
-        $files = glob($root . '/theme/*.php') ?: [];
-        $files = array_merge($files, glob($root . '/core/templates/*.php') ?: []);
+        $files = [];
 
-        foreach (glob($root . '/apps/*/templates', GLOB_ONLYDIR) ?: [] as $templatesDir) {
+        // Каждый узор обязан отдать хотя бы один файл: пустой ответ glob означает исчезнувший
+        // каталог шаблонов, и без порога страж проверял бы пустой список молча.
+        foreach (['theme/*.php', 'core/templates/*.php'] as $pattern) {
+            $found = glob($root . '/' . $pattern) ?: [];
+            self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного PHP-файла — каталог шаблонов исчез');
+            foreach ($found as $file) {
+                $files[] = $file;
+            }
+        }
+
+        // Приложений в дереве может стать больше — число каталогов не закрепляется, но ноль
+        // означает, что папка шаблонов приложений уехала, и это падение, а не «нечего проверять».
+        $templatesDirs = glob($root . '/apps/*/templates', GLOB_ONLYDIR) ?: [];
+        self::assertNotEmpty($templatesDirs, 'Обход apps/*/templates не отдал ни одного каталога — шаблоны приложений исчезли');
+
+        foreach ($templatesDirs as $templatesDir) {
             foreach ($this->phpFiles($templatesDir) as $file) {
                 $files[] = $file;
             }
@@ -333,9 +347,10 @@ final class NoIndexNoStoreSourceTest extends TestCase
      */
     private function phpFiles(string $dir): array
     {
-        if (!is_dir($dir)) {
-            return [];
-        }
+        self::assertDirectoryExists(
+            $dir,
+            $dir . ': каталог исчез из дерева — страж автономных экранов проверял бы меньше, чем требует правило'
+        );
 
         $out = [];
         foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir)) as $item) {
@@ -343,6 +358,8 @@ final class NoIndexNoStoreSourceTest extends TestCase
                 $out[] = $item->getPathname();
             }
         }
+
+        self::assertNotEmpty($out, $dir . ': каталог не отдал ни одного PHP-файла — проверять нечего');
 
         sort($out);
 

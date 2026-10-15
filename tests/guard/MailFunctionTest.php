@@ -157,20 +157,25 @@ final class MailFunctionTest extends TestCase
         foreach ($roots as $dir) {
             $base = $root . '/' . $dir;
 
-            if (!is_dir($base)) {
-                continue;
-            }
+            self::assertDirectoryExists(
+                $base,
+                $dir . ': корень кода исчез из дерева — почтовый страж проверял бы меньше, чем требует правило'
+            );
 
             // glob($base.'/**/*.php') не годится: `**` в glob() не рекурсивен, он равен одному
             // уровню каталога, — файлы прямо в корне и вложенные на два уровня молча
             // выпадали бы из проверки. Обход реальный, как в остальных стражах.
+            $found = [];
             $items = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($base));
 
             foreach ($items as $item) {
                 if ($item->isFile() && $item->getExtension() === 'php') {
-                    $files[] = $item->getPathname();
+                    $found[] = $item->getPathname();
                 }
             }
+
+            self::assertNotEmpty($found, $dir . ': корень не отдал ни одного PHP-файла — проверять нечего');
+            $files = array_merge($files, $found);
         }
 
         sort($files);

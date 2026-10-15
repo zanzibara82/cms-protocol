@@ -126,10 +126,17 @@ final class AppSqlTest extends TestCase
     private function sqlFiles(): array
     {
         $root = dirname(__DIR__, 2);
-        $files = glob($root . '/sql/*.sql') ?: [];
+        $files = [];
 
-        foreach (glob($root . '/apps/*/sql/*.sql') ?: [] as $file) {
-            $files[] = $file;
+        // Каждый узор обязан отдать хотя бы один файл: пустой список миграций означает, что
+        // каталог уехал, и страж без этой строки проверял бы ноль файлов молча. Число файлов
+        // не закрепляется — его прибавляет каждый релиз схемы.
+        foreach (['sql/*.sql', 'apps/*/sql/*.sql'] as $pattern) {
+            $found = glob($root . '/' . $pattern) ?: [];
+            self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного SQL-файла — каталог миграций исчез');
+            foreach ($found as $file) {
+                $files[] = $file;
+            }
         }
 
         sort($files);
@@ -140,7 +147,18 @@ final class AppSqlTest extends TestCase
     /** @return list<string> */
     private function appSqlFiles(): array
     {
-        $files = glob(dirname(__DIR__, 2) . '/apps/*/sql/*.sql') ?: [];
+        $root = dirname(__DIR__, 2);
+        $files = [];
+
+        // Обход идёт списком узоров, и порог непустоты живёт в теле цикла: пустой ответ glob
+        // означает исчезнувший каталог миграций раздела, а не «проверять нечего».
+        foreach (['apps/*/sql/*.sql'] as $pattern) {
+            $found = glob($root . '/' . $pattern) ?: [];
+            self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного SQL-файла — каталог миграций исчез');
+            foreach ($found as $file) {
+                $files[] = $file;
+            }
+        }
 
         sort($files);
 
