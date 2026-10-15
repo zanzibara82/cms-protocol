@@ -102,16 +102,18 @@ final class NewsPublishRulesTest extends TestCase
     {
         $now = new DateTimeImmutable(self::NOW);
 
+        // После каждого `LIKE ?` идёт знак снятия — ровно один обратный слэш, переданный параметром,
+        // поэтому аргументов стало шесть вместо трёх, а сравнение остаётся точным.
         $escaped = adminWhere(parseAdminFilters(['q' => '100%_']), $now);
-        self::assertSame(['%100\\%\\_%', '%100\\%\\_%', '%100\\%\\_%'], $escaped['args']);
+        self::assertSame(['%100\\%\\_%', '\\', '%100\\%\\_%', '\\', '%100\\%\\_%', '\\'], $escaped['args']);
 
         $scope = adminWhere(parseAdminFilters(['cat' => 'id-1', 'q' => 'вечер']), $now);
         // Единица появляется только когда условия нет вовсе (общая вкладка): здесь они есть.
         self::assertSame(
-            'i.category_id = ? AND (i.title LIKE ? OR i.lead_text LIKE ? OR i.slug LIKE ?)',
+            'i.category_id = ? AND (i.title LIKE ? ESCAPE ? OR i.lead_text LIKE ? ESCAPE ? OR i.slug LIKE ? ESCAPE ?)',
             $scope['where']
         );
-        self::assertSame(['id-1', '%вечер%', '%вечер%', '%вечер%'], $scope['args']);
+        self::assertSame(['id-1', '%вечер%', '\\', '%вечер%', '\\', '%вечер%', '\\'], $scope['args']);
     }
 
     public function testСрокПубликацииПодставляетсяПриВыпуске(): void

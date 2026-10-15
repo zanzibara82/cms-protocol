@@ -150,10 +150,17 @@ function adminWhere(array $filters, DateTimeImmutable $now): array
 
     if ($query !== '') {
         $like = '%' . escapeLike($query) . '%';
-        $parts[] = '(i.title LIKE ? OR i.lead_text LIKE ? OR i.slug LIKE ?)';
+        // Знак снятия объявляем явно и передаём его связываемым параметром: литерал обратного
+        // слэша в тексте SQL живёт только в одном режиме (`ESCAPE '\\'` ломается при
+        // `NO_BACKSLASH_ESCAPES`, `ESCAPE '\'` — в режиме по умолчанию), а бинд даёт ровно один
+        // слэш в обоих. Без объявления поиск по «100%» при этом режиме ищет уже не то.
+        $parts[] = '(i.title LIKE ? ESCAPE ? OR i.lead_text LIKE ? ESCAPE ? OR i.slug LIKE ? ESCAPE ?)';
         $args[] = $like;
+        $args[] = '\\';
         $args[] = $like;
+        $args[] = '\\';
         $args[] = $like;
+        $args[] = '\\';
     }
 
     // Пустое условие — единица: `WHERE 1` читается как «все строки», а без него каждому вызову

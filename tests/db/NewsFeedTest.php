@@ -74,6 +74,40 @@ final class NewsFeedTest extends NewsDbTestCase
         self::assertSame('100%', findFeed(['q' => '100%'])['q']);
     }
 
+    // Запрос поиска объявляет `ESCAPE` явно и передаёт знак снятия параметром. Без объявления
+    // снятие обратным слэшем работает, пока в режиме СУБД нет `NO_BACKSLASH_ESCAPES`; при этом
+    // режиме слэш перестаёт быть снимающим и поиск по «100%» начинает искать уже не то.
+    // Проверка идёт на обоих путях поиска: лента (`findFeed` → `feed.php`) и редакторский список
+    // (`adminItemPage` → `items.php`), поэтому снятие `ESCAPE` в любом из них краснит тест.
+    public function testПоискПроцентаНеЛомаетсяПриNoBackslashEscapes(): void
+    {
+        $this->published('garantii-100', ['title' => '100% гарантии']);
+        $this->published('sto-procentov', ['title' => '100 процентов']);
+
+        run("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_BACKSLASH_ESCAPES')");
+
+        try {
+            self::assertStringContainsString(
+                'NO_BACKSLASH_ESCAPES',
+                (string) value('SELECT @@sql_mode'),
+                'Замер пошёл не в том режиме: без NO_BACKSLASH_ESCAPES проверка ничего не доказывает'
+            );
+
+            self::assertSame(
+                ['garantii-100'],
+                $this->feedSlugs(findFeed(['q' => '100%'])),
+                'Лента при NO_BACKSLASH_ESCAPES нашла не тот материал: поиск без явного ESCAPE'
+            );
+            self::assertSame(
+                ['garantii-100'],
+                $this->slugs(adminItemPage(['query' => '100%'], nowUtc())['items']),
+                'Список редактора при NO_BACKSLASH_ESCAPES нашёл не тот материал: поиск без явного ESCAPE'
+            );
+        } finally {
+            run("SET SESSION sql_mode = REPLACE(REPLACE(@@sql_mode, ',NO_BACKSLASH_ESCAPES', ''), 'NO_BACKSLASH_ESCAPES,', '')");
+        }
+    }
+
     public function testРубрикаФильтруетЛенту(): void
     {
         $this->published('zhizn-shkoly-material');

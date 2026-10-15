@@ -162,6 +162,41 @@ final class SqlSafetyTest extends TestCase
         return $this->files(['core', 'admin', 'theme', 'apps', 'public'], 'php');
     }
 
+    // F(М7-1б): каждое `LIKE ?` в разделе «Новости» обязано объявлять знак снятия `ESCAPE`.
+    // `escapeLike()` готовит значение под обратный слэш, и без явного `ESCAPE` снятие живёт
+    // только пока в режиме СУБД нет `NO_BACKSLASH_ESCAPES` — при этом режиме слэш становится
+    // обычным символом шаблона, и поиск по «100%» начинает искать уже не то. Страж ловит
+    // написание нового запроса без `ESCAPE` до коммита: паттерн находит `LIKE ?`, за которым
+    // не идёт `ESCAPE` (отрицательное опережение), поэтому корректная строка
+    // `LIKE ? ESCAPE ?` не считается нарушением.
+    public function testКаждыйLikeВРазделеНовостиОбъявляетEscape(): void
+    {
+        $violations = [];
+
+        foreach ($this->newsLibFiles() as $file) {
+            $code = $this->withoutComments((string) file_get_contents($file));
+            if (preg_match_all('/LIKE\s+\?(?!\s+ESCAPE)/i', $code) > 0) {
+                $violations[] = $this->relative($file) . ': LIKE ? без объявления ESCAPE';
+            }
+        }
+
+        self::assertSame(
+            [],
+            $violations,
+            'Каждый LIKE ? в apps/news/lib обязан объявлять ESCAPE — иначе снятие обратным слэшем живёт только при отсутствии NO_BACKSLASH_ESCAPES'
+        );
+    }
+
+    /** @return list<string> */
+    private function newsLibFiles(): array
+    {
+        $root = dirname(__DIR__, 2);
+        $out = glob($root . '/apps/news/lib/*.php') ?: [];
+        sort($out);
+
+        return $out;
+    }
+
     /** @return list<string> */
     private function sqlFiles(): array
     {
