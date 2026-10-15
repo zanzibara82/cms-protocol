@@ -166,16 +166,19 @@ final class SqlSafetyTest extends TestCase
     // `escapeLike()` готовит значение под обратный слэш, и без явного `ESCAPE` снятие живёт
     // только пока в режиме СУБД нет `NO_BACKSLASH_ESCAPES` — при этом режиме слэш становится
     // обычным символом шаблона, и поиск по «100%» начинает искать уже не то. Страж ловит
-    // написание нового запроса без `ESCAPE` до коммита: паттерн находит `LIKE ?`, за которым
-    // не идёт `ESCAPE` (отрицательное опережение), поэтому корректная строка
-    // `LIKE ? ESCAPE ?` не считается нарушением.
+    // написание нового запроса без `ESCAPE` до коммита: паттерн находит `LIKE` с плейсхолдером,
+    // за которым не идёт `ESCAPE` (отрицательное опережение), поэтому корректная строка
+    // `LIKE ? ESCAPE ?` не считается нарушением. Пробел перед плейсхолдером необязателен
+    // (`\s*` в обеих частях узора): `LIKE?` — валидный MySQL по образцу `id=?`, и с узором
+    // `\s+` такой запрос проходил ворота, нарушая инвариант. Обход каталога рекурсивный, поэтому
+    // нарушение во вложенном подкаталоге `apps/news/lib` тоже попадается.
     public function testКаждыйLikeВРазделеНовостиОбъявляетEscape(): void
     {
         $violations = [];
 
         foreach ($this->newsLibFiles() as $file) {
             $code = $this->withoutComments((string) file_get_contents($file));
-            if (preg_match_all('/LIKE\s+\?(?!\s+ESCAPE)/i', $code) > 0) {
+            if (preg_match_all('/LIKE\s*\?(?!\s*ESCAPE)/i', $code) > 0) {
                 $violations[] = $this->relative($file) . ': LIKE ? без объявления ESCAPE';
             }
         }
@@ -190,11 +193,10 @@ final class SqlSafetyTest extends TestCase
     /** @return list<string> */
     private function newsLibFiles(): array
     {
-        $root = dirname(__DIR__, 2);
-        $out = glob($root . '/apps/news/lib/*.php') ?: [];
-        sort($out);
-
-        return $out;
+        // Рекурсивный обход (`files()`), а не плоский `glob`: иначе файл во вложенном подкаталоге
+        // `apps/news/lib` вовсе не попадал в область проверки, и инвариант можно было нарушить
+        // в новом каталоге, оставив ворота зелёными.
+        return $this->files(['apps/news/lib'], 'php');
     }
 
     /** @return list<string> */
