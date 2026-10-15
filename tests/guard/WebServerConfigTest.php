@@ -261,6 +261,18 @@ final class WebServerConfigTest extends TestCase
         );
     }
 
+    // Apache принимает и LF, и CRLF, а `.gitattributes` гарантирует LF только на обычном пути:
+    // редактор или оператор может положить CRLF-версию файла в дерево руками, и именно тогда
+    // страж нужен больше всего. Проверка идёт по всему набору читателей, а не по одной директиве:
+    // только так видно, что барьер целиком не зависит от переноса строк.
+    public function testОбразецСПереносомСтрокиCrlfПроходитВсеПроверки(): void
+    {
+        $crlf = str_replace("\n", "\r\n", $this->correctSample());
+
+        self::assertSame([], $this->violations($crlf, 'probe'), 'Корректный образец с CRLF дал находки');
+        self::assertSame([], $this->uploadsViolations($crlf, 'probe'), 'Корректный образец с CRLF дал находки в проверке каталога загрузок');
+    }
+
     /**
      * Находки в тексте конфигурации: каждый барьер — отдельной проверкой.
      *
@@ -268,6 +280,13 @@ final class WebServerConfigTest extends TestCase
      */
     private function violations(string $config, string $relative): array
     {
+        // Читатели заякорены на конце строки, а PCRE без модификатора `D` не ставит `$` перед
+        // CRLF: нормализуем перенос один раз на входе, и весь набор проверок видит LF. `offset()`
+        // сравнивает только относительный порядок двух правил в одном и том же тексте, номера
+        // строк и позиции в сообщениях не выдаются; `withoutForwardedHeaders()` ищет подстроки
+        // ключей, которые через перенос не пишутся. Смысл обоих после нормализации не меняется.
+        $config = str_replace("\r\n", "\n", $config);
+
         $found = [];
 
         if (preg_match('/^\s*Options\b[^\n]*-Indexes/m', $config) !== 1) {
@@ -621,7 +640,8 @@ final class WebServerConfigTest extends TestCase
 
     // Корректный образец: тот же набор барьеров, что предписан корневому файлу, но в изолированном
     // тексте. Нужен, чтобы каждая мутация красила ровно одну проверку, а не ноль из-за того,
-    // что образец сам по себе неверен.
+    // что образец сам по себе неверен. В конце стоит блок отказа для php-расширений из каталога
+    // загрузок: образец обязан проходить весь набор проверок стража, а не только корневую его часть.
     private function correctSample(): string
     {
         return <<<'HTACCESS'
@@ -643,6 +663,15 @@ Options -Indexes
     RewriteRule ^ index.php [L]
 </IfModule>
 <FilesMatch "(?i)^install\.lock$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phar)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
