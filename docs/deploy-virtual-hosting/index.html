@@ -660,8 +660,8 @@ ls -l config.sample.php</code></pre>
       </ol>
 
       <h3>Параметры исходящего SMTP (сопоставление с нашим конфигом)</h3>
-      <p>Адрес сервера исходящей почты, логин ящика и допустимые порты даёт ваш хостер — возьмите их из его
-      документации или письма о создании ящика. Обычно логин для SMTP — полный адрес ящика. Переносим это в
+      <p>Адрес сервера исходящей почты, логин ящика и допустимые порты даёт ваш хостер — возьмите их из
+      документации хостера или письма о создании ящика. Обычно логин для SMTP — полный адрес ящика. Переносим это в
       <code>config.php</code> (плейсхолдер <code>&lt;smtp.вашего-хостера&gt;</code> заменяется на реальный адрес):</p>
       <ul>
         <li><code>SMTP_HOST</code> = <code>&lt;smtp.вашего-хостера&gt;</code>;</li>
@@ -837,8 +837,8 @@ ls -l config.sample.php</code></pre>
       <li><code>public/</code> целиком: <code>index.php</code>, <code>setup.php</code>, <code>.htaccess</code>,
       <code>assets/app.css</code>, <code>uploads/</code>,</li>
       <li>корневой <code>.htaccess</code> — он обязателен при запасной раскладке (шаг 9), и его передаёт
-      <code>scripts/deploy.sh</code>: в списке исключений этого файла нет (из скрытых там только
-      <code>/.gitignore</code> и <code>/.superpowers/</code>),</li>
+      <code>scripts/deploy.sh</code>: в списке исключений этого файла нет (из скрытого там <code>/.git/</code>,
+      <code>/.gitignore</code>, <code>/.superpowers/</code> и три файла инструментов; весь перечень — шаг 8),</li>
       <li>образец <code>config.sample.php</code> (из него установщик берёт значения по умолчанию),</li>
       <li><code>.gitattributes</code> — не обязателен на проде, но безвреден.</li>
     </ul>
