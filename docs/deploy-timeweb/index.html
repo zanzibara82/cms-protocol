@@ -130,9 +130,12 @@
       <code>public/index.php</code>, одноразовый установщик <code>public/setup.php</code>, файл
       <code>public/.htaccess</code>, стили <code>public/assets/</code> и каталог загрузок <code>public/uploads/</code>.</li>
       <li><strong>Боевой конфиг — файл <code>config.php</code> в корне проекта</strong> (права 600, в git не попадает).
-      Образец настроек — <code>config.sample.php</code>.</li>
-      <li><strong>Установщик <code>public/setup.php</code></strong> сам проверяет расширения и версию PHP, создаёт
-      администратора и ставит замок <code>public/install.lock</code>, после чего отдаёт 404.</li>
+      Его записывает первый экран установщика, руками готовить файл не нужно. Образец значений по умолчанию —
+      <code>config.sample.php</code>.</li>
+      <li><strong>Установщик <code>public/setup.php</code></strong> идёт двумя экранами: первый пишет
+      <code>config.php</code>, второй проверяет расширения и версию PHP, создаёт администратора и ставит замок
+      <code>public/install.lock</code>, после чего и <code>setup.php</code>, и <code>setup.php?step=admin</code>
+      отдают 404.</li>
       <li><strong>Почта — собственный SMTP-клиент ядра</strong> (<code>core/SmtpSocket.php</code>): порт 465 идёт через
       <code>ssl://</code>, порт 587 требует обязательного STARTTLS, пароли в журнал не пишутся. Функцию <code>mail()</code>
       мы не используем.</li>
@@ -140,12 +143,16 @@
       Node, Tailwind и <code>node_modules/</code> на хостинге не нужны.</li>
     </ul>
     <div class="todo">
-      <strong>Честная пометка о готовности.</strong> В репозитории уже есть ядро, установщик, экран «Приложения», маршруты
-      <code>/robots.txt</code> и <code>/sitemap.xml</code>. Но раздел «Новости» достраивается в задачах 13–20 плана,
-      а вся выкладочная автоматизация — <code>scripts/deploy.sh</code>, зонд <code>scripts/hosting-probe.php</code>,
-      корневой <code>.htaccess</code> запасной раскладки и <code>docs/deploy-checklist.md</code> — появляется только
-      <strong>в задаче 21</strong>. Ниже такие файлы помечены фразой «появится в задаче 21». Сейчас их в репозитории нет,
-      и вручную воссоздавать их до закрытия задачи не следует.
+      <strong>Честная пометка о готовности.</strong> Ядро, установщик, экран «Приложения», маршруты
+      <code>/robots.txt</code> и <code>/sitemap.xml</code> и раздел «Новости» готовы. Выкладочная автоматизация тоже
+      лежит в репозитории: корневой <code>.htaccess</code> запасной раскладки, <code>public/.htaccess</code> и
+      <code>public/uploads/.htaccess</code>, <code>scripts/deploy.sh</code>, зонд
+      <code>scripts/hosting-probe.php</code>, <code>scripts/responsive-check.mjs</code>, чек-лист
+      <code>docs/deploy-checklist.md</code> и их стражи <code>tests/guard/DeploySafetyTest.php</code> и
+      <code>tests/guard/WebServerConfigTest.php</code>. Открытым остаётся другое: два пункта приёмки — работоспособность
+      форм без JavaScript и проверка против настоящего SMTP-сервера хостинга — локально не проверяются вовсе. В
+      <code>docs/deploy-checklist.md</code> они помечены явно и закрытыми считаются только после прогона на боевом
+      хостинге.
     </div>
   </section>
 
@@ -293,7 +300,8 @@
         <li><strong>Запасной путь (основной для TimeWeb):</strong> залить всю структуру проекта в директорию сайта и
         закрыть служебное корневым файлом <code>.htaccess</code>, который редиректит запросы внутрь <code>public/</code>.
         Именно этот вариант в плане проекта называется <em>режим <code>root</code></em>, а соответствующий корневой
-        <code>.htaccess</code> <strong>появится в задаче 21</strong>.</li>
+        <code>.htaccess</code> лежит в репозитории: шаг 9 перечисляет его правила, а порядок блокировки и тормоз
+        повторного прохода проверяет <code>tests/guard/DeploySafetyTest.php</code>.</li>
       </ul>
       <div class="note"><strong>Риск запасной раскладки.</strong> Когда вся структура лежит в веб-зоне, боевой
       <code>config.php</code> оказывается внутри доступного из интернета каталога. Поэтому корневой <code>.htaccess</code>
@@ -464,11 +472,19 @@ php_value post_max_size 12M</code></pre>
       Подробный список «что можно и что нельзя» — в разделе <a href="#load-skip">«Что загрузить и что не загрузить»</a>.</p>
       <p>Два способа выкладки:</p>
       <ol>
-        <li><strong>Через скрипт выкладки (<code>scripts/deploy.sh</code> — появится в задаче 21).</strong> Один
+        <li><strong>Через скрипт выкладки <code>scripts/deploy.sh</code>.</strong> Один
         <code>rsync</code> по SSH переносит нужные файлы, исключая <code>vendor/</code>, <code>node_modules/</code>,
-        <code>tests/</code>, <code>docs/</code>, служебные файлы инструментов и боевой <code>config.php</code>.
-        Скрипт берёт адрес, логин и путь из переменных окружения и никогда не стирает на сервере <code>config.php</code>,
-        замок установщика и каталог загрузок. Сейчас файла нет — не выдумывайте его поведение, дожидайтесь задачу 21.</li>
+        <code>tests/</code>, <code>docs/</code>, <code>docker/</code>, <code>scripts/</code>, <code>src-css/</code>,
+        служебные файлы инструментов (<code>composer.json</code> и <code>composer.lock</code>,
+        <code>package.json</code> и <code>package-lock.json</code>, <code>tailwind.config.js</code>,
+        <code>postcss.config.js</code>, <code>phpstan.neon</code>, <code>phpunit.xml</code>,
+        <code>.php-cs-fixer.dist.php</code> с кэшем), <code>.git/</code>, <code>.gitignore</code> и
+        <code>.superpowers/</code>. Скрипт берёт адрес, логин и путь из переменных окружения и никогда не стирает
+        на сервере <code>config.php</code>, замок установщика, каталог загрузок и журнал: все четыре пути стоят в
+        исключениях <code>rsync</code>, и за их наличие следит <code>tests/guard/DeploySafetyTest.php</code>.
+        Относительный <code>CMS_DEPLOY_PATH</code> скрипт отвергает до первой передачи — с ним <code>--delete</code>
+        уехал бы чистить соседнее дерево. После заливки тот же скрипт проверяет раскладку, если задан
+        <code>CMS_DEPLOY_URL</code>.</li>
         <li><strong>Через архив + файловый менеджер (руками, доступно уже сегодня).</strong> Локально упакуйте нужные
         каталоги в <code>.zip</code> (не включая исключения из списка ниже), загрузите архив в директорию сайта и
         распакуйте его в файловом менеджере командой «Разархивировать». <code>config.php</code> при этом в архив
@@ -506,15 +522,23 @@ php_value post_max_size 12M</code></pre>
         <li>и только после блокировки переписывает существующие файлы/каталоги внутрь <code>public/</code>, а остальное —
         в <code>public/index.php</code> (с обязательным тормозом повторного прохода, чтобы стили не подменились разметкой).</li>
       </ul>
-      <div class="todo"><strong>Файл появится в задаче 21.</strong> Корневой <code>.htaccess</code> с этими правилами
-      — часть задачи 21 и его набора тестов <code>tests/guard/DeploySafetyTest.php</code>. В репозитории его сейчас нет.
-      Не пишите правила наугад: в плане зафиксированы тонкости (блокировка до переписывания, <code>RewriteBase /</code>,
-      условие <code>RewriteCond $1 !^public/</code> как тормоз второго прохода), без которых раскладка либо отдаёт
-      исходники, либо ломает стили и выдаёт 500. До закрытия задачи 21 временно не делайте сайт публичным.</div>
+      <div class="note"><strong>Файл лежит в репозитории, правила писать не нужно.</strong> Корневой
+      <code>.htaccess</code> с этими правилами существует, и его проверяет страж
+      <code>tests/guard/DeploySafetyTest.php</code>: блокировка служебного обязана идти до переписывания, правило
+      <code>RewriteBase /</code> и тормоз повторного прохода <code>RewriteCond $1 !^public/</code> тоже обязательны.
+      Закрытию подлежат каталоги <code>admin</code>, <code>apps</code>, <code>core</code>, <code>docker</code>,
+      <code>scripts</code>, <code>sql</code>, <code>tests</code>, <code>docs</code>, <code>theme</code>,
+      <code>vendor</code>, <code>node_modules</code>, файлы <code>config.php</code> и <code>config.sample.php</code>,
+      файлы сборки (<code>composer.json</code>, <code>composer.lock</code>, <code>package.json</code>,
+      <code>package-lock.json</code>, <code>phpunit.xml</code>, <code>phpstan.neon</code>) и скрытые каталоги
+      <code>.git</code>, <code>.env</code>, <code>.superpowers</code>. Менять эти правила можно только вместе с
+      тестом: без тормоза второго прохода стилевому запросу вместо выдачи достаётся разметка, а без порядка правил —
+      исходники ядра наружу.</div>
       <p>Существующий <code>public/.htaccess</code> в запасной раскладке работает без изменений: Apache применяет его
       правила к каталогу <code>public/</code> — в нём уже стоят front-controller, <code>Options -Indexes</code>,
-      правила к замку <code>install.lock</code> (404 через rewrite и 403 через <code>FilesMatch</code>) и заголовки
-      безопасности.</p>
+      директива <code>DirectoryIndex index.php</code> в обёртке <code>mod_dir.c</code> (без неё запрос «/» отдаёт
+      конфигурация хостинга, и главная отвечает 403 или 404), правила к замку <code>install.lock</code>
+      (404 через rewrite и 403 через <code>FilesMatch</code>) и заголовки безопасности.</p>
 
       <h3>Что делает наш редирект http→https внутри <code>public/.htaccess</code></h3>
       <p>Наш файл сам переводит http на https кодом <strong>302</strong> (временный редирект), а не 301: постоянный
@@ -693,12 +717,17 @@ ls -l config.sample.php</code></pre>
       <p>Прежде чем запускать установщик, удобно одним запросом проверить, что хостинг соответствует требованиям
       проекта: версия PHP ≥ 8.1, шесть нужных расширений, лимиты загрузки, живой <code>stream_socket_client</code>,
       доступный каталог сессий, открытый почтовый порт и указание документ-корня.</p>
-      <div class="todo"><strong>Зонд <code>scripts/hosting-probe.php</code> появится в задаче 21.</strong> Это
+      <div class="note"><strong>Зонд <code>scripts/hosting-probe.php</code> лежит в репозитории.</strong> Это
       одноразовый скрипт: копия с секретным ключом кладётся в <code>public/</code> под именем <code>probe.php</code>,
       отвечает на <code>/probe.php?k=…&amp;smtp=хост&amp;port=587</code> и после ответа удаляет себя. В репозитории ключ
-      пустой, а сам зонд не читает боевой <code>config.php</code> и не отдаёт дамп всех настроек. Сейчас файла нет —
-      не выкладывайте «похожий» зонд вручную. Вместо него временно проверяйте факты руками: версию PHP в шаге 5,
-      лимиты в шаге 6, расширения — на экране установщика (шаг 14), а почтовый порт — разделом «Проверка исходящих портов».</div>
+      пустой (<code>$probeKey = '';</code>), поэтому скачанный оттуда зонд отвечает 403 на любой запрос — значение
+      вписывают в копию перед загрузкой, чтобы секрет не попал в git. Второй источник ключа — переменная окружения
+      хостинга <code>CMS_PROBE_KEY</code>: непустое значение перекрывает вписанное в файл, и об этом надо знать до
+      пробега (случайно оставленная переменная даёт 403 при формально верном ключе). Зонд не читает боевой
+      <code>config.php</code> и не отдаёт дамп всех настроек. Полная команда подстановки ключа, загрузки и проверки
+      ответа — шаг 1 <code>docs/deploy-checklist.md</code>.</div>
+      <p>Если зонд неудобен, те же факты проверяются руками: версия PHP в шаге 5, лимиты в шаге 6, расширения —
+      на экране установщика (шаг 14), а почтовый порт — разделом «Проверка исходящих портов».</p>
       <p>Требования проекта к расширениям (проверяет и установщик): <code>pdo_mysql</code>, <code>mbstring</code>,
       <code>openssl</code>, <code>fileinfo</code>, <code>json</code>, <code>gd</code>. Минимальная версия PHP — 8.1.</p>
       <div class="signal"><strong>Признак, что шаг получился:</strong> все обязательные проверки зелёные; отсутствие
@@ -708,7 +737,8 @@ ls -l config.sample.php</code></pre>
           <li>Не хватает расширения (например, <code>fileinfo</code> или <code>gd</code>) — включите его в php.ini панели
           или запросите у поддержки; без них установщик откажет.</li>
           <li>Почтовый порт закрыт — см. раздел «Проверка исходящих портов».</li>
-          <li>Зонд (когда появится) не отвечает — проверьте ключ и то, что файл ещё не удалил себя.</li>
+          <li>Зонд не отвечает — проверьте ключ (и в копии файла, и в переменной окружения хостинга) и то, что файл
+          ещё не удалил себя.</li>
         </ul>
       </div>
     </article>
@@ -769,10 +799,12 @@ ls -l config.sample.php</code></pre>
       Это делает именно экран «Установить»/«Обновить», а не phpMyAdmin. Проверка в базе: в таблице
       <code>tbl_app_installation</code> у «Новостей» появится запись с версией, а в <code>tbl_app_migration</code> —
       строки применённых релизов.</p>
-      <div class="todo"><strong>Честно о статусе раздела.</strong> Экран «Приложения» и механизм установки/обновления
-      в ядре уже есть. Но сам раздел «Новости» достраивается в задачах 13–20: его публичные маршруты, контроллеры
-      админки и большинство шаблонов ещё не в репозитории (есть манифест, часть библиотеки правил, два SQL-файла схемы,
-      сид рубрик и шаблон ленты). Кнопка «Установить» осмысленно работает после закрытия этих задач.</div>
+      <div class="note"><strong>Что именно устанавливается.</strong> В репозитории лежит целый раздел: манифест с
+      требованиями к ядру, маршруты (<code>apps/news/routes.php</code>), экраны админки (<code>admin.php</code> и
+      <code>actions/</code>), библиотека правил (<code>lib/</code>), шаблоны публичных страниц — лента, карточка
+      материала, рубрика и тег, — два SQL-файла схемы и сид стартовых рубрик. Кнопка «Установить» работает сейчас:
+      применять схему и создавать рубрики она умеет на этом дереве. Открытыми остаются два пункта приёмки — все формы
+      без JavaScript и отправка письма против настоящего SMTP хостинга; оба проверяются только на живом стенде.</div>
       <div class="signal"><strong>Признак, что шаг получился:</strong> в «Приложениях» «Новости» помечены установленными,
       а в админке появилась навигация раздела.</div>
       <div class="fallback"><strong>Если не получилось:</strong>
@@ -845,8 +877,9 @@ ls -l config.sample.php</code></pre>
       переносим поверх (их защищает выкладка).</li>
     </ul>
     <p>Если выкладываете руками через архив — просто не включайте эти пути в архив. Если через
-    <code>scripts/deploy.sh</code> (появится в задаче 21) — там список исключений уже задан, а <code>--delete</code>
-    защищён от стирания <code>config.php</code>, замка, загрузок и журнала.</p>
+    <code>scripts/deploy.sh</code> — там список исключений уже задан, а <code>--delete</code> защищён от стирания
+    <code>config.php</code>, замка, загрузок и журнала: все четыре пути стоят в исключениях <code>rsync</code>, и за
+    их наличие отвечает <code>tests/guard/DeploySafetyTest.php</code>.</p>
     <figure>
       <img src="images/filemanager-upload.png" alt="Загрузка файлов и архива через файловый менеджер TimeWeb">
       <figcaption>Загрузка архива и распаковка в файловом менеджере. Источник: <a href="https://timeweb.com/ru/docs/virtualnyj-hosting/podklyuchenie-k-serveru-hostinga/fajlovyj-menedzher/">«Работа с файлами сайта через файловый менеджер»</a>.</figcaption>
@@ -875,18 +908,29 @@ ls -l config.sample.php</code></pre>
 
   <section id="first-run" class="step" aria-labelledby="firstrun-h">
     <h2 id="firstrun-h">Установка: First-run через <code>/setup.php</code></h2>
-    <p>Установщик доступен ровно один раз. Он сам делает три вещи и ничему лишнему не даёт произойти:</p>
+    <p>Установщик доступен ровно один раз, и делает это двумя экранами: первый собирает настройки и записывает
+    <code>config.php</code>, второй проверяет окружение, применяет схему и заводит администратора. Ничему лишнему
+    он не даёт произойти:</p>
     <ol>
-      <li><strong>Проверяет окружение.</strong> Отказывается работать на PHP ниже 8.1 и при отсутствии любого из
-      расширений <code>pdo_mysql</code>, <code>mbstring</code>, <code>openssl</code>, <code>fileinfo</code>,
-      <code>json</code>, <code>gd</code>; проверяет, что <code>public/</code> записываем (для замка) и что каталог журнала
-      доступен (иначе штатные <code>logWarn()</code>/<code>logError()</code> терялись бы).</li>
-      <li><strong>Создаёт данные.</strong> Применяет схему ядра, заводит первого администратора (пароль не короче 10 символов),
-      ставит замок <code>public/install.lock</code>.</li>
-      <li><strong>Закрывает себя.</strong> После установки любой заход на <code>/setup.php</code> отвечает 404; замок
-      занимается атомарно, чтобы два параллельных запроса не перезаписали пароль администратора.</li>
+      <li><strong>Первый экран пишет файл и ничего не создаёт.</strong> Форма собирает восемь значений: хост, порт,
+      имя базы, пользователь и пароль базы, префикс таблиц, адрес сайта без слэша в конце и его название. Успех —
+      записанный <code>config.php</code> с правами <code>600</code> и отметка сессии, которая открывает второй экран;
+      любой отказ печатается на экран и не пишет ни файла, ни отметки. Таблиц на этом шаге ещё нет.</li>
+      <li><strong>Второй экран проверяет окружение.</strong> Без отметки первого экрана адрес возвращает на него
+      с объяснением. Проверки: PHP не ниже 8.1, шесть расширений (<code>pdo_mysql</code>, <code>mbstring</code>,
+      <code>openssl</code>, <code>fileinfo</code>, <code>json</code>, <code>gd</code>), записываемость
+      <code>public/</code> (для замка) и доступность каталога журнала (иначе штатные
+      <code>logWarn()</code>/<code>logError()</code> терялись бы). Есть проблема — кнопка неактивна и список проблем
+      напечатан.</li>
+      <li><strong>Тот же экран создаёт данные.</strong> Применяет схему ядра из <code>sql/0001_core_baseline.sql</code>,
+      заводит первого администратора (пароль не короче 10 символов), ставит замок <code>public/install.lock</code> и
+      ведёт на <code>/login</code>.</li>
+      <li><strong>Замок закрывает оба экрана.</strong> После установки любой заход и на <code>/setup.php</code>, и на
+      <code>/setup.php?step=admin</code> отвечает 404; замок занимается атомарно, чтобы два параллельных запроса не
+      перезаписали пароль администратора.</li>
     </ol>
-    <p>Если установка упала до финала — повторный запуск безопасен (схема через <code>IF NOT EXISTS</code>, записи идемпотентны).</p>
+    <p>Если установка упала до финала — повторный запуск безопасен (схема через <code>IF NOT EXISTS</code>, записи
+    идемпотентны).</p>
   </section>
 
   <section id="mail" class="step" aria-labelledby="mail-h">
@@ -982,10 +1026,13 @@ nc -vz smtp.timeweb.ru 465</code></pre>
       что кука сессии идёт по https с флагом Secure.</li>
       <li><strong>Открыть раздел «Приложения»</strong> (<code>/admin/apps</code>) и убедиться, что состояние «Новостей»
       корректно.</li>
-      <li><strong>Включить «Новости»</strong> кнопкой «Установить» (когда раздел достроен, задачи 13–20) — см. шаг 15.</li>
+      <li><strong>Включить «Новости»</strong> кнопкой «Установить» на экране «Приложения» — см. шаг 15.</li>
       <li><strong>Проверить закрытие служебных путей</strong> (режим <code>root</code>): <code>/config.php</code>,
       <code>/core/bootstrap.php</code>, <code>/sql/0001_core_baseline.sql</code> не должны отдавать 200.</li>
-      <li><strong>Проверить адаптивность</strong> 360…1440 на боевом адресе (локально — <code>scripts/responsive-check.mjs</code>, появится в задаче 21).</li>
+      <li><strong>Проверить адаптивность</strong> 360…1440 на боевом адресе (локально — командой
+      <code>npm run responsive -- --base=https://домен-школы.рф</code>, которая запускает
+      <code>scripts/responsive-check.mjs</code>; для входа в админку он читает <code>RESP_EMAIL</code> и
+      <code>RESP_PASSWORD</code>).</li>
     </ol>
   </section>
 
@@ -995,12 +1042,14 @@ nc -vz smtp.timeweb.ru 465</code></pre>
     <code>scripts/db-reset</code> трогает лишь тестовую базу и на сервере не запускается.</p>
     <p>Откат файлов — это повторная выкладка из коммита прошлой версии:</p>
     <ul>
-      <li><strong>Через <code>deploy.sh</code> (появится в задаче 21).</strong> Выверните прошлый коммит в отдельный
+      <li><strong>Через <code>deploy.sh</code>.</strong> Выверните прошлый коммит в отдельный
       worktree и выполните выкладку из него:
       <pre><code>git worktree add ../old &lt;коммит-прошлой-версии&gt;
 CMS_DEPLOY_PATH=… bash ../old/cms/scripts/deploy.sh</code></pre>
       Скрипт использует <code>rsync --delete</code>, но защищён от стирания <code>config.php</code>, замка
-      <code>public/install.lock</code>, каталога <code>public/uploads/</code> и журнала <code>core/storage/</code>.</li>
+      <code>public/install.lock</code>, каталога <code>public/uploads/</code> и журнала <code>core/storage/</code>.
+      Без <code>CMS_DEPLOY_URL</code> проверка раскладки пропустится; при откате сайт уже установлен, поэтому адрес
+      задают и проверку делают — иначе залитая назад прошлая версия остаётся непроверенной.</li>
       <li><strong>Вручную через файловый менеджер/FTP.</strong> Замените PHP-файлы и <code>public/assets/app.css</code>
       на версии прошлой сборки, не трогая <code>config.php</code> и <code>public/uploads/</code>. Затем на всякий случай
       убедитесь, что <code>public/install.lock</code> на месте.</li>
@@ -1023,12 +1072,12 @@ CMS_DEPLOY_PATH=… bash ../old/cms/scripts/deploy.sh</code></pre>
         <tr><td>☐</td><td>SSL Let's Encrypt выпущен, https работает, http→https редирект есть</td><td>браузер (шаг 11)</td></tr>
         <tr><td>☐</td><td>Установщик прошёл, <code>/setup.php</code> отдаёт 404</td><td>браузер (шаг 14)</td></tr>
         <tr><td>☐</td><td>Ядро и администратор созданы, вход работает, сессия по https с Secure</td><td><code>/login</code> → <code>/admin</code></td></tr>
-        <tr><td>☐</td><td>Раздел «Новости» установлен через «Приложения» (когда раздел достроен, задачи 13–20)</td><td><code>/admin/apps</code> (шаг 15)</td></tr>
+        <tr><td>☐</td><td>Раздел «Новости» установлен через экран «Приложения»</td><td><code>/admin/apps</code> (шаг 15)</td></tr>
         <tr><td>☐</td><td><code>/robots.txt</code> отдаёт карту и <code>Disallow</code> для приватного</td><td>браузер/curl</td></tr>
         <tr><td>☐</td><td><code>/sitemap.xml</code> отвечает 200 и содержит нужные адреса</td><td>браузер/curl</td></tr>
         <tr><td>☐</td><td>Почтовый ящик создан, SMTP заполнен, порт 465/587 открыт</td><td>SSH <code>nc</code> / зонд (шаги 12–13)</td></tr>
         <tr><td>☐</td><td>Журнал <code>core/storage/errors.log</code> пишется и не отдаётся наружу</td><td>SSH (раздел «Логи»)</td></tr>
-        <tr><td>☐</td><td>Адаптивность 360…1440 на боевом адресе</td><td>руками / скрипт (появится в задаче 21)</td></tr>
+        <tr><td>☐</td><td>Адаптивность 360…1440 на боевом адресе</td><td>руками / <code>npm run responsive -- --base=https://домен</code></td></tr>
       </tbody>
     </table>
   </section>
@@ -1047,7 +1096,7 @@ CMS_DEPLOY_PATH=… bash ../old/cms/scripts/deploy.sh</code></pre>
       <li><strong>Если что-то пошло не так</strong> — делайте откат (раздел «Откат»): повторная выкладка прошлой версии,
       база не пересоздаётся.</li>
     </ol>
-    <p>Удобнее всего обновления делать через <code>scripts/deploy.sh</code> (появится в задаче 21): он выкладывает
+    <p>Удобнее всего обновления делать через <code>scripts/deploy.sh</code>: он выкладывает
     одним <code>rsync</code> и по умолчанию защищает <code>config.php</code>, замок, загрузки и журнал.</p>
   </section>
 
