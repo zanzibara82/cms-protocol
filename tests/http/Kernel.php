@@ -56,11 +56,15 @@ final class Kernel
         // Изоляция окружения подпроцесса (F6): bootstrap.php выставляет CMS_EXTRA_APPS_DIR/
         // CMS_EXTRA_THEME_DIR для процессов PHPUnit, и без явного снятия proc_open передал бы их
         // в php -S по наследованию — тогда фикстурные «demo»/«future» жили бы во ВСЕХ http-классах,
-        // а не только там, где их просят. «env -u» снимает унаследованные ключи; классы, которым
-        // нужны фикстуры (AdminApps, Robots), передают их через $env — присваивание идёт после -u,
+        // а не только там, где их просят. CMS_SITE_URL снимаем тем же «env -u»: контейнер разработки
+        // выставляет его (docker-compose.dev.yml:21 — http://localhost:8080 без конечного слэша),
+        // и без снятия утверждения про абсолютный адрес жили бы за счёт унаследованного окружения, а
+        // не заготовки настроек. Фикстура stepOneFields() даёт адрес с конечным слэшем, контейнер —
+        // без него; различие видно именно при снятом окружении. Классы, которым нужен свой адрес
+        // (EmptySiteUrl, установочные), передают его через $env — присваивание идёт после -u,
         // поэтому для них ключ возвращается.
         $command = sprintf(
-            'env -u CMS_EXTRA_APPS_DIR -u CMS_EXTRA_THEME_DIR %s php -S %s:%d -t %s/public %s/public/index.php',
+            'env -u CMS_EXTRA_APPS_DIR -u CMS_EXTRA_THEME_DIR -u CMS_SITE_URL %s php -S %s:%d -t %s/public %s/public/index.php',
             $prefix,
             self::HOST,
             self::PORT,
