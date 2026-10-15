@@ -120,6 +120,24 @@ final class LoginTest extends TestCase
         self::assertStringContainsString('Почта или пароль не подошли', $absent['body']);
     }
 
+    // Сквозная проверка пакета #289: адрес длиннее колонки tbl_login_attempt.email не должен
+    // доходить до записи попытки. Иначе на настоящем запросе к серверу отказ по заведомо
+    // неизвестному адресу превращается в 500-й ответ: переполнение колонки бросает исключение,
+    // его перехватывает ядро, и обычный экран отказа исчезает.
+    public function testАдресДлиннееКолонкиОтказываетсяБезЖурналаИНеДаётПятисотыйОтвет(): void
+    {
+        $email = str_repeat('a', LOGIN_EMAIL_MAX + 1) . '@school.dev';
+        self::assertGreaterThan(LOGIN_EMAIL_MAX, mb_strlen($email), 'Замер собран: адрес длиннее порога');
+
+        $before = (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'));
+        $response = Kernel::post('/login', ['_token' => $this->token(), 'email' => $email, 'password' => 'мимо']);
+        $after = (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'));
+
+        self::assertSame(200, $response['status'], 'Отказ по длинному адресу не должен быть 500-м ответом');
+        self::assertStringContainsString(LOGIN_ERROR_GENERIC, $response['body'], 'Экран отказа печатает общий текст');
+        self::assertSame($before, $after, 'Попытка по заведомо неизвестному адресу не пишется в журнал');
+    }
+
     public function testПослеПятиНеудачВходЗакрывается(): void
     {
         $this->exhaustLoginLimit();
