@@ -54,10 +54,11 @@ final class CoreSchemaTest extends TestCase
     public function testДатаСозданияХранитсяВUtc(): void
     {
         TestDb::clearTable('option');
-        insert('option', ['option_name' => 'moment', 'option_value' => utcStamp(nowUtc()), 'autoload' => 1]);
+        $moment = utcStamp(nowUtc());
+        insert('option', ['option_name' => 'moment', 'option_value' => $moment, 'autoload' => 1]);
 
         $stored = (string) value('SELECT option_value FROM ' . t('option') . ' WHERE option_name = ?', ['moment']);
-        self::assertSame(utcStamp(nowUtc()), $stored);
+        self::assertSame($moment, $stored);
         self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $stored);
     }
 }
