@@ -101,6 +101,25 @@ final class LoginLimitTest extends TestCase
         self::assertGreaterThanOrEqual($verifyMs * 0.8, $loginMs, 'Отказ по неизвестному адресу быстрее проверки пароля — адрес выдаётся временем ответа');
     }
 
+    // Пакет #289, находка первой тяжести: адрес длиннее ширины колонки tbl_login_attempt.email (190)
+    // не должен доходить до записи попытки — иначе переполнение колонки превращает отказ по заведомо
+    // неизвестному адресу в 500-й ответ. Ветка отказа стоит до обращения к базе и до проверки пароля,
+    // поэтому в журнале не прибавляется ни строки, а текст остаётся общим, как при неизвестном адресе.
+    public function testАдресДлиннееКолонкиОтказываетсяБезЗаписиПопытки(): void
+    {
+        // Ровно порог (190) ещё помещается в колонку, поэтому берём 191 символ локальной части.
+        $email = str_repeat('a', LOGIN_EMAIL_MAX + 1) . '@school.dev';
+        self::assertGreaterThan(LOGIN_EMAIL_MAX, mb_strlen($email), 'Замер собран: адрес именно длиннее порога');
+
+        $before = (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'), []);
+        $result = attemptLogin($email, 'любой-пароль');
+        $after = (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'), []);
+
+        self::assertFalse($result['ok'], 'Слишком длинный адрес не входит');
+        self::assertSame(LOGIN_ERROR_GENERIC, $result['error'], 'Текст отказа не выдаёт, что адрес слишком длинный');
+        self::assertSame($before, $after, 'Попытка по заведомо неизвестному адресу не пишется в журнал');
+    }
+
     public function testВерныйПарольВпускаетРедактора(): void
     {
         TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
@@ -114,6 +133,24 @@ final class LoginLimitTest extends TestCase
         self::assertSame('redaktor@school.dev', $result['user']['email']);
         self::assertFalse($clean['ok'] === false);
         self::assertSame('redaktor@school.dev', $clean['user']['email']);
+    }
+
+    // Пакет #289, А-3: наружу уходит узкий контракт возврата — четыре поля без хеша пароля. Полная
+    // строка остаётся внутри ядра (её читает loginUser()), а не уезжает в ответ вызывающей стороне.
+    public function testУспешныйВходОтдаётУзкийКонтрактБезХешаПароля(): void
+    {
+        TestDb::seedUser('redaktor@school.dev', 'верный-пароль', 'editor');
+
+        $result = attemptLogin('redaktor@school.dev', 'верный-пароль');
+
+        self::assertTrue($result['ok'], 'Верный пароль выпускает редактора');
+        self::assertArrayNotHasKey('password_hash', $result['user'], 'Хеш пароля не должен уходить наружу');
+        self::assertSame(
+            ['id', 'email', 'name', 'role'],
+            array_keys($result['user']),
+            'Наружу — ровно четыре поля в согласованном порядке'
+        );
+        self::assertSame('redaktor@school.dev', $result['user']['email'], 'Сужение контракта не теряет адрес');
     }
 
     public function testЗаблокированныйАккаунтНеВпускаетДажеСВернымПаролем(): void

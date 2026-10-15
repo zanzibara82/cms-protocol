@@ -15,6 +15,11 @@ const LOGIN_WINDOW_IP = 60;
 const LOGIN_ERROR_GENERIC = 'Почта или пароль не подошли. Проверьте раскладку и попробуйте ещё раз.';
 const LOGIN_ERROR_BLOCKED = 'Слишком много попыток входа. Подождите немного и попробуйте снова.';
 
+// Порог длины адреса входа задан шириной колонки tbl_login_attempt.email (VARCHAR(190) в
+// sql/0001_core_baseline.sql), а не удобством: журнал попыток пишет адрес как есть, и строка
+// длиннее колонки превращает отказ по неизвестному адресу в 500-й ответ на переполнении колонки.
+const LOGIN_EMAIL_MAX = 190;
+
 function passwordAlgorithm(): string
 {
     return defined('PASSWORD_ARGON2ID') ? 'argon2id' : 'bcrypt';
@@ -159,7 +164,7 @@ function recordLoginAttempt(string $email, string $ip, ?DateTimeImmutable $now =
     ]);
 }
 
-/** @return array{ok: true, user: array<string, mixed>}|array{ok: false, error: string} */
+/** @return array{ok: true, user: array{id: string, email: string, name: string, role: string}}|array{ok: false, error: string} */
 function attemptLogin(string $email, string $password): array
 {
     $clean = mb_strtolower(trim($email));
@@ -169,13 +174,25 @@ function attemptLogin(string $email, string $password): array
         return ['ok' => false, 'error' => LOGIN_ERROR_GENERIC];
     }
 
+    // Отказ по адресу длиннее колонки журнала ставится до loginBlocked() и до выборки пользователя:
+    // попытка ещё не написана, а переполнение tbl_login_attempt.email дало бы 500-й ответ вместо отказа.
+    // Текст совпадает с отказом по неизвестному адресу, поэтому ветка не выдаёт существование аккаунта;
+    // заодно она не зовёт verifyPassword() на мусорном входе — аргон2 дорог по построению, и вызов его
+    // на произвольной строке был бы готовым дешёвым отказом в обслуживании.
+    if (mb_strlen($clean) > LOGIN_EMAIL_MAX) {
+        return ['ok' => false, 'error' => LOGIN_ERROR_GENERIC];
+    }
+
     if (loginBlocked($clean, $ip)) {
         logWarn('auth.blocked', ['email' => $clean, 'ip' => $ip]);
 
         return ['ok' => false, 'error' => LOGIN_ERROR_BLOCKED];
     }
 
-    $row = one('SELECT * FROM ' . t('user') . ' WHERE email = ?', [$clean]);
+    // Явный список колонок вместо SELECT *: наружу идёт узкий контракт, а строка целиком нужна
+    // только внутри: session_version читает loginUser(), blocked_at проверяется ниже, password_hash
+    // нужен сверке и needsRehash(). Хеш остаётся в $row, но не уезжает в возвращаемом массиве.
+    $row = one('SELECT id, email, name, role, session_version, blocked_at, password_hash FROM ' . t('user') . ' WHERE email = ?', [$clean]);
     // Проверка пароля выполняется в обеих ветках: при отсутствии строки пользователя сверяется
     // с хешем-мишенью, чтобы отказ по неизвестному адресу не был быстрее отказа по неверному.
     $passwordMatches = verifyPassword($password, $row === null ? dummyPasswordHash() : (string) $row['password_hash']);
@@ -197,5 +214,12 @@ function attemptLogin(string $email, string $password): array
     loginUser($row);
     logInfo('auth.login', ['userId' => (string) $row['id']]);
 
-    return ['ok' => true, 'user' => $row];
+    // Наружу — узкий контракт: четыре поля как строки. Полный $row (с хешем и session_version)
+    // уже ушёл в loginUser(), в ответе вызывающей стороне хеш пароля не нужен.
+    return ['ok' => true, 'user' => [
+        'id' => (string) $row['id'],
+        'email' => (string) $row['email'],
+        'name' => (string) $row['name'],
+        'role' => (string) $row['role'],
+    ]];
 }
