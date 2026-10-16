@@ -429,3 +429,72 @@ function deleteBlock(string $id): array
 
     return ['ok' => true, 'notice' => 'deleted', 'error' => ''];
 }
+
+/**
+ * Стрелки порядка. Механика `moveCategory()` (`apps/news/lib/catalog.php:299-331`) с одной
+ * поправкой §5 спецификации: обход идёт внутри зоны, поэтому движение строки `home` не пересобирает
+ * порядки зоны `article`.
+ *
+ * Направление приходит из намерения экрана, а не из состояния строки: `op` у ветки `match` задачи 8
+ * бывает только `up` или `down`, и третья ветка здесь была бы мёртвым кодом.
+ *
+ * @return array{ok: bool, notice: string, error: string}
+ */
+function moveBlock(string $id, string $direction): array
+{
+    // Одна выборка отвечает и за «блок есть», и за его соседей: отдельный `one()` за идентификатором
+    // добавил бы второй вопрос базе о том же состоянии.
+    $rows = all('SELECT id, zone, visible FROM ' . t('news_block') . ' ORDER BY order_index, title');
+
+    $zone = '';
+
+    foreach ($rows as $row) {
+        if ((string) $row['id'] === $id) {
+            $zone = (string) $row['zone'];
+            break;
+        }
+    }
+
+    if ($zone === '') {
+        return ['ok' => false, 'notice' => '', 'error' => 'Блока уже нет — обновите страницу.'];
+    }
+
+    $ids = [];
+    $index = -1;
+
+    foreach ($rows as $row) {
+        if ((string) $row['zone'] !== $zone) {
+            continue;
+        }
+
+        // Позиция считается до добавления строки: счётчик уже добавленных и есть её индекс.
+        if ((string) $row['id'] === $id) {
+            $index = count($ids);
+        }
+
+        $ids[] = (string) $row['id'];
+    }
+
+    $target = $direction === 'up' ? $index - 1 : $index + 1;
+    if ($target < 0 || $target >= count($ids)) {
+        return ['ok' => true, 'notice' => $direction === 'up' ? 'topped' : 'bottomed', 'error' => ''];
+    }
+
+    $next = $ids;
+    $next[$index] = $ids[$target];
+    $next[$target] = $ids[$index];
+
+    $stamp = utcStamp(nowUtc());
+    tx(static function () use ($next, $stamp): void {
+        foreach ($next as $position => $blockId) {
+            run(
+                'UPDATE ' . t('news_block') . ' SET order_index = ?, updated_at = ? WHERE id = ?',
+                [$position + 1, $stamp, $blockId]
+            );
+        }
+    });
+
+    logInfo('news.block_moved', ['blockId' => $id, 'zone' => $zone, 'direction' => $direction]);
+
+    return ['ok' => true, 'notice' => 'moved', 'error' => ''];
+}

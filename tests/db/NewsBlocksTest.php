@@ -451,16 +451,133 @@ final class NewsBlocksTest extends NewsDbTestCase
         self::assertTrue(createBlock('home', 'list', 'Свежие материалы', 5)['ok'], 'освободившееся место занимает новый блок');
     }
 
+    // ── Порядок в зоне ───────────────────────────────────
+
+    public function testСтрелкаМеняетМестамиСоседейВСвоейЗоне(): void
+    {
+        // Заголовки идут обратно порядку: «О школе» по алфавиту раньше «Свежие материалы», поэтому
+        // обход по заголовку дал бы другую перестановку и эту проверку покраснил.
+        $readToday = self::makeBlock('home', 'list', 'Читают сегодня', ['order_index' => 2]);
+        self::makeBlock('home', 'list', 'Свежие материалы', ['order_index' => 1]);
+        self::makeBlock('home', 'list', 'О школе', ['order_index' => 3]);
+
+        self::assertSame('moved', (string) moveBlock($readToday, 'up')['notice']);
+
+        self::assertSame(
+            ['Читают сегодня', 'Свежие материалы', 'О школе'],
+            array_column(newsBlockRows('home'), 'title'),
+            'средняя строка встала первой, сосед опустился на её место'
+        );
+        self::assertSame('1', $this->orderOf('home', 'Читают сегодня'));
+        self::assertSame('2', $this->orderOf('home', 'Свежие материалы'));
+        self::assertSame('3', $this->orderOf('home', 'О школе'));
+        self::assertSame(
+            '3',
+            $this->column('SELECT COUNT(*) FROM ' . t('news_block') . ' WHERE zone = ?', ['home']),
+            'движение не создаёт и не удаляет строк'
+        );
+    }
+
+    public function testДвижениеНеТрогаетПорядокДругойЗоны(): void
+    {
+        self::makeBlock('home', 'list', 'Первый дома', ['order_index' => 1]);
+        $secondHome = self::makeBlock('home', 'list', 'Второй дома', ['order_index' => 2]);
+        self::makeBlock('article', 'related', 'Первый в карточке', ['order_index' => 1]);
+        self::makeBlock('article', 'related', 'Второй в карточке', ['order_index' => 2]);
+
+        self::assertSame('moved', (string) moveBlock($secondHome, 'up')['notice']);
+
+        // Без фильтра по зоне пересборка проходила бы по всем строкам сайта: соседняя зона получила
+        // бы порядки 3 и 4 и исчезла бы из своей выборки (§5 спецификации).
+        self::assertSame(
+            ['Первый в карточке', 'Второй в карточке'],
+            array_column(newsBlockRows('article'), 'title'),
+            'зона «article» не участвует в движении зоны «home»'
+        );
+        self::assertSame('1', $this->orderOf('article', 'Первый в карточке'));
+        self::assertSame('2', $this->orderOf('article', 'Второй в карточке'));
+    }
+
+    public function testСкрытыйБлокУчаствуетВПорядкеЗоны(): void
+    {
+        self::makeBlock('home', 'list', 'Видимый первый', ['order_index' => 1]);
+        $hidden = self::makeBlock('home', 'list', 'Скрытый', ['order_index' => 2, 'visible' => 0]);
+        $third = self::makeBlock('home', 'list', 'Третий', ['order_index' => 3]);
+
+        self::assertSame('moved', (string) moveBlock($third, 'up')['notice']);
+
+        // Строка зоны считает и скрытых соседей: «вверх» передвигает на одну позицию, а не
+        // перепрыгивает через скрытый блок.
+        self::assertSame('2', $this->orderOf('home', 'Третий'));
+        self::assertSame('3', $this->orderOf('home', 'Скрытый'));
+        self::assertSame($hidden, $this->blockIdOf('home', 'Скрытый'), 'скрытая строка осталась собой');
+
+        // Печать при этом знает только про видимые: порядок считается по зоне целиком, а читатель
+        // отсекает скрытое (задача 4).
+        self::assertSame(['Видимый первый', 'Третий'], array_column(newsBlockRows('home'), 'title'));
+    }
+
+    public function testОдиночнаяСтрокаЗоныНеДвигается(): void
+    {
+        $only = self::makeBlock('home', 'list', 'Единственный', ['order_index' => 1]);
+
+        $up = moveBlock($only, 'up');
+        self::assertTrue($up['ok'], 'край зоны — не отказ');
+        self::assertSame('topped', (string) $up['notice']);
+        self::assertSame('', (string) $up['error']);
+
+        $down = moveBlock($only, 'down');
+        self::assertTrue($down['ok'], 'край зоны — не отказ');
+        self::assertSame('bottomed', (string) $down['notice']);
+
+        self::assertSame('1', $this->orderOf('home', 'Единственный'), 'пометка не пишет базу');
+    }
+
+    public function testКрайниеСтрокиМногойЗоныВозвращаютПометку(): void
+    {
+        $top = self::makeBlock('home', 'list', 'Первый', ['order_index' => 1]);
+        $bottom = self::makeBlock('home', 'list', 'Последний', ['order_index' => 2]);
+
+        self::assertSame('topped', (string) moveBlock($top, 'up')['notice']);
+        self::assertSame('bottomed', (string) moveBlock($bottom, 'down')['notice']);
+
+        // Два разных ключа за одно и то же «ничего не произошло»: вверх и вниз человек видит
+        // разные плашки и понимает, к какому краю он упёрся.
+        self::assertSame(['Первый', 'Последний'], array_column(newsBlockRows('home'), 'title'));
+        self::assertSame('1', $this->orderOf('home', 'Первый'));
+        self::assertSame('2', $this->orderOf('home', 'Последний'));
+    }
+
+    public function testДвижениеПересобираетРазреженныйПорядокПлотно(): void
+    {
+        // Дубликаты и разрывы оставляла ручная правка базы. Тот же довод, что у `moveCategory()`:
+        // пересборка чинит их целиком, а не меняет местами две строки.
+        self::makeBlock('home', 'list', 'Первый', ['order_index' => 7]);
+        self::makeBlock('home', 'list', 'Второй', ['order_index' => 7]);
+        $third = self::makeBlock('home', 'list', 'Третий', ['order_index' => 12]);
+
+        self::assertSame('moved', (string) moveBlock($third, 'up')['notice']);
+
+        $orders = array_map(
+            static fn (array $row): string => (string) $row['order_index'],
+            all('SELECT order_index FROM ' . t('news_block') . ' WHERE zone = ? ORDER BY order_index', ['home'])
+        );
+
+        self::assertSame(['1', '2', '3'], $orders, 'в зоне плотность 1..N без разрывов и дубликатов');
+    }
+
     public function testЧужойИдентификаторОтказываетсяОднимТекстом(): void
     {
-        // Пять операций правки и удаления отвечают одной строкой: человек смотрит на экран, где
-        // строку уже не видно, и ему важно понять «обнови страницу», а не различать пять формулировок.
+        // Шесть операций правки, удаления и движения отвечают одной строкой: человек смотрит на
+        // экран, где строку уже не видно, и ему важно понять «обнови страницу», а не различать
+        // шесть формулировок.
         $results = [
             renameBlock('net-takogo-identifikatora', 'Новое название'),
             retargetBlock('net-takogo-identifikatora', 'category', categoryIdOf('metodika')),
             limitBlock('net-takogo-identifikatora', 3),
             setBlockVisibility('net-takogo-identifikatora', true),
             deleteBlock('net-takogo-identifikatora'),
+            moveBlock('net-takogo-identifikatora', 'up'),
         ];
 
         foreach ($results as $index => $result) {

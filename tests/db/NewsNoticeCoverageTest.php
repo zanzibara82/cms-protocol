@@ -130,6 +130,7 @@ final class NewsNoticeCoverageTest extends NewsDbTestCase
             limitBlock('net-takogo-identifikatora', 3),
             setBlockVisibility('net-takogo-identifikatora', true),
             deleteBlock('net-takogo-identifikatora'),
+            moveBlock('net-takogo-identifikatora', 'up'),
         ] as $index => $result) {
             self::assertFalse($result['ok'], 'Отказ №' . $index . ' обязан не удаваться');
             self::assertSame('', (string) $result['notice'], 'Отказ №' . $index . ' не несёт ключа');
@@ -152,16 +153,25 @@ final class NewsNoticeCoverageTest extends NewsDbTestCase
         $this->block(limitBlock($id, 3), 'limited', $id);
         $this->block(setBlockVisibility($id, false), 'hidden', $id);
         $this->block(setBlockVisibility($id, true), 'shown', $id);
+
+        $this->block(createBlock('home', 'list', 'Сосед по зоне', 4), 'created');
+        $neighbour = $this->blockIdOf('home', 'Сосед по зоне');
+
+        // Три ключа порядка: `moved` в обе стороны и пометки обоих краёв. Сосед нужен, чтобы
+        // движение вообще было куда: одна строка зоны даёт только пометки.
+        $this->block(moveBlock($neighbour, 'up'), 'moved', $neighbour);
+        $this->block(moveBlock($neighbour, 'up'), 'topped', $neighbour);
+        $this->block(moveBlock($neighbour, 'down'), 'moved', $neighbour);
+        $this->block(moveBlock($neighbour, 'down'), 'bottomed', $neighbour);
+
+        $this->block(deleteBlock($neighbour), 'deleted', $neighbour);
         $this->block(deleteBlock($id), 'deleted', $id);
 
-        // Три ключа порядка (`moved`, `topped`, `bottomed`) приносят стрелки в задаче 7. Список
-        // назван, а не оставлен пустым: если задача 6 добавит в словарь текст, который не
-        // достигает ни одна её операция, проверка красна уже сейчас — мёртвый плашечный ключ не
-        // должен переждать одну задачу.
+        // Словарь блока закрыт: ни одного текста без действия, которое его приносит.
         self::assertSame(
-            ['moved', 'topped', 'bottomed'],
+            [],
             array_values(array_diff(array_keys(NEWS_BLOCK_NOTICE_TEXT), array_keys($this->blockHits))),
-            'Эти тексты блока достигаются только стрелками — они приходят в задаче 7'
+            'Этот текст блока не достигается ни одним действием'
         );
     }
 
