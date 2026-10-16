@@ -57,9 +57,14 @@ function region(string $name, array $data = []): void
         return;
     }
 
-    echo '<section class="region region-' . e($name) . '">' . $html . '</section>';
+    echo partial('region', ['zone' => $name, 'content' => $html]);
 }
 ```
+
+Разметка обёртки (`<section class="region region-<имя>">`) живёт в `core/templates/region.php`, а не
+литералом внутри `region()`: сборка стилей читает только объявленные каталоги разметки, и страж
+`StyleSourceTest::testРазметкаНеРастётВнеОбъявленныхКаталогов` краснеет на `class=` в `core/template.php`
+(вердикт Р5 плана).
 
 Три решения, зафиксированные в этой сигнатуре:
 

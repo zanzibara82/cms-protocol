@@ -47,12 +47,13 @@
 
 | Файл | Ответственность |
 | --- | --- |
-| `core/templates/region.php` | обёртка зоны: `<section class="region" data-zone="…">` + сырой `$content` |
+| `core/templates/region.php` | обёртка зоны: `<section class="region region-<имя>">` + сырой `$content` |
 | `apps/news/sql/20261016_0003_blocks.sql` | третий релиз: таблица блоков + две заводские строки |
 | `apps/news/lib/blocks.php` | читатель зоны, валидаторы полей, семь операций записи, строки экрана и цель |
 | `apps/news/actions/blocks.php` | разбор намерения формы: CSRF, `match ($op)`, возврат на экран |
 | `apps/news/templates/admin/blocks.php` | экран «Блоки»: три таблицы зон + форма добавления |
 | `apps/news/templates/partials/block.php` | вид блока на публичной странице: заголовок + сетка карточек |
+| `tests/fixtures/theme/probe-region.php` | страница-фикстура: вызывает `region('home')` внутри `render()` |
 | `tests/unit/NewsBlockRulesTest.php` | чистые правила: зоны, виды, пределы поля, цель блока |
 | `tests/db/NewsBlocksTest.php` | читатель и операции на живой базе |
 | `tests/http/NewsBlocksAdminTest.php` | экран блоков: вход, `no-store`, все девять действий, границы форм |
@@ -70,7 +71,7 @@
 | `apps/news/routes.php` | задача 5: `foreach` подписки зон после :54 и удаление строки :211; задача 9: подключение `actions/blocks.php` и два литеральных маршрута экрана |
 | `apps/news/admin.php` | контроллер `newsAdminBlocks()` |
 | `theme/home.php`, `apps/news/templates/{feed,category,tag,single}.php` | вызовы `region()`; в `single.php` — переезд «Читайте также» |
-| `tests/unit/TemplateTest.php` | пять проверок `region()` |
+| `tests/unit/TemplateTest.php` | шесть проверок `region()` и фикстуры-страницы |
 | `tests/db/NewsDbTestCase.php` | `news_block` в сбросе, фабрика `makeBlock()` |
 | `tests/db/NewsSchemaTest.php` | шесть таблиц, три релиза, версия `1.1.0`, заводские строки |
 | `tests/db/NewsRegistryTest.php`, `tests/http/NewsAssemblyTest.php` | версия и число релизов; в `NewsAssemblyTest` — пятый путь в списке админских экранов |
@@ -113,13 +114,17 @@
 `id`. Разрешение делается прямым `one('SELECT slug … WHERE id = ?')` внутри `blocks.php`;
 `findCategory()`/`findTag()` остаются там, где их читатель не касается.
 
-**Р5 — обёртка зоны живёт partial'ом.** Спецификация §1 показывает `class="region region-<имя>"`
-внутри `region()`. Так делать нельзя: `StyleSourceTest::testРазметкаНеРастётВнеОбъявленныхКаталогов`
-(:97-113) краснеет на литерал `class=` в `core/template.php`, а `classAttributeTokens()` (:445)
-прочитал бы `region-<?= e($zone) ?>` как токен, не проходящий `~^[a-z0-9][a-z0-9:_/.#\[\]%-]*$~`.
-Обёртка — `core/templates/region.php` с `class="region" data-zone="<?= e($zone) ?>"`; переменная
-обязана называться `$content` (страж `OutputEscapingTest::MARKED_VARS`). Имя зоны человек читает из
-`data-zone`.
+**Р5 — обёртка зоны живёт partial'ом, класс имени зоны печатается.** Спецификация §1 показывает
+`class="region region-<имя>"` внутри `region()`, а §6 требует этот же класс критерием приёмки.
+Место литерала в §1 неверно: `StyleSourceTest::testРазметкаНеРастётВнеОбъявленныхКаталогов` (:97-113)
+краснеет на `class=` в `core/template.php` — обратный замер задачи 1 это показал. Форма класса из §1
+и §6 при этом достижима и обязательна: обёртка — `core/templates/region.php` с
+`class="region region-<?= e($zone) ?>"`; переменная содержимого обязана называться `$content`
+(страж `OutputEscapingTest::MARKED_VARS`). `classAttributeTokens()` (:445-463) токен
+`region-<?= e($zone) ?>` отбрасывает по регэкспу (:453, `continue`, а не нарушение), поэтому правило
+`.region-home` в `src-css/app.css` не нужно и мёртвым правилом не считается; в артефакт собирается
+утилита `.region`. Отдельного атрибута `data-zone` в этом слое нет: имя зоны человек и проверки
+читают из класса, и второй носитель того же имени — расходование разметки без требования.
 
 **Р6 — «похожие» переезжают целиком.** Старый виджет `single.php:64-73`, переменная `$related`
 (:11) и вычислитель `routes.php:211` удаляются в одной задаче с вызовом `region('article', …)`.
@@ -288,9 +293,9 @@ declare(strict_types=1);
         region('home');
         $out = (string) ob_get_clean();
 
-        self::assertStringContainsString('<section class="region" data-zone="home">', $out);
+        self::assertStringContainsString('<section class="region region-home">', $out);
         self::assertStringContainsString('<p>один</p>', $out, 'Разметка подписчика не экранируется');
-        self::assertSame(1, substr_count($out, '<section class="region"'), 'Одна зона — одна обёртка');
+        self::assertSame(1, substr_count($out, '<section class="region region-'), 'Одна зона — одна обёртка');
     }
 
     public function testПодписчикПолучаетИмяЗоныИКонтекстСтраницы(): void
@@ -320,7 +325,7 @@ declare(strict_types=1);
         region('home');
         $out = (string) ob_get_clean();
 
-        self::assertSame(1, substr_count($out, '<section class="region"'));
+        self::assertSame(1, substr_count($out, '<section class="region region-'));
         self::assertLessThan(
             (int) strpos($out, '<p>поздний</p>'),
             (int) strpos($out, '<p>ранний</p>'),
@@ -339,7 +344,7 @@ declare(strict_types=1);
 
         self::assertStringContainsString('<p>тело страницы</p>', $html, 'Страница-фикстура не собрана');
         self::assertStringContainsString('<main id="main"', $html, 'Каркас темы обязан остаться целым');
-        self::assertStringContainsString('<section class="region" data-zone="home">', $html);
+        self::assertStringContainsString('<section class="region region-home">', $html);
         self::assertStringContainsString('<p>в строке</p>', $html, 'Содержимое подписчика потерялось');
     }
 ```
@@ -368,7 +373,7 @@ declare(strict_types=1);
  * @var string $content
  */
 ?>
-<section class="region" data-zone="<?= e($zone) ?>">
+<section class="region region-<?= e($zone) ?>">
 <?= $content /* @safe html */ ?>
 </section>
 ```
@@ -441,9 +446,9 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 
 | Мутация | Что обязано покраснеть |
 | --- | --- |
-| убрать `trim()` (`if ($html === '')`) | `testЗонаСПробеламиВместоСодержимогоМолчит` |
-| печатать обёртку до проверки пустоты | `testПустаяЗонаНеПечатаетНиБайта` |
-| вписать `<section class="region" …>` прямо в `region()` вместо `partial('region', …)` | `StyleSourceTest::testРазметкаНеРастётВнеОбъявленныхКаталогов` |
+| убрать `trim()` (`if ($html === '')`) | `testЗонаСПробеламиВместоСодержимогоМолчит` (пустая зона при `trim`-проверке молчит и дальше, поэтому вторая проверка не затрагивается) |
+| печатать обёртку до проверки пустоты | `testПустаяЗонаНеПечатаетНиБайта` и `testЗонаСПробеламиВместоСодержимогоМолчит` — обе попадают в один дефект «обёртка раньше содержимого», замер фиксирует две красные строки, а не одну |
+| вписать `<section class="region region-…">` прямо в `region()` вместо `partial('region', …)` | `StyleSourceTest::testРазметкаНеРастётВнеОбъявленныхКаталогов` |
 | добавить правило `.region` и не запустить `bash scripts/css` | шаг свежести артефакта в `bash scripts/gate.sh` + `StyleSourceTest::testКлассыРазметкиСобралисьВАртефакте` |
 | убрать класс из `core/templates/region.php`, оставив правило в `src-css/app.css` | `StyleSourceTest::testКлассыИсточникаСтилейИспользуютсяВРазметке` (мёртвое правило) |
 | убрать вызов `region('home')` из `tests/fixtures/theme/probe-region.php` | `testВыводЗоныПопадаетВСтрокуКоторуюВозвращаетRenderToString`, а остальные пять остаются зелёными: проверка держит именно связку точки вывода со собранной страницей, а не повторяет проверку 3 |
@@ -1634,7 +1639,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
         // не удалён (критерий 4 §6 спецификации).
         $page = Kernel::get('/news/vecher-vstrechi');
 
-        self::assertStringContainsString('<section class="region" data-zone="article">', $page['body']);
+        self::assertStringContainsString('<section class="region region-article">', $page['body']);
         self::assertStringContainsString('Похожие материалы', $page['body'], 'заводской блок зоны article');
         self::assertStringContainsString('Второй вечер', $page['body']);
         self::assertStringNotContainsString('Приём в первый класс', $page['body'], 'чужая рубрика в блоке не появляется');
@@ -1650,7 +1655,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
         $page = Kernel::get('/');
 
         self::assertSame(200, $page['status']);
-        self::assertStringContainsString('<section class="region" data-zone="home">', $page['body']);
+        self::assertStringContainsString('<section class="region region-home">', $page['body']);
         self::assertStringContainsString('Свежие материалы', $page['body']);
         self::assertStringContainsString('/news/vecher-vstrechi', $page['body'], 'карточка блока ведёт на материал');
     }
@@ -1661,14 +1666,15 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
         // остаться ровно такой, какой была до слоя (критерий 1 приёмки).
         $page = Kernel::get('/news');
 
-        self::assertStringNotContainsString('class="region"', $page['body']);
+        self::assertStringNotContainsString('<section class="region', $page['body']);
     }
 ```
 
 - [ ] **Шаг 2: Убедиться, что тест красный**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter "NewsPublicTest::testУМатериалаВидноПохожиеИзЕгоРубрики|NewsPublicTest::testНаГлавнойБлокСвежихМатериалов|NewsPublicTest::testЗонаБезБлоковНеПечатаетОбёртку"`
-Ожидание: первые два падают («Похожие материалы» и `data-zone` на страницах нет — строки блоков
+Ожидание: первые два падают («Похожие материалы» и обёртки `region region-…` на страницах нет —
+строки блоков
 лежат в базе с задачи 2, но подписки и вызова ещё нет), третий проходит: обёртку печатать пока
 некому.
 
