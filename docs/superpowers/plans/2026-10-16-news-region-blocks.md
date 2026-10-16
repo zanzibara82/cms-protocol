@@ -201,6 +201,29 @@ kind: string, …}`. На level 6 PHPStan отказывает передать 
 три. Цена: форма длинная, и её правка затрагивает три документа. Выгода: расхождение «что лежит в
 строке» ловится анализатором до запуска теста.
 
+**Р15 — план установки содержит три релиза, а не два.** (закрыт по ходу задачи 2) Шаг RED задачи 2
+обещал падения только на двух строках версии, хотя `planApp()` после третьего файла обязана отдать три
+неприменённых имени — без правки `NewsRegistryTest` набор `db` не зеленеет, и шаг противоречил
+собственному правилу идемпотентности. Ожидание остаётся точным списком из трёх имён, а не подмножеством.
+
+**Р16 — закладка сверяется колонка в колонку с релизом.** Рецензия задачи 2 (важная №1): проверка
+заводских блоков выбирала 4 колонки из 11, поэтому порча `take_limit` (5 → 7 против §2 «по пять
+материалов»), проставленная цель (`NULL, NULL` → `'category', …`, от чего читатель задачи 4 уходит из
+общей ленты), `order_index` (0 → 5, от чего считается следующая позиция в задаче 6) и самые литеры `id`
+оставляли ворота зелёными. Глобальное правило плана — «проверка, которая не способна покраснеть, чинится
+мутацией», — здесь не выполнен. Правка в шаге f: выбираются `id, zone, kind, title, target_kind,
+target_id, take_limit, visible, order_index` и ожидаются две полные строки; `created_at`/`updated_at`
+не сверяются, их конкретное время — деталь закладки, а не контракт. Цена: три строки мутаций в шаге 8
+обязаны окраситься, и они проверяются прогоном, а не рассуждением.
+
+**Р17 — индекс сверяется по составу колонок, а не по одному имени.** Рецензия задачи 2 (важная №2):
+комментарий проверки обещал покрытие выборки зоны, но `assertContains` по `DISTINCT INDEX_NAME` не
+видит порядка колонок — `KEY (order_index, zone)`, `(zone)` и `(zone, visible)` называются как нужно
+и ворота зелёны, хотя `WHERE zone = ? … ORDER BY order_index` (§2) не обслуживают. Правка в шаге f:
+читаются `INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME` из `information_schema.STATISTICS`, упорядоченный
+состав сравнивается `assertSame` для `news_block_zone_order → [zone, order_index]` и `PRIMARY → [id]`.
+Цена: проверка становится чувствительной к перестановке колонок (мутация в шаге 8).
+
 ---
 
 ### Задача 1: Точка вывода в ядре
@@ -548,12 +571,35 @@ f) Две новые проверки — в конец класса, перед
     {
         // Закладка нужна, чтобы у только что установленного раздела главная и карточка сразу что-то
         // выводили; человек при этом видит два готовых блока и правит их, а не гадает, где они.
-        $rows = all('SELECT zone, kind, title, visible FROM ' . t('news_block') . ' ORDER BY zone, order_index');
+        // Сверяются все колонки, которые задаёт релиз: предел выборки, цель и порядок — тоже контракт
+        // закладки, иначе правка `take_limit` или проставленная цель ворота не окрасят.
+        // `created_at`/`updated_at` не сверяются: их конкретное время — деталь закладки, а не контракт.
+        $rows = all('SELECT id, zone, kind, title, target_kind, target_id, take_limit, visible, order_index FROM ' . t('news_block') . ' ORDER BY zone, order_index');
 
         self::assertSame(
             [
-                ['zone' => 'article', 'kind' => 'related', 'title' => 'Похожие материалы', 'visible' => 1],
-                ['zone' => 'home', 'kind' => 'list', 'title' => 'Свежие материалы', 'visible' => 1],
+                [
+                    'id' => 'newsblk-article',
+                    'zone' => 'article',
+                    'kind' => 'related',
+                    'title' => 'Похожие материалы',
+                    'target_kind' => null,
+                    'target_id' => null,
+                    'take_limit' => 5,
+                    'visible' => 1,
+                    'order_index' => 0,
+                ],
+                [
+                    'id' => 'newsblk-home',
+                    'zone' => 'home',
+                    'kind' => 'list',
+                    'title' => 'Свежие материалы',
+                    'target_kind' => null,
+                    'target_id' => null,
+                    'take_limit' => 5,
+                    'visible' => 1,
+                    'order_index' => 0,
+                ],
             ],
             $rows
         );
@@ -562,17 +608,21 @@ f) Две новые проверки — в конец класса, перед
     public function testИндексЗоныБлоковНаМесте(): void
     {
         // Читатель зоны выбирает `WHERE zone = ? AND visible = 1 ORDER BY order_index`, и без
-        // составного индекса каждый показ страницы сканировал бы таблицу блоков целиком.
-        $names = array_map(
-            static fn (array $row): string => (string) $row['INDEX_NAME'],
-            all(
-                'SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
-                [(string) configValue('DB_NAME'), t('news_block')]
-            )
+        // составного индекса каждый показ страницы сканировал бы таблицу блоков целиком. Сверяется
+        // состав и порядок колонок, а не только имя: `KEY (order_index, zone)` названием не отличается
+        // от нужного, но зоне не служит.
+        $rows = all(
+            'SELECT INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY INDEX_NAME, SEQ_IN_INDEX',
+            [(string) configValue('DB_NAME'), t('news_block')]
         );
 
-        self::assertContains('PRIMARY', $names);
-        self::assertContains('news_block_zone_order', $names);
+        $columns = [];
+        foreach ($rows as $row) {
+            $columns[(string) $row['INDEX_NAME']][] = (string) $row['COLUMN_NAME'];
+        }
+
+        self::assertSame(['id'], $columns['PRIMARY'] ?? []);
+        self::assertSame(['zone', 'order_index'], $columns['news_block_zone_order'] ?? []);
     }
 ```
 
@@ -670,7 +720,18 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 | убрать `IF NOT EXISTS` | `testПовторныйПрогонВсехРелизовНеОтказывает` (`SQLSTATE[42S01]`) |
 | убрать `INSERT IGNORE` (оставить `INSERT`) | тот же тест: дублирование PRIMARY KEY |
 | убрать `KEY news_block_zone_order` | `testИндексЗоныБлоковНаМесте` |
+| переставить колонки: `KEY news_block_zone_order (order_index, zone)` | `testИндексЗоныБлоковНаМесте` (сравнение упорядоченного состава) |
+| `take_limit` `5` → `7` в одной заводской строке | `testЗаводскиеБлокиСтавятсяВместеСТаблицей` |
+| цель в одной заводской строке: `NULL, NULL` → `'category', 'newsblk-home'` | тот же тест |
+| `order_index` `0` → `5` в одной заводской строке | тот же тест |
 | оставить версию манифеста `1.0.0` при новом релизе | `testРазделЧислитсяУстановленнымИГотовымКРаботе`, `NewsRegistryTest`, `NewsAssemblyTest` |
+
+В таблице восемь строк: четыре были в плане изначально (убрать `IF NOT EXISTS`, убрать
+`INSERT IGNORE`, убрать `KEY`, оставить старую версию манифеста), ещё четыре добавлены по рецензии
+задачи 2 (вердикты Р16 и Р17): перестановка колонок индекса и три значения заводской строки
+(`take_limit`, цель, `order_index`). Проверка закладки сверяет все колонки, которые задаёт релиз,
+поэтому порча этих значений обязана окраситься. Каждый прогон — ровно одна правка файла релиза,
+с дословным выводом падения и последующей откачкой.
 
 - [ ] **Шаг 9: Ворота, коммит и отчёт**
 
