@@ -118,4 +118,89 @@ final class TemplateTest extends TestCase
         self::assertNotFalse($hook, 'Вывод хука page_head обязан появиться в разметке');
         self::assertLessThan((int) $page, (int) $hook, 'Хук обязан идти раньше значения $page[head]');
     }
+
+    public function testПустаяЗонаНеПечатаетНиБайта(): void
+    {
+        // Подписчика нет в сборке без раздела: страница обязана остаться ровно такой, какой была
+        // до вызова. Обёртка «для пустоты» нарисовала бы посередине полосы пустую рамку.
+        ob_start();
+        region('home');
+
+        self::assertSame('', (string) ob_get_clean());
+    }
+
+    public function testЗонаСПробеламиВместоСодержимогоМолчит(): void
+    {
+        // «Ничего не нашлось» подписчик возвращает переводом строк, и это тоже пустота:
+        // решение 5 спецификации проверяется именно на границе trim(), а не на пустой строке.
+        addFilter('region_home', static fn (string $html): string => "\n  \t ");
+
+        ob_start();
+        region('home');
+
+        self::assertSame('', (string) ob_get_clean(), 'Обёртка печатается только вокруг содержимого');
+    }
+
+    public function testЗонаПечатаетОбёрткуИхСодержимоеСырьём(): void
+    {
+        addFilter('region_home', static fn (string $html): string => $html . '<p>один</p>');
+
+        ob_start();
+        region('home');
+        $out = (string) ob_get_clean();
+
+        self::assertStringContainsString('<section class="region" data-zone="home">', $out);
+        self::assertStringContainsString('<p>один</p>', $out, 'Разметка подписчика не экранируется');
+        self::assertSame(1, substr_count($out, '<section class="region"'), 'Одна зона — одна обёртка');
+    }
+
+    public function testПодписчикПолучаетИмяЗоныИКонтекстСтраницы(): void
+    {
+        // Ядро не знает, зачем подписчику имя зоны и адрес материала, — но без этих двух
+        // аргументов раздел не различил бы три свои точки и не собрал бы «похожие» в нужной
+        // рубрике (решение 7 спецификации: третий аргумент нужен именно переезду виджета).
+        addFilter('region_article', static fn (string $html, string $zone, array $data): string => $html
+            . '<i>' . e($zone) . '</i><b>' . e((string) $data['slug']) . '</b>');
+
+        ob_start();
+        region('article', ['slug' => 'itog-goda']);
+        $out = (string) ob_get_clean();
+
+        self::assertStringContainsString('<i>article</i>', $out);
+        self::assertStringContainsString('<b>itog-goda</b>', $out);
+    }
+
+    public function testНесколькоПодписчиковСходятсяВОднуОбёртку(): void
+    {
+        // Подписок у зоны может быть больше одного, и порядок обязан читаться по приоритету:
+        // иначе раздел не сможет встать раньше темы, а обёрток станет две на один вызов.
+        addFilter('region_home', static fn (string $html): string => $html . '<p>ранний</p>', 5);
+        addFilter('region_home', static fn (string $html): string => $html . '<p>поздний</p>', 20);
+
+        ob_start();
+        region('home');
+        $out = (string) ob_get_clean();
+
+        self::assertSame(1, substr_count($out, '<section class="region"'));
+        self::assertLessThan(
+            (int) strpos($out, '<p>поздний</p>'),
+            (int) strpos($out, '<p>ранний</p>'),
+            'Более ранний приоритет обязан читаться первым'
+        );
+    }
+
+    public function testВыводЗоныПопадаетВСтрокуКоторуюВозвращаетRenderToString(): void
+    {
+        // Единственный канал ответа ядра — строка, собранная renderToString() (core/template.php:103),
+        // и экраны отказа уходят в respond() именно ею. Печатающая точка вывода обязана донести зону
+        // и туда: иначе отказный экран и любой ответ-строка вышли бы без блоков (§6 спецификации).
+        addFilter('region_home', static fn (string $html): string => $html . '<p>в строке</p>');
+
+        $html = renderToString('probe-region');
+
+        self::assertStringContainsString('<p>тело страницы</p>', $html, 'Страница-фикстура не собрана');
+        self::assertStringContainsString('<main id="main"', $html, 'Каркас темы обязан остаться целым');
+        self::assertStringContainsString('<section class="region" data-zone="home">', $html);
+        self::assertStringContainsString('<p>в строке</p>', $html, 'Содержимое подписчика потерялось');
+    }
 }

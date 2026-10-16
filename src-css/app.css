@@ -28,6 +28,13 @@
 section[id] {
   scroll-margin-top: 5.5rem;
 }
+
+/* Обёртка точки вывода region(): зона отделяется от содержимого страницы линией сверху */
+.region {
+  border-top: 1px solid rgba(43, 33, 24, 0.1);
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+}
 html {
   scroll-behavior: smooth;
 }

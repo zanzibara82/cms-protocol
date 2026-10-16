@@ -152,3 +152,21 @@ function richText(string $text): string
 
     return implode('<br>', $out);
 }
+
+// Точка вывода, которую приложение наполняет своим содержимым: ядро знает только имя зоны.
+// Печатает, а не возвращает строку, — вызов стоит внутри шаблона и обязан встать в общий поток
+// страницы. Пустая зона не печатает ни байта, включая обёртку: сайт без раздела не обрастает
+// пустыми рамками (решение 5 спецификации).
+/**
+ * @param array<string, mixed> $data контекст страницы для подписчика: адрес материала, рубрика
+ */
+function region(string $name, array $data = []): void
+{
+    $html = (string) applyFilters('region_' . $name, '', $name, $data);
+
+    if (trim($html) === '') {
+        return;
+    }
+
+    echo partial('region', ['zone' => $name, 'content' => $html]);
+}
