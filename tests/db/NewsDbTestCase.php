@@ -118,6 +118,34 @@ abstract class NewsDbTestCase extends TestCase
     }
 
     /**
+     * Блок выводится строкой напрямую: тест читателя обязан класть в базу ровно проверяемое
+     * состояние — зону, вид, цель, предел и порядок, — а не получать его через правила формы.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected static function makeBlock(string $zone, string $kind, string $title, array $overrides = []): string
+    {
+        $id = newId();
+        $stamp = utcStamp(nowUtc());
+
+        insert('news_block', array_merge([
+            'id' => $id,
+            'zone' => $zone,
+            'kind' => $kind,
+            'title' => $title,
+            'target_kind' => null,
+            'target_id' => null,
+            'take_limit' => 5,
+            'visible' => 1,
+            'order_index' => 0,
+            'created_at' => $stamp,
+            'updated_at' => $stamp,
+        ], $overrides));
+
+        return $id;
+    }
+
+    /**
      * Значение первой колонки первой строки; пустая строка — если запрос ничего не нашёл.
      *
      * @param list<mixed> $args
