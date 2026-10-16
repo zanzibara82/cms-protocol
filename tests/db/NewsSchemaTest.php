@@ -203,12 +203,35 @@ final class NewsSchemaTest extends TestCase
     {
         // Закладка нужна, чтобы у только что установленного раздела главная и карточка сразу что-то
         // выводили; человек при этом видит два готовых блока и правит их, а не гадает, где они.
-        $rows = all('SELECT zone, kind, title, visible FROM ' . t('news_block') . ' ORDER BY zone, order_index');
+        // Сверяются все колонки, которые задаёт релиз: предел выборки, цель и порядок — тоже контракт
+        // закладки, иначе правка `take_limit` или проставленная цель ворота не окрасят.
+        // `created_at`/`updated_at` не сверяются: их конкретное время — деталь закладки, а не контракт.
+        $rows = all('SELECT id, zone, kind, title, target_kind, target_id, take_limit, visible, order_index FROM ' . t('news_block') . ' ORDER BY zone, order_index');
 
         self::assertSame(
             [
-                ['zone' => 'article', 'kind' => 'related', 'title' => 'Похожие материалы', 'visible' => 1],
-                ['zone' => 'home', 'kind' => 'list', 'title' => 'Свежие материалы', 'visible' => 1],
+                [
+                    'id' => 'newsblk-article',
+                    'zone' => 'article',
+                    'kind' => 'related',
+                    'title' => 'Похожие материалы',
+                    'target_kind' => null,
+                    'target_id' => null,
+                    'take_limit' => 5,
+                    'visible' => 1,
+                    'order_index' => 0,
+                ],
+                [
+                    'id' => 'newsblk-home',
+                    'zone' => 'home',
+                    'kind' => 'list',
+                    'title' => 'Свежие материалы',
+                    'target_kind' => null,
+                    'target_id' => null,
+                    'take_limit' => 5,
+                    'visible' => 1,
+                    'order_index' => 0,
+                ],
             ],
             $rows
         );
@@ -217,17 +240,21 @@ final class NewsSchemaTest extends TestCase
     public function testИндексЗоныБлоковНаМесте(): void
     {
         // Читатель зоны выбирает `WHERE zone = ? AND visible = 1 ORDER BY order_index`, и без
-        // составного индекса каждый показ страницы сканировал бы таблицу блоков целиком.
-        $names = array_map(
-            static fn (array $row): string => (string) $row['INDEX_NAME'],
-            all(
-                'SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
-                [(string) configValue('DB_NAME'), t('news_block')]
-            )
+        // составного индекса каждый показ страницы сканировал бы таблицу блоков целиком. Сверяется
+        // состав и порядок колонок, а не только имя: `KEY (order_index, zone)` названием не отличается
+        // от нужного, но зоне не служит.
+        $rows = all(
+            'SELECT INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY INDEX_NAME, SEQ_IN_INDEX',
+            [(string) configValue('DB_NAME'), t('news_block')]
         );
 
-        self::assertContains('PRIMARY', $names);
-        self::assertContains('news_block_zone_order', $names);
+        $columns = [];
+        foreach ($rows as $row) {
+            $columns[(string) $row['INDEX_NAME']][] = (string) $row['COLUMN_NAME'];
+        }
+
+        self::assertSame(['id'], $columns['PRIMARY'] ?? []);
+        self::assertSame(['zone', 'order_index'], $columns['news_block_zone_order'] ?? []);
     }
 
     /** @return list<string> */
