@@ -51,7 +51,7 @@ final class NewsConstantsTest extends TestCase
 
     public function testТекстыУспехаЗаканчиваютсяТочкойИНеСодержатПодстановок(): void
     {
-        $dictionaries = ['материал' => NEWS_NOTICE_TEXT, 'справочники' => CATALOG_NOTICE_TEXT];
+        $dictionaries = ['материал' => NEWS_NOTICE_TEXT, 'справочники' => CATALOG_NOTICE_TEXT, 'блоки' => NEWS_BLOCK_NOTICE_TEXT];
 
         foreach ($dictionaries as $name => $texts) {
             self::assertNotSame([], $texts, $name);
