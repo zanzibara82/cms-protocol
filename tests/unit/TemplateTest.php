@@ -149,9 +149,9 @@ final class TemplateTest extends TestCase
         region('home');
         $out = (string) ob_get_clean();
 
-        self::assertStringContainsString('<section class="region" data-zone="home">', $out);
+        self::assertStringContainsString('<section class="region region-home">', $out);
         self::assertStringContainsString('<p>один</p>', $out, 'Разметка подписчика не экранируется');
-        self::assertSame(1, substr_count($out, '<section class="region"'), 'Одна зона — одна обёртка');
+        self::assertSame(1, substr_count($out, '<section class="region region-'), 'Одна зона — одна обёртка');
     }
 
     public function testПодписчикПолучаетИмяЗоныИКонтекстСтраницы(): void
@@ -181,7 +181,7 @@ final class TemplateTest extends TestCase
         region('home');
         $out = (string) ob_get_clean();
 
-        self::assertSame(1, substr_count($out, '<section class="region"'));
+        self::assertSame(1, substr_count($out, '<section class="region region-'));
         self::assertLessThan(
             (int) strpos($out, '<p>поздний</p>'),
             (int) strpos($out, '<p>ранний</p>'),
@@ -200,7 +200,7 @@ final class TemplateTest extends TestCase
 
         self::assertStringContainsString('<p>тело страницы</p>', $html, 'Страница-фикстура не собрана');
         self::assertStringContainsString('<main id="main"', $html, 'Каркас темы обязан остаться целым');
-        self::assertStringContainsString('<section class="region" data-zone="home">', $html);
+        self::assertStringContainsString('<section class="region region-home">', $html);
         self::assertStringContainsString('<p>в строке</p>', $html, 'Содержимое подписчика потерялось');
     }
 }
