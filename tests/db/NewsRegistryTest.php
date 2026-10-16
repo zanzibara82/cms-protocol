@@ -30,7 +30,7 @@ final class NewsRegistryTest extends TestCase
 
         self::assertIsArray($manifest);
         self::assertSame('Новости', (string) $manifest['title']);
-        self::assertSame('1.0.0', (string) $manifest['version']);
+        self::assertSame('1.1.0', (string) $manifest['version']);
         self::assertSame('1.1.0', (string) $manifest['requiresCore']);
         self::assertStringEndsWith('apps/news', str_replace('\\', '/', (string) $manifest['dir']));
         self::assertSame([['href' => '/news/admin', 'label' => 'Новости']], $manifest['adminNav']);
@@ -41,7 +41,7 @@ final class NewsRegistryTest extends TestCase
         $state = appState('news');
 
         self::assertSame('missing', $state['state']);
-        self::assertSame('1.0.0', $state['manifestVersion']);
+        self::assertSame('1.1.0', $state['manifestVersion']);
         self::assertSame('', $state['dbVersion']);
         self::assertSame('Раздел не установлен.', $state['reason']);
     }
@@ -63,13 +63,13 @@ final class NewsRegistryTest extends TestCase
         self::assertNotSame('incompatible', appState('news')['state']);
     }
 
-    public function testПланУстановкиСодержитОбаРелиза(): void
+    public function testПланУстановкиСодержитТриРелиза(): void
     {
         $plan = planApp('news');
 
         self::assertFalse($plan->isEmpty());
         self::assertFalse($plan->isBlocked());
-        self::assertSame(['20261006_0001_catalog.sql', '20261006_0002_items.sql'], $plan->pendingNames());
+        self::assertSame(['20261006_0001_catalog.sql', '20261006_0002_items.sql', '20261016_0003_blocks.sql'], $plan->pendingNames());
     }
 
     public function testПриватныйПутьРазделаОбъявленВМанифесте(): void

@@ -67,8 +67,8 @@ final class NewsAssemblyTest extends TestCase
         $installed = appInstallation('news');
 
         self::assertNotNull($installed);
-        self::assertSame('1.0.0', (string) $installed['version']);
-        self::assertSame(2, (int) value('SELECT COUNT(*) FROM ' . t('app_migration') . ' WHERE app = ?', ['news']));
+        self::assertSame('1.1.0', (string) $installed['version']);
+        self::assertSame(3, (int) value('SELECT COUNT(*) FROM ' . t('app_migration') . ' WHERE app = ?', ['news']));
         self::assertSame(3, (int) value('SELECT COUNT(*) FROM ' . t('news_category')));
     }
 

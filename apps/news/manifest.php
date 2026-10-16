@@ -7,7 +7,7 @@ declare(strict_types=1);
 return [
     'id' => 'news',
     'title' => 'Новости',
-    'version' => '1.0.0',
+    'version' => '1.1.0',
     'requiresCore' => '1.1.0',
     'privatePaths' => ['/news/admin'],
     'sql' => __DIR__ . '/sql',

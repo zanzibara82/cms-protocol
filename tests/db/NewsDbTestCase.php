@@ -61,11 +61,11 @@ abstract class NewsDbTestCase extends TestCase
         }
     }
 
+    // Закладка блоков из релиза схемы после первой очистки не возвращается: `seedApp()` сеет
+    // только рубрики, поэтому задачи 4 и 6 заводят нужные блоки сами.
     protected static function clearNews(): void
     {
-        self::clearItems();
-
-        foreach (['news_tag', 'news_category'] as $table) {
+        foreach (['news_item_tag', 'news_old_slug', 'news_item', 'news_tag', 'news_category', 'news_block'] as $table) {
             run('DELETE FROM ' . t($table));
         }
     }
@@ -133,7 +133,7 @@ abstract class NewsDbTestCase extends TestCase
     {
         run('SET FOREIGN_KEY_CHECKS = 0');
 
-        foreach (['news_item_tag', 'news_old_slug', 'news_item', 'news_tag', 'news_category'] as $table) {
+        foreach (['news_block', 'news_item_tag', 'news_old_slug', 'news_item', 'news_tag', 'news_category'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
 

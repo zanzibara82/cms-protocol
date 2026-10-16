@@ -29,27 +29,30 @@ final class NewsSchemaTest extends TestCase
         run('DELETE FROM ' . t('app_migration') . " WHERE app = 'news'");
     }
 
-    public function testВсеПятьТаблицРазделаСозданы(): void
+    public function testВсеШестьТаблицРазделаСозданы(): void
     {
         self::assertSame(self::tables(), $this->existingTables());
     }
 
-    public function testЖурналПомнитОбаРелизаВПорядкеОчереди(): void
+    public function testЖурналПомнитТриРелизаВПорядкеОчереди(): void
     {
         $names = array_map(
             static fn (array $row): string => (string) $row['name'],
             all('SELECT name FROM ' . t('app_migration') . " WHERE app = 'news' ORDER BY applied_at, name")
         );
 
-        self::assertSame(['20261006_0001_catalog.sql', '20261006_0002_items.sql'], $names);
+        self::assertSame(
+            ['20261006_0001_catalog.sql', '20261006_0002_items.sql', '20261016_0003_blocks.sql'],
+            $names
+        );
     }
 
     // MySQL фиксирует DDL сразу, а журнал установщика пишется после каждого файла: если релиз
     // оборвётся на полпути, следующий прогон повторит уже применённые операторы по живым таблицам.
     // Поэтому каждый оператор всех найденных релизов пропускается второй раз по тому же соединению:
     // отказа быть не должно, и число строк в таблицах раздела обязано остаться прежним. Точный
-    // состав релизов и порядок очереди закреплены за testЖурналПомнитОбаРелизаВПорядкеОчереди.
-    public function testПовторныйПрогонОбоихРелизовНеОтказывает(): void
+    // состав релизов и порядок очереди закреплены за testЖурналПомнитТриРелизаВПорядкеОчереди.
+    public function testПовторныйПрогонВсехРелизовНеОтказывает(): void
     {
         $files = glob(dirname(__DIR__, 2) . '/apps/news/sql/*.sql') ?: [];
         sort($files);
@@ -71,7 +74,7 @@ final class NewsSchemaTest extends TestCase
         $installation = appInstallation('news');
 
         self::assertIsArray($installation);
-        self::assertSame('1.0.0', (string) $installation['version']);
+        self::assertSame('1.1.0', (string) $installation['version']);
         self::assertSame(1, (int) $installation['enabled']);
         self::assertSame('ready', appState('news')['state']);
     }
@@ -196,10 +199,48 @@ final class NewsSchemaTest extends TestCase
         self::assertContains('news_item_slug', $names);
     }
 
+    public function testЗаводскиеБлокиСтавятсяВместеСТаблицей(): void
+    {
+        // Закладка нужна, чтобы у freshly-установленного раздела главная и карточка сразу что-то
+        // выводили; человек при этом видит два готовых блока и правит их, а не гадает, где они.
+        $rows = all('SELECT zone, kind, title, visible FROM ' . t('news_block') . ' ORDER BY zone, order_index');
+
+        self::assertSame(
+            [
+                ['zone' => 'article', 'kind' => 'related', 'title' => 'Похожие материалы', 'visible' => 1],
+                ['zone' => 'home', 'kind' => 'list', 'title' => 'Свежие материалы', 'visible' => 1],
+            ],
+            $rows
+        );
+    }
+
+    public function testИндексЗоныБлоковНаМесте(): void
+    {
+        // Читатель зоны выбирает `WHERE zone = ? AND visible = 1 ORDER BY order_index`, и без
+        // составного индекса каждый показ страницы сканировал бы таблицу блоков целиком.
+        $names = array_map(
+            static fn (array $row): string => (string) $row['INDEX_NAME'],
+            all(
+                'SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
+                [(string) configValue('DB_NAME'), t('news_block')]
+            )
+        );
+
+        self::assertContains('PRIMARY', $names);
+        self::assertContains('news_block_zone_order', $names);
+    }
+
     /** @return list<string> */
     private static function tables(): array
     {
-        return [t('news_category'), t('news_item'), t('news_item_tag'), t('news_old_slug'), t('news_tag')];
+        return [
+            t('news_block'),
+            t('news_category'),
+            t('news_item'),
+            t('news_item_tag'),
+            t('news_old_slug'),
+            t('news_tag'),
+        ];
     }
 
     /** @return array<string, int> */
@@ -234,7 +275,7 @@ final class NewsSchemaTest extends TestCase
     {
         run('SET FOREIGN_KEY_CHECKS = 0');
 
-        foreach (['news_item_tag', 'news_old_slug', 'news_item', 'news_tag', 'news_category'] as $table) {
+        foreach (['news_block', 'news_item_tag', 'news_old_slug', 'news_item', 'news_tag', 'news_category'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
 
