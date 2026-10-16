@@ -201,7 +201,7 @@ final class NewsSchemaTest extends TestCase
 
     public function testЗаводскиеБлокиСтавятсяВместеСТаблицей(): void
     {
-        // Закладка нужна, чтобы у freshly-установленного раздела главная и карточка сразу что-то
+        // Закладка нужна, чтобы у только что установленного раздела главная и карточка сразу что-то
         // выводили; человек при этом видит два готовых блока и правит их, а не гадает, где они.
         $rows = all('SELECT zone, kind, title, visible FROM ' . t('news_block') . ' ORDER BY zone, order_index');
 

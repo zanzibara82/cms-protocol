@@ -546,7 +546,7 @@ f) Две новые проверки — в конец класса, перед
 ```php
     public function testЗаводскиеБлокиСтавятсяВместеСТаблицей(): void
     {
-        // Закладка нужна, чтобы у freshly-установленного раздела главная и карточка сразу что-то
+        // Закладка нужна, чтобы у только что установленного раздела главная и карточка сразу что-то
         // выводили; человек при этом видит два готовых блока и правит их, а не гадает, где они.
         $rows = all('SELECT zone, kind, title, visible FROM ' . t('news_block') . ' ORDER BY zone, order_index');
 
@@ -625,13 +625,17 @@ INSERT IGNORE INTO tbl_news_block (id, zone, kind, title, target_kind, target_id
 - [ ] **Шаг 5: Прогнать остальные затронутые проверки**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter "NewsSchemaTest|NewsRegistryTest"`
-Ожидание: `NewsSchemaTest` зелёный; `NewsRegistryTest` красный на двух строках версии (`:33`, `:44`).
+Ожидание: `NewsSchemaTest` зелёный; `NewsRegistryTest` красный в трёх местах — две строки версии
+(`:33`, `:44`) и `testПланУстановкиСодержитОбаРелиза`: `planApp()` после появления файла релиза
+отдаёт три неприменённых имени вместо двух.
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsAssemblyTest`
 Ожидание: красный на `'1.0.0'` (`:70`) и на `2` применённых релизах (`:71`).
 
 В `tests/db/NewsRegistryTest.php` правятся четыре значения: `assertSame('1.0.0', (string) $manifest['version'])`
-→ `'1.1.0'`, `assertSame('1.0.0', $state['manifestVersion'])` → `'1.1.0'`. Остальные проверки файла
-(`requiresCore`, `dbVersion`, `state`) не трогаются.
+→ `'1.1.0'`, `assertSame('1.0.0', $state['manifestVersion'])` → `'1.1.0'`. Плюс переименование
+`testПланУстановкиСодержитОбаРелиза` → `testПланУстановкиСодержитТриРелиза` и третий элемент
+ожидания — `'20261016_0003_blocks.sql'` (список остаётся точным, а не подмножеством). Остальные
+проверки файла (`requiresCore`, `dbVersion`, `state`) не трогаются.
 
 В `tests/http/NewsAssemblyTest.php` правятся две строки: версия → `'1.1.0'`, счётчик журнала → `3`.
 
