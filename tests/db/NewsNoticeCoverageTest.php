@@ -22,6 +22,9 @@ final class NewsNoticeCoverageTest extends NewsDbTestCase
     /** @var array<string, string> */
     private array $itemHits = [];
 
+    /** @var array<string, string> */
+    private array $blockHits = [];
+
     public function testКаждыйТекстСправочниковДостигаетсяДействием(): void
     {
         $this->catalog(createCategory('Проба'), 'created');
@@ -119,11 +122,47 @@ final class NewsNoticeCoverageTest extends NewsDbTestCase
             setItemPinned('net-takogo-identifikatora', true),
             // Отказ по состоянию, а не по идентификатору: черновик не закрепляют (isOpen()).
             setItemPinned($draft, true),
+            // Блоки: тот же договор, что у справочников и материалов — отказ не называет ключ.
+            createBlock('sidebar', 'list', 'Чужая зона', 5),
+            createBlock('home', 'carousel', 'Чужой вид', 5),
+            renameBlock('net-takogo-identifikatora', 'Новое название'),
+            retargetBlock('net-takogo-identifikatora', 'category', categoryIdOf('metodika')),
+            limitBlock('net-takogo-identifikatora', 3),
+            setBlockVisibility('net-takogo-identifikatora', true),
+            deleteBlock('net-takogo-identifikatora'),
         ] as $index => $result) {
             self::assertFalse($result['ok'], 'Отказ №' . $index . ' обязан не удаваться');
             self::assertSame('', (string) $result['notice'], 'Отказ №' . $index . ' не несёт ключа');
             self::assertNotSame('', (string) $result['error'], 'Отказ №' . $index . ' называет причину');
         }
+    }
+
+    public function testКаждыйТекстБлокаДостигаетсяДействием(): void
+    {
+        $categoryId = categoryIdOf('zhizn-shkoly');
+        $tagId = resolveTagIds(['Пробный тег'])[0];
+
+        $this->block(createBlock('home', 'list', 'Свежие материалы', 5), 'created');
+        $id = $this->blockIdOf('home', 'Свежие материалы');
+
+        $this->block(renameBlock($id, 'Свежие за неделю'), 'renamed', $id);
+        $this->block(retargetBlock($id, 'category', $categoryId), 'retargeted', $id);
+        $this->block(retargetBlock($id, 'tag', $tagId), 'retargeted', $id);
+        $this->block(retargetBlock($id, '', ''), 'retargeted', $id);
+        $this->block(limitBlock($id, 3), 'limited', $id);
+        $this->block(setBlockVisibility($id, false), 'hidden', $id);
+        $this->block(setBlockVisibility($id, true), 'shown', $id);
+        $this->block(deleteBlock($id), 'deleted', $id);
+
+        // Три ключа порядка (`moved`, `topped`, `bottomed`) приносят стрелки в задаче 7. Список
+        // назван, а не оставлен пустым: если задача 6 добавит в словарь текст, который не
+        // достигает ни одна её операция, проверка красна уже сейчас — мёртвый плашечный ключ не
+        // должен переждать одну задачу.
+        self::assertSame(
+            ['moved', 'topped', 'bottomed'],
+            array_values(array_diff(array_keys(NEWS_BLOCK_NOTICE_TEXT), array_keys($this->blockHits))),
+            'Эти тексты блока достигаются только стрелками — они приходят в задаче 7'
+        );
     }
 
     /**
@@ -152,6 +191,21 @@ final class NewsNoticeCoverageTest extends NewsDbTestCase
         $this->itemHits[$expect] = $id;
 
         return (string) $result['id'];
+    }
+
+    private function blockIdOf(string $zone, string $title): string
+    {
+        return $this->column('SELECT id FROM ' . t('news_block') . ' WHERE zone = ? AND title = ?', [$zone, $title]);
+    }
+
+    /** @param array{ok: bool, notice: string, error: string} $result */
+    private function block(array $result, string $expect, string $id = ''): void
+    {
+        self::assertTrue($result['ok'], $expect . ' / ' . $id . ': ' . (string) $result['error']);
+        self::assertSame($expect, (string) $result['notice'], $expect . ' / ' . $id);
+        self::assertArrayHasKey($expect, NEWS_BLOCK_NOTICE_TEXT, $expect . ': ключ обязан быть в словаре раздела');
+
+        $this->blockHits[$expect] = $id;
     }
 
     private function lastCategoryId(): string

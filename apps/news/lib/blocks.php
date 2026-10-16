@@ -235,3 +235,197 @@ function newsRegionHtml(string $html, string $zone, array $data = []): string
 
     return $html . $added;
 }
+
+// ── Операции записи ──────────────────────────────────────
+
+// Счётчик зоны считает и скрытые строки: предел — это место в настройке, а не число блоков на
+// экране (§5 спецификации). Иначе человек накопил бы десять скрытых строк, а читатель задачи 4
+// молча отрезал бы седьмую и восьмую на своём LIMIT.
+function blockCountInZone(string $zone): int
+{
+    return (int) value('SELECT COUNT(*) FROM ' . t('news_block') . ' WHERE zone = ?', [$zone]);
+}
+
+// Жива ли цель, решает тот же резолвер, что зовёт страницу (вердикт Р10): пустой адрес означает
+// «рубрики или метки уже нет», и у писателя с читателем остаётся одно определение цели.
+function blockTargetExists(string $targetKind, string $targetId): bool
+{
+    return blockTargetSlug($targetKind, $targetId) !== '';
+}
+
+/** @return array{ok: bool, notice: string, error: string} */
+function createBlock(string $rawZone, string $rawKind, string $rawTitle, int $rawTake, string $targetKind = '', string $targetId = ''): array
+{
+    $checked = checkBlockFields($rawZone, $rawKind, $rawTitle, $rawTake);
+    if ($checked['error'] !== '') {
+        return ['ok' => false, 'notice' => '', 'error' => $checked['error']];
+    }
+
+    $cleanKind = trim($targetKind);
+    $cleanId = trim($targetId);
+
+    $problem = blockTargetProblem($checked['kind'], $cleanKind, $cleanId, blockTargetExists($cleanKind, $cleanId));
+    if ($problem !== '') {
+        return ['ok' => false, 'notice' => '', 'error' => $problem];
+    }
+
+    if (blockCountInZone($checked['zone']) >= NEWS_BLOCK_PER_ZONE) {
+        return [
+            'ok' => false,
+            'notice' => '',
+            'error' => 'В зоне уже ' . NEWS_BLOCK_PER_ZONE . ' '
+                . plural(NEWS_BLOCK_PER_ZONE, ['блок', 'блока', 'блоков'])
+                . ' — уберите лишний, чтобы добавить новый.',
+        ];
+    }
+
+    // Новый блок становится в конец своей зоны: плотность 1..N держится внутри зоны, а не по
+    // всей таблице (задача 7 пересобирает её стрелками тоже только в зоне).
+    $order = (int) value('SELECT COALESCE(MAX(order_index), 0) FROM ' . t('news_block') . ' WHERE zone = ?', [$checked['zone']]) + 1;
+    $id = newId();
+    $stamp = utcStamp(nowUtc());
+
+    run(
+        'INSERT INTO ' . t('news_block')
+            . ' (id, zone, kind, title, target_kind, target_id, take_limit, visible, order_index, created_at, updated_at)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)',
+        [
+            $id,
+            $checked['zone'],
+            $checked['kind'],
+            $checked['title'],
+            $cleanKind === '' ? null : $cleanKind,
+            $cleanId === '' ? null : $cleanId,
+            $checked['take'],
+            $order,
+            $stamp,
+            $stamp,
+        ]
+    );
+
+    logInfo('news.block_saved', ['blockId' => $id, 'zone' => $checked['zone'], 'change' => 'created']);
+
+    return ['ok' => true, 'notice' => 'created', 'error' => ''];
+}
+
+/** @return array{ok: bool, notice: string, error: string} */
+function renameBlock(string $id, string $rawTitle): array
+{
+    $row = one('SELECT id, zone, kind, take_limit FROM ' . t('news_block') . ' WHERE id = ?', [$id]);
+    if ($row === null) {
+        return ['ok' => false, 'notice' => '', 'error' => 'Блока уже нет — обновите страницу.'];
+    }
+
+    // Зона, вид и предел берутся из строки, а проверка та же, что при создании: у правки заголовка
+    // нет своего предела длины (§5 спецификации).
+    $checked = checkBlockFields((string) $row['zone'], (string) $row['kind'], $rawTitle, (int) $row['take_limit']);
+    if ($checked['error'] !== '') {
+        return ['ok' => false, 'notice' => '', 'error' => $checked['error']];
+    }
+
+    run(
+        'UPDATE ' . t('news_block') . ' SET title = ?, updated_at = ? WHERE id = ?',
+        [$checked['title'], utcStamp(nowUtc()), (string) $row['id']]
+    );
+
+    logInfo('news.block_saved', ['blockId' => (string) $row['id'], 'zone' => (string) $row['zone'], 'change' => 'renamed']);
+
+    return ['ok' => true, 'notice' => 'renamed', 'error' => ''];
+}
+
+/** @return array{ok: bool, notice: string, error: string} */
+function retargetBlock(string $id, string $targetKind, string $targetId): array
+{
+    $row = one('SELECT id, zone, kind FROM ' . t('news_block') . ' WHERE id = ?', [$id]);
+    if ($row === null) {
+        return ['ok' => false, 'notice' => '', 'error' => 'Блока уже нет — обновите страницу.'];
+    }
+
+    $cleanKind = trim($targetKind);
+    $cleanId = trim($targetId);
+
+    // Вид читается из строки: форма правки цели его не отправляет, а взятый из POST позволил бы
+    // записать «похожие + рубрика» — противоречие, которое читатель толкует по-своему (вердикт Р9).
+    $problem = blockTargetProblem((string) $row['kind'], $cleanKind, $cleanId, blockTargetExists($cleanKind, $cleanId));
+    if ($problem !== '') {
+        return ['ok' => false, 'notice' => '', 'error' => $problem];
+    }
+
+    // Обе колонки пишутся одним выражением: наполовину снятая цель — состояние, которого читатель
+    // задачи 4 не различает (пустой `target_kind` значит «вся лента», а живой `target_id` при этом
+    // просто теряется).
+    run(
+        'UPDATE ' . t('news_block') . ' SET target_kind = ?, target_id = ?, updated_at = ? WHERE id = ?',
+        [$cleanKind === '' ? null : $cleanKind, $cleanId === '' ? null : $cleanId, utcStamp(nowUtc()), (string) $row['id']]
+    );
+
+    logInfo('news.block_saved', ['blockId' => (string) $row['id'], 'zone' => (string) $row['zone'], 'change' => 'retargeted']);
+
+    return ['ok' => true, 'notice' => 'retargeted', 'error' => ''];
+}
+
+/** @return array{ok: bool, notice: string, error: string} */
+function limitBlock(string $id, int $rawTake): array
+{
+    $row = one('SELECT id, zone, kind, title FROM ' . t('news_block') . ' WHERE id = ?', [$id]);
+    if ($row === null) {
+        return ['ok' => false, 'notice' => '', 'error' => 'Блока уже нет — обновите страницу.'];
+    }
+
+    $checked = checkBlockFields((string) $row['zone'], (string) $row['kind'], (string) $row['title'], $rawTake);
+    if ($checked['error'] !== '') {
+        return ['ok' => false, 'notice' => '', 'error' => $checked['error']];
+    }
+
+    run(
+        'UPDATE ' . t('news_block') . ' SET take_limit = ?, updated_at = ? WHERE id = ?',
+        [$checked['take'], utcStamp(nowUtc()), (string) $row['id']]
+    );
+
+    logInfo('news.block_saved', ['blockId' => (string) $row['id'], 'zone' => (string) $row['zone'], 'change' => 'limited']);
+
+    return ['ok' => true, 'notice' => 'limited', 'error' => ''];
+}
+
+/**
+ * Показ и скрытие — одна функция с направлением, а не две и не переключатель. Направление приходит
+ * из намерения человека (`op` = show или hide): двойное «скрыть» обязано оставить блок скрытым,
+ * тогда как переключатель показал бы его против воли.
+ *
+ * @return array{ok: bool, notice: string, error: string}
+ */
+function setBlockVisibility(string $id, bool $visible): array
+{
+    $row = one('SELECT id, zone FROM ' . t('news_block') . ' WHERE id = ?', [$id]);
+    if ($row === null) {
+        return ['ok' => false, 'notice' => '', 'error' => 'Блока уже нет — обновите страницу.'];
+    }
+
+    run(
+        'UPDATE ' . t('news_block') . ' SET visible = ?, updated_at = ? WHERE id = ?',
+        [$visible ? 1 : 0, utcStamp(nowUtc()), (string) $row['id']]
+    );
+
+    logInfo('news.block_saved', [
+        'blockId' => (string) $row['id'],
+        'zone' => (string) $row['zone'],
+        'change' => $visible ? 'shown' : 'hidden',
+    ]);
+
+    return ['ok' => true, 'notice' => $visible ? 'shown' : 'hidden', 'error' => ''];
+}
+
+/** @return array{ok: bool, notice: string, error: string} */
+function deleteBlock(string $id): array
+{
+    $row = one('SELECT id, zone FROM ' . t('news_block') . ' WHERE id = ?', [$id]);
+    if ($row === null) {
+        return ['ok' => false, 'notice' => '', 'error' => 'Блока уже нет — обновите страницу.'];
+    }
+
+    run('DELETE FROM ' . t('news_block') . ' WHERE id = ?', [(string) $row['id']]);
+
+    logInfo('news.block_deleted', ['blockId' => (string) $row['id'], 'zone' => (string) $row['zone']]);
+
+    return ['ok' => true, 'notice' => 'deleted', 'error' => ''];
+}
