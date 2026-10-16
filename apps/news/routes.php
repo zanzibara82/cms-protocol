@@ -53,6 +53,16 @@ addFilter('sitemap_urls', static function (array $urls): array {
     return array_merge($urls, newsSitemapUrls());
 }, 10);
 
+// Блоки вывода: раздел подписывает каждую свою зону одной функцией, имя зоны приходит
+// аргументом — на второе имя не нужно второе замыкание (решение 2 спецификации).
+// Подписка стоит ниже фильтра карты сайтов: для стража `NewsVisibilityTest` строка того
+// замыкания — единственная наводка на место в файле, и сдвигать её здесь нельзя (вердикт Р3).
+// Имя переменной с префиксом области: файл исполняется внутри `registerAppRoutes()`
+// (`core/apps.php:266`), и короткое `$zone` жило бы в её локальных переменных.
+foreach (NEWS_BLOCK_ZONES as $regionZone) {
+    addFilter('region_' . $regionZone, 'newsRegionHtml', 10);
+}
+
 /** @param array<string, string> $params */
 function newsFeedPage(array $params = []): void
 {
@@ -208,7 +218,6 @@ function newsSinglePage(array $params = []): void
         'preview' => $preview && !$open,
         'scheduled' => $open === false && $item['status'] === NEWS_STATUS['PUBLISHED'],
         'showUpdated' => $updated !== null && formatRuDate($updated) !== formatRuDate(momentOf($item['publishedAt'])),
-        'related' => $open ? relatedLinks((string) $item['categorySlug'], (string) $item['slug'], $now) : [],
     ], [
         'title' => $seo['title'],
         'description' => $seo['description'],

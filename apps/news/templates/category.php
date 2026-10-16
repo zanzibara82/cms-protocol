@@ -28,4 +28,6 @@ declare(strict_types=1);
     <?= partial('news/partials/search', ['q' => '']) /* @safe html */ ?>
     <?= partial('news/partials/categories', ['categories' => $categories, 'current' => $current]) /* @safe html */ ?>
     <?= partial('news/partials/list', ['feed' => $feed, 'empty' => $empty]) /* @safe html */ ?>
+
+    <?php region('category'); ?>
 </section>

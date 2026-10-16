@@ -24,4 +24,6 @@ declare(strict_types=1);
     </header>
 
     <?= partial('news/partials/list', ['feed' => $feed, 'empty' => $empty]) /* @safe html */ ?>
+
+    <?php region('category'); ?>
 </section>

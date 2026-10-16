@@ -280,10 +280,38 @@ final class NewsPublicTest extends TestCase
 
     public function testУМатериалаВидноПохожиеИзЕгоРубрики(): void
     {
+        // Виджет переехал в блок зоны `article`: заголовок человек задаёт на экране «Блоки», и
+        // на странице он обязан прозвучать ровно один раз — второй значил бы, что старый виджет
+        // не удалён (критерий 4 §6 спецификации).
         $page = Kernel::get('/news/vecher-vstrechi');
 
-        self::assertStringContainsString('Читайте также', $page['body']);
+        self::assertStringContainsString('<section class="region region-article">', $page['body']);
+        self::assertStringContainsString('Похожие материалы', $page['body'], 'заводской блок зоны article');
         self::assertStringContainsString('Второй вечер', $page['body']);
-        self::assertStringNotContainsString('Приём в первый класс', $page['body'], 'чужая рубрика в похожих не появляется');
+        self::assertStringNotContainsString('Приём в первый класс', $page['body'], 'чужая рубрика в блоке не появляется');
+        self::assertStringNotContainsString('Читайте также', $page['body'], 'старый заголовок виджета снят вместе с виджетом');
+        self::assertSame(1, substr_count((string) $page['body'], 'Похожие материалы'), 'один блок — одна печать заголовка');
+    }
+
+    public function testНаГлавнойБлокСвежихМатериалов(): void
+    {
+        // Зона `home` живёт в теме, а не в разделе: если подписка подключена только к шаблонам
+        // «Новостей», эта проверка красна, и наоборот — она же доказывает, что ядро зовёт
+        // приложение, а не наоборот.
+        $page = Kernel::get('/');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('<section class="region region-home">', $page['body']);
+        self::assertStringContainsString('Свежие материалы', $page['body']);
+        self::assertStringContainsString('/news/vecher-vstrechi', $page['body'], 'карточка блока ведёт на материал');
+    }
+
+    public function testЗонаБезБлоковНеПечатаетОбёртку(): void
+    {
+        // В зоне `category` заводских строк нет и человек их не заводил: страница-список обязана
+        // остаться ровно такой, какой была до слоя (критерий 1 приёмки).
+        $page = Kernel::get('/news');
+
+        self::assertStringNotContainsString('<section class="region', $page['body']);
     }
 }

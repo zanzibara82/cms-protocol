@@ -8,7 +8,6 @@ declare(strict_types=1);
  * @var bool $preview
  * @var bool $scheduled
  * @var bool $showUpdated
- * @var list<array<string, mixed>> $related
  */
 ?>
 <article class="space-y-6">
@@ -61,14 +60,5 @@ declare(strict_types=1);
         </ul>
     <?php endif; ?>
 
-    <?php if ($related !== []): ?>
-        <section class="space-y-4 border-t border-ink/10 pt-6">
-            <h2 class="text-xl font-semibold">Читайте также</h2>
-            <div class="grid gap-4 sm:grid-cols-2">
-                <?php foreach ($related as $card): ?>
-                    <?= partial('news/partials/card', ['card' => $card]) /* @safe html */ ?>
-                <?php endforeach; ?>
-            </div>
-        </section>
-    <?php endif; ?>
+    <?php region('article', ['slug' => (string) $item['slug'], 'category' => (string) $item['categorySlug']]); ?>
 </article>
