@@ -17,4 +17,9 @@ parameters:
   excludePaths:
     analyse:
       - public/assets/*
+  # Глобальные константы lib-файлов в реестр символов попадают только при явном включении
+  # файла в набор сканирования: paths сам по себе константы не резолвит (проверено на
+  # NEWS_BLOCK_OPS: единичный argv-прогон теста ловит «not found», пара «тест + admin.php» — нет).
+  scanFiles:
+    - apps/news/lib/admin.php
   treatPhpDocTypesAsCertain: false

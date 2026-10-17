@@ -88,4 +88,46 @@ final class NewsBlockRulesTest extends TestCase
         self::assertNotSame('', blockTargetProblem('list', 'user', 'id', true), 'Целью может быть только рубрика или метка');
         self::assertNotSame('', blockTargetProblem('list', '', 'id', false), 'Идентификатор без вида цели — обрывок формы');
     }
+
+    // ── Цель из формы ────────────────────────────────────
+
+    public function testПустаяСтрокаНеДаётНиВидаНиИдентификатора(): void
+    {
+        self::assertSame(['kind' => '', 'id' => ''], parseBlockTarget(''));
+        self::assertSame(['kind' => '', 'id' => ''], parseBlockTarget('   '), 'Пробелы срезаются до проверки');
+    }
+
+    public function testРубрикаИМеткаРасщепляютсяПоПервомуДвоеточию(): void
+    {
+        self::assertSame(['kind' => 'category', 'id' => 'zhizn-shkoly'], parseBlockTarget('category:zhizn-shkoly'));
+        self::assertSame(['kind' => 'tag', 'id' => 'vypusknik'], parseBlockTarget('tag:vypusknik'));
+    }
+
+    public function testЗначениеБезРазделителяНеПридумываетВид(): void
+    {
+        // «prosto-id» не превращается в рубрику с идентификатором «prosto-id»: вид неизвестен, и
+        // проверка обязана его отвергнуть, а не выбрать первый словарь.
+        self::assertSame(['kind' => '', 'id' => 'prosto-id'], parseBlockTarget('prosto-id'));
+    }
+
+    public function testДвоеточиеВИдентификатореОстаётсяВЦели(): void
+    {
+        // Идентификатор строит `newId()`, и двоеточия в нём нет. Разбор остаётся предсказуемым:
+        // всё после первого разделителя — идентификатор, а не ещё один вид цели.
+        self::assertSame(['kind' => 'tag', 'id' => 'a:b'], parseBlockTarget('tag:a:b'));
+    }
+
+    public function testЧужойВидЦелиДоходитДоПроверкиИОтказывается(): void
+    {
+        $parsed = parseBlockTarget('shop:9');
+
+        self::assertSame(['kind' => 'shop', 'id' => '9'], $parsed, 'Парсер не решает, жива ли цель');
+        self::assertNotSame('', blockTargetProblem('list', $parsed['kind'], $parsed['id'], true));
+        self::assertNotSame('', blockTargetProblem('list', $parsed['kind'], $parsed['id'], false));
+    }
+
+    public function testНеполнаяЦельОтказывается(): void
+    {
+        self::assertNotSame('', blockTargetProblem('list', 'category', '', true), 'Рубрика без идентификатора — обрывок');
+    }
 }

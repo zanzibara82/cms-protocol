@@ -27,6 +27,28 @@ final class NewsAdminRulesTest extends TestCase
         );
     }
 
+    /**
+     * Строка экрана «Блоки» в том виде, как её отдаёт `adminBlockRows()` (задача 8): шаблон читает
+     * готовые поля и не пересчитывает видимость сам.
+     *
+     * @param array<string, mixed> $overrides
+     *
+     * @return array<string, mixed>
+     */
+    private function block(array $overrides = []): array
+    {
+        return array_merge([
+            'id' => 'id-bloka',
+            'zone' => 'home',
+            'kind' => 'list',
+            'title' => 'Свежие материалы',
+            'take' => 5,
+            'visible' => true,
+            'order' => 0,
+            'target' => null,
+        ], $overrides);
+    }
+
     public function testЧерновикуТолькоПечать(): void
     {
         self::assertSame(
@@ -144,5 +166,77 @@ final class NewsAdminRulesTest extends TestCase
         foreach (['published', 'scheduled', 'unpublished', 'pinned', 'unpinned', 'unchanged'] as $key) {
             self::assertArrayHasKey($key, NEWS_NOTICE_TEXT, $key);
         }
+    }
+
+    // ── Блоки вывода ─────────────────────────────────────
+
+    public function testДействияБлоковОбещаныДевятьИУКаждогоЕстьПодпись(): void
+    {
+        // Порядок этого списка — порядок, в котором ветки `match` разбирают POST (задача 9), и
+        // страж договора действий сверяет его с обработчиком: новое действие без ветки не проходит.
+        self::assertSame(
+            ['create', 'rename', 'retarget', 'limit', 'show', 'hide', 'up', 'down', 'delete'],
+            NEWS_BLOCK_OPS
+        );
+        self::assertSame(NEWS_BLOCK_OPS, array_keys(NEWS_BLOCK_OP_LABEL), 'Действию без подписи нечего печатать');
+
+        foreach (NEWS_BLOCK_OP_LABEL as $op => $label) {
+            self::assertNotSame('', $label, (string) $op);
+        }
+    }
+
+    public function testЗоныИВидыБлоковПодписаны(): void
+    {
+        // Подписи читают заголовки трёх таблиц и две формы. Ключи обязаны совпасть со списками
+        // задачи 3: зона без подписи напечатала бы пустой заголовок таблицы.
+        self::assertSame(NEWS_BLOCK_ZONES, array_keys(NEWS_BLOCK_ZONE_LABEL));
+        self::assertSame(NEWS_BLOCK_KINDS, array_keys(NEWS_BLOCK_KIND_LABEL));
+    }
+
+    public function testКнопкиСтрокиБлокаЗависятОтСостоянияПоказа(): void
+    {
+        self::assertSame(
+            [
+                ['op' => 'hide', 'label' => 'Скрыть'],
+                ['op' => 'up', 'label' => 'Вверх'],
+                ['op' => 'down', 'label' => 'Вниз'],
+                ['op' => 'delete', 'label' => 'Удалить'],
+            ],
+            newsBlockRowActions($this->block())
+        );
+
+        self::assertSame(
+            'show',
+            newsBlockRowActions($this->block(['visible' => false]))[0]['op'],
+            'Скрытому блоку положена кнопка «Показать», а не «Скрыть»'
+        );
+    }
+
+    public function testПравкиСтрокиНеКнопкиАПоля(): void
+    {
+        // Заголовок, цель и число — три формы внутри строки. Их подписи шаблон читает прямо из
+        // словаря, поэтому в списке кнопок их нет: кнопка «Переименовать» рядом с полем ввода
+        // означала бы два способа сделать одно и то же.
+        $ops = array_column(newsBlockRowActions($this->block()), 'op');
+
+        foreach (['rename', 'retarget', 'limit'] as $inline) {
+            self::assertNotContains($inline, $ops);
+        }
+    }
+
+    public function testСтрокиРаздаютсяПоЗонамВСпискеЗон(): void
+    {
+        $grouped = groupBlockRows([
+            $this->block(['id' => 'a1', 'zone' => 'article', 'title' => 'Домашний список']),
+            $this->block(['id' => 'h1', 'zone' => 'home']),
+            $this->block(['id' => 'x1', 'zone' => 'sidebar']),
+        ]);
+
+        // Пустая зона обязана остаться в списке со своей таблицей и формой добавления: иначе
+        // человек, который ещё ничего не настроил, не нашёл бы, где начинать.
+        self::assertSame(NEWS_BLOCK_ZONES, array_keys($grouped));
+        self::assertSame(['h1'], array_column($grouped['home'], 'id'));
+        self::assertSame(['a1'], array_column($grouped['article'], 'id'));
+        self::assertSame([], $grouped['category']);
     }
 }

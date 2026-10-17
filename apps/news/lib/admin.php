@@ -240,3 +240,107 @@ function catalogFailure(string $error): array
 {
     return ['ok' => false, 'notice' => '', 'error' => $error];
 }
+
+// ── Блоки вывода ─────────────────────────────────────────
+
+// Действия экрана блоков ровно в том порядке, в котором их разбирает `match` в
+// actions/blocks.php (задача 9). Страж договора действий сверяет этот список с обработчиком:
+// новое действие без ветки match не проходит — тот же договор, что у рубрик и тегов.
+/** @var list<string> */
+const NEWS_BLOCK_OPS = ['create', 'rename', 'retarget', 'limit', 'show', 'hide', 'up', 'down', 'delete'];
+
+/** @var array<string, string> */
+const NEWS_BLOCK_OP_LABEL = [
+    'create' => 'Добавить блок',
+    'rename' => 'Сохранить заголовок',
+    'retarget' => 'Сохранить цель',
+    'limit' => 'Сохранить число',
+    'show' => 'Показать',
+    'hide' => 'Скрыть',
+    'up' => 'Вверх',
+    'down' => 'Вниз',
+    'delete' => 'Удалить',
+];
+
+// Подписи зон и видов: их печатают заголовки трёх таблиц и две формы экрана. В базе и в адресе
+// значение остаётся коротким (`home`, `list`) — человек читает русский текст, машина идентификатор.
+/** @var array<string, string> */
+const NEWS_BLOCK_ZONE_LABEL = [
+    'home' => 'На главной',
+    'category' => 'В рубрике',
+    'article' => 'В материале',
+];
+
+/** @var array<string, string> */
+const NEWS_BLOCK_KIND_LABEL = [
+    'list' => 'Список материалов',
+    'related' => 'Похожие материалы',
+];
+
+/**
+ * Кнопки строки экрана «Блоки».
+ *
+ * Заголовок, цель и число правятся полями внутри строки — их подписи шаблон читает прямо из
+ * NEWS_BLOCK_OP_LABEL, как у справочников. Здесь только то, что нажимается: направление показа,
+ * две стрелки порядка и удаление. Направление берётся из состояния строки, а не переключается:
+ * второе нажатие «Скрыть» обязано оставить блок скрытым (договор `setBlockVisibility()`, задача 6).
+ * Стрелки печатаются и на первой, и на последней строке зоны: `moveBlock()` за краем возвращает
+ * `topped` / `bottomed`, и отсутствие кнопки само по себе ничего человеку не объяснило бы.
+ *
+ * @param array{id: string, zone: string, kind: string, title: string, take: int, visible: bool, order: int, target: null|array{kind: string, id: string, label: string, alive: bool}} $row
+ *
+ * @return list<array{op: string, label: string}>
+ */
+function newsBlockRowActions(array $row): array
+{
+    $toggle = $row['visible'] === true ? 'hide' : 'show';
+
+    $ops = [$toggle, 'up', 'down', 'delete'];
+    $out = [];
+
+    foreach ($ops as $op) {
+        $out[] = ['op' => $op, 'label' => NEWS_BLOCK_OP_LABEL[$op]];
+    }
+
+    return $out;
+}
+
+/**
+ * Раздать строки по зонам — по одной таблице на объявленную зону.
+ *
+ * Порядок задаёт NEWS_BLOCK_ZONES, а не база: пустая зона обязана остаться на экране со своей
+ * формой добавления, иначе человек, который ничего ещё не настроил, не нашёл бы, где начинать.
+ * Строка с необъявленной зоной не печатается нигде (вердикт Р12): создать её редактор не может —
+ * `checkBlockFields()` отвергает чужую зону, — значит, пришла она из ручной правки базы. Отдать
+ * её одной из таблиц означало бы соврать про место вывода, а уронить экран — лишить человека
+ * способа эту правку увидеть и отменить.
+ *
+ * Форма строк повторяется дословно (вердикт Р14): шаблон экрана отдаёт эти строки в
+ * `newsBlockRowActions()`, а тот объявлен параметром точной формы. Вывести `list<array<string,
+ * mixed>>` означало бы спор с PHPStan на каждом экране.
+ *
+ * @param list<array{id: string, zone: string, kind: string, title: string, take: int, visible: bool, order: int, target: null|array{kind: string, id: string, label: string, alive: bool}}> $rows
+ *
+ * @return array<string, list<array{id: string, zone: string, kind: string, title: string, take: int, visible: bool, order: int, target: null|array{kind: string, id: string, label: string, alive: bool}}>>
+ */
+function groupBlockRows(array $rows): array
+{
+    /** @var array<string, list<array{id: string, zone: string, kind: string, title: string, take: int, visible: bool, order: int, target: null|array{kind: string, id: string, label: string, alive: bool}}>> $byZone */
+    $byZone = [];
+
+    foreach (NEWS_BLOCK_ZONES as $zone) {
+        $byZone[$zone] = [];
+    }
+
+    foreach ($rows as $row) {
+        $zone = $row['zone'];
+
+        if (!isset($byZone[$zone])) {
+            continue;
+        }
+
+        $byZone[$zone][] = $row;
+    }
+
+    return $byZone;
+}

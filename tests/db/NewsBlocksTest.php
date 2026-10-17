@@ -620,6 +620,158 @@ final class NewsBlocksTest extends NewsDbTestCase
         return array_map(static fn (array $row): string => (string) $row['title'], $rows);
     }
 
+    // ── Строки экрана ────────────────────────────────────
+
+    public function testСтрокиЭкранаИдутВПорядкеЗоныАНеПоАлфавиту(): void
+    {
+        self::makeBlock('home', 'list', 'Январь', ['order_index' => 30]);
+        self::makeBlock('home', 'list', 'Август', ['order_index' => 10]);
+        self::makeBlock('category', 'list', 'Рубричный', ['order_index' => 20]);
+
+        // Порядок экрана — тот же, что печатает страница: человек правит стрелками именно ту
+        // последовательность, которую читатель отдаёт читателю.
+        self::assertSame(['Рубричный', 'Август', 'Январь'], $this->titles(adminBlockRows()));
+    }
+
+    public function testЭкранПоказываетИСкрытыеСтроки(): void
+    {
+        self::makeBlock('home', 'list', 'Видимый', ['order_index' => 10]);
+        $hiddenId = self::makeBlock('home', 'list', 'Скрытый', ['order_index' => 20, 'visible' => 0]);
+
+        $rows = adminBlockRows();
+
+        self::assertCount(2, $rows, 'Снятый с сайта блок обязан остаться в админке: иначе его не вернуть');
+        self::assertSame($hiddenId, $rows[1]['id']);
+        self::assertFalse($rows[1]['visible']);
+    }
+
+    public function testСтрокаНесётВсеПоляКоторыеЧитаетШаблон(): void
+    {
+        $id = self::makeBlock('article', 'related', 'Похожие чтения', ['order_index' => 4, 'take_limit' => 3]);
+
+        self::assertSame(
+            [[
+                'id' => $id,
+                'zone' => 'article',
+                'kind' => 'related',
+                'title' => 'Похожие чтения',
+                'take' => 3,
+                'visible' => true,
+                'order' => 4,
+                'target' => null,
+            ]],
+            adminBlockRows()
+        );
+    }
+
+    public function testПодписьРубрикиСледуетЗаПереименованием(): void
+    {
+        $categoryId = categoryIdOf('zhizn-shkoly');
+        self::makeBlock('category', 'list', 'Из рубрики', ['target_kind' => 'category', 'target_id' => $categoryId]);
+
+        self::assertSame('Жизнь школы', adminBlockRows()[0]['target']['label']);
+
+        self::assertTrue(renameCategory($categoryId, 'Жизнь класса')['ok']);
+
+        self::assertSame(
+            'Жизнь класса',
+            adminBlockRows()[0]['target']['label'],
+            'Название цели экран берёт из справочника, а не из копии в своей строке'
+        );
+    }
+
+    public function testМеткаПодписываетсяСвоейНадписью(): void
+    {
+        [$tagId] = resolveTagIds(['Выпускник']);
+        self::makeBlock('home', 'list', 'По метке', ['target_kind' => 'tag', 'target_id' => $tagId]);
+
+        $target = adminBlockRows()[0]['target'];
+
+        self::assertSame('tag', $target['kind']);
+        self::assertSame('Выпускник', $target['label']);
+        self::assertTrue($target['alive']);
+    }
+
+    public function testБлокБезЦелиНесётПустуюЦель(): void
+    {
+        self::makeBlock('home', 'list', 'Вся лента');
+
+        self::assertNull(adminBlockRows()[0]['target']);
+    }
+
+    public function testУдалённаяЦельПомечаетсяНедоступной(): void
+    {
+        self::assertTrue(createCategory('Праздники')['ok']);
+        $categoryId = $this->column('SELECT id FROM ' . t('news_category') . ' WHERE title = ?', ['Праздники']);
+        self::makeBlock('home', 'list', 'Сирота', ['target_kind' => 'category', 'target_id' => $categoryId]);
+
+        self::assertTrue(deleteCategory($categoryId)['ok'], 'Рубрика без материалов удаляется');
+
+        $target = adminBlockRows()[0]['target'];
+
+        // Цели больше нет, но строка остаётся и говорит об этом (§5): читатель задачи 4 отдаёт по
+        // такой строке общую ленту, и редактор обязан видеть, что подборка съехала.
+        self::assertSame($categoryId, $target['id']);
+        self::assertSame('', $target['label']);
+        self::assertFalse($target['alive']);
+    }
+
+    public function testПолуразрушеннаяЦельНеИсчезаетСоСтроки(): void
+    {
+        // Ручная правка базы способна оставить вид цели без идентификатора. Такая строка
+        // показывается мёртвой: молча считать её «блоком без цели» — значит спрятать поломку.
+        self::makeBlock('home', 'list', 'Наполовину', ['target_kind' => 'category', 'target_id' => null]);
+
+        $target = adminBlockRows()[0]['target'];
+
+        self::assertIsArray($target);
+        self::assertFalse($target['alive']);
+    }
+
+    public function testОпцииЦелиСоставныеИГруппированыПоСловарю(): void
+    {
+        $categoryId = categoryIdOf('zhizn-shkoly');
+        [$tagId] = resolveTagIds(['Выпускник']);
+
+        $groups = blockTargetOptions();
+
+        // Две группы в порядке NEWS_BLOCK_TARGETS: шаблон печатает из них `<optgroup>`, и третья
+        // цель появилась бы в формах сама, без правки разметки.
+        self::assertSame(['category', 'tag'], array_column($groups, 'kind'));
+        self::assertSame(['Рубрики', 'Теги'], array_column($groups, 'label'));
+        self::assertContains('category:' . $categoryId, array_column($groups[0]['items'], 'value'));
+        self::assertContains('tag:' . $tagId, array_column($groups[1]['items'], 'value'));
+    }
+
+    public function testСкрытаяРубрикаОстаётсяВОпцияхЦели(): void
+    {
+        self::assertTrue(createCategory('Праздники')['ok']);
+        $categoryId = $this->column('SELECT id FROM ' . t('news_category') . ' WHERE title = ?', ['Праздники']);
+        self::assertTrue(toggleCategoryVisibility($categoryId)['ok']);
+
+        $found = null;
+
+        foreach (blockTargetOptions()[0]['items'] as $item) {
+            if ($item['value'] === 'category:' . $categoryId) {
+                $found = $item;
+            }
+        }
+
+        self::assertNotNull($found, 'Снятие рубрики с показа не убирает её из выбора: блок на неё уже настроен');
+        self::assertFalse($found['visible'], 'Скрытая рубрика помечена — шаблон печатает слово «скрыта»');
+    }
+
+    public function testПодделаннаяЦельНеПроходитЧерезПисателя(): void
+    {
+        $target = parseBlockTarget('shop:9');
+
+        $result = createBlock('home', 'list', 'Подделка', 3, $target['kind'], $target['id']);
+
+        self::assertFalse($result['ok']);
+        self::assertSame('', $result['notice'], 'Отказ не несёт ключа уведомления');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('news_block')));
+    }
+
     /**
      * @param list<array<string, mixed>> $cards
      * @return list<string>

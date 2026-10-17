@@ -498,3 +498,144 @@ function moveBlock(string $id, string $direction): array
 
     return ['ok' => true, 'notice' => 'moved', 'error' => ''];
 }
+
+// ── Цель и строки экрана ─────────────────────────────────
+
+/**
+ * Разбор составного значения цели из формы: `category:<id>` или `tag:<id>`; пустая строка — цели нет.
+ *
+ * Здесь только расщепление по первому двоеточию. Живая ли цель и бывает ли она у этого вида,
+ * решает `blockTargetProblem()` (вердикт Р13): если бы неизвестный вид молча превращался в «цели
+ * нет», подделанный POST `shop:9` развернул бы подборку на всю ленту без единого отказа — тихая
+ * правка намерения человека.
+ *
+ * @return array{kind: string, id: string}
+ */
+function parseBlockTarget(string $raw): array
+{
+    $value = trim($raw);
+
+    if ($value === '') {
+        return ['kind' => '', 'id' => ''];
+    }
+
+    $at = strpos($value, ':');
+
+    if ($at === false) {
+        return ['kind' => '', 'id' => $value];
+    }
+
+    return ['kind' => substr($value, 0, $at), 'id' => substr($value, $at + 1)];
+}
+
+/**
+ * Все строки таблицы блоков — то, что печатает экран «Блоки».
+ *
+ * В отличие от читателя задачи 4, экран не отбирает `visible = 1`: скрытый блок остаётся в
+ * таблице и доступен кнопке «Показать» (правило 1). Названия целей приходят из выборок
+ * справочников — тех же, что печатают экраны «Рубрики» и «Теги» (правило 2).
+ *
+ * @return list<array{
+ *     id: string, zone: string, kind: string, title: string, take: int, visible: bool, order: int,
+ *     target: null|array{kind: string, id: string, label: string, alive: bool}
+ * }>
+ */
+function adminBlockRows(): array
+{
+    // Порядок строк: зона (строковое имя — статья раньше рубрики, рубрика раньше главной),
+    // внутри зоны — порядок, который правят стрелками, и заголовок при равенстве. Порядок таблиц
+    // на экране задаёт groupBlockRows(), а не эта выборка.
+    $rows = all(
+        'SELECT id, zone, kind, title, target_kind, target_id, take_limit, visible, order_index'
+            . ' FROM ' . t('news_block')
+            . ' ORDER BY zone, order_index, title'
+    );
+
+    /** @var array<string, array<string, string>> $labels */
+    $labels = ['category' => [], 'tag' => []];
+
+    foreach (adminCategoryRows() as $categoryRow) {
+        $labels['category'][$categoryRow['id']] = $categoryRow['title'];
+    }
+
+    foreach (adminTagRows() as $tagRow) {
+        $labels['tag'][$tagRow['id']] = $tagRow['label'];
+    }
+
+    $out = [];
+
+    foreach ($rows as $row) {
+        $targetKind = $row['target_kind'] === null ? '' : (string) $row['target_kind'];
+        $targetId = $row['target_id'] === null ? '' : (string) $row['target_id'];
+        $target = null;
+
+        if ($targetKind !== '' || $targetId !== '') {
+            // Строка, у которой заполнена хоть одна колонка цели, показывается целью — живой или
+            // мёртвой (правило 4): «вида нет, а идентификатор есть» и «идентификатора нет, а вид
+            // есть» приходят только из порчи данных, и прятать их со строки нельзя.
+            $known = isset($labels[$targetKind]);
+            $target = [
+                'kind' => $targetKind,
+                'id' => $targetId,
+                'label' => $known ? (string) ($labels[$targetKind][$targetId] ?? '') : '',
+                'alive' => $known && isset($labels[$targetKind][$targetId]),
+            ];
+        }
+
+        $out[] = [
+            'id' => (string) $row['id'],
+            'zone' => (string) $row['zone'],
+            'kind' => (string) $row['kind'],
+            'title' => (string) $row['title'],
+            'take' => (int) $row['take_limit'],
+            'visible' => (bool) $row['visible'],
+            'order' => (int) $row['order_index'],
+            'target' => $target,
+        ];
+    }
+
+    return $out;
+}
+
+/**
+ * Опции выбора цели — для формы добавления и для правки цели в строке.
+ *
+ * Значение одной опции составное (`category:42`), и это не экономия разметки: два независимых
+ * поля позволяют отправить пару «вид — рубрика, идентификатор — метка» (вердикт Р13). «Без цели»
+ * — отдельная опция с пустым значением, её печатает шаблон. Скрытые рубрики в списке остаются:
+ * блок на такую уже настроен, и снять её с выбора означало бы потерять настройку при первой
+ * же правке (правило 2).
+ *
+ * @return list<array{kind: string, label: string, items: list<array{value: string, title: string, visible: bool}>}>
+ */
+function blockTargetOptions(): array
+{
+    /** @var array<string, list<array{value: string, title: string, visible: bool}>> $byKind */
+    $byKind = ['category' => [], 'tag' => []];
+
+    foreach (adminCategoryRows() as $categoryRow) {
+        $byKind['category'][] = [
+            'value' => 'category:' . $categoryRow['id'],
+            'title' => $categoryRow['title'],
+            'visible' => $categoryRow['visible'],
+        ];
+    }
+
+    foreach (adminTagRows() as $tagRow) {
+        $byKind['tag'][] = [
+            'value' => 'tag:' . $tagRow['id'],
+            'title' => $tagRow['label'],
+            'visible' => true,
+        ];
+    }
+
+    $out = [];
+
+    // Порядок групп и их заголовки читаются из того же словаря, что и проверка цели: добавленная
+    // цель появляется в формах автоматически, и её невозможно забыть проверить.
+    foreach (NEWS_BLOCK_TARGETS as $kind => $label) {
+        $out[] = ['kind' => (string) $kind, 'label' => (string) $label, 'items' => $byKind[$kind]];
+    }
+
+    return $out;
+}
