@@ -15,6 +15,7 @@ final class AppActionContractTest extends TestCase
     private const ACTIONS = [
         'apps/news/actions/items.php' => ['ops' => ['NEWS_ROW_OP_LABEL'], 'default' => 'itemFailure'],
         'apps/news/actions/catalog.php' => ['ops' => ['NEWS_CATEGORY_OP_LABEL', 'NEWS_TAG_OP_LABEL'], 'default' => 'catalogFailure'],
+        'apps/news/actions/blocks.php' => ['ops' => ['NEWS_BLOCK_OP_LABEL'], 'default' => 'catalogFailure'],
     ];
 
     public function testКаждоеОбещанноеДействиеРазобрано(): void
@@ -28,6 +29,12 @@ final class AppActionContractTest extends TestCase
             array_merge(NEWS_CATEGORY_OPS, NEWS_TAG_OPS),
             $catalog,
             'catalog.php: порядок действий в match обязан совпадать со списком'
+        );
+
+        self::assertSame(
+            array_keys(NEWS_BLOCK_OP_LABEL),
+            $this->handledOps('apps/news/actions/blocks.php'),
+            'blocks.php: кнопки экрана и match расходятся'
         );
     }
 
@@ -60,6 +67,19 @@ final class AppActionContractTest extends TestCase
             array_values(array_diff($captions, $catalog)),
             'catalog.php: подпись без ветки match — мёртвая кнопка'
         );
+
+        $blocks = $this->handledOps('apps/news/actions/blocks.php');
+
+        self::assertSame(
+            [],
+            array_values(array_diff($blocks, array_keys(NEWS_BLOCK_OP_LABEL))),
+            'blocks.php: разобранное действие обязано иметь подпись'
+        );
+        self::assertSame(
+            [],
+            array_values(array_diff(array_keys(NEWS_BLOCK_OP_LABEL), $blocks)),
+            'blocks.php: подпись без ветки match — мёртвая кнопка'
+        );
     }
 
     public function testНеизвестноеДействиеОтказывается(): void
@@ -85,6 +105,7 @@ final class AppActionContractTest extends TestCase
     {
         self::assertSame(NEWS_CATEGORY_OPS, array_keys(NEWS_CATEGORY_OP_LABEL));
         self::assertSame(NEWS_TAG_OPS, array_keys(NEWS_TAG_OP_LABEL));
+        self::assertSame(NEWS_BLOCK_OPS, array_keys(NEWS_BLOCK_OP_LABEL));
     }
 
     /**

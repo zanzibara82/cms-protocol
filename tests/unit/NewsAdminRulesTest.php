@@ -92,14 +92,23 @@ final class NewsAdminRulesTest extends TestCase
         self::assertSame([], newsRowActions($this->item(['status' => 'ARCHIVED'])), 'Строки из будущего не печатают кнопок');
     }
 
-    public function testПолосаВкладокЗнаетЧетыреЭкрана(): void
+    public function testПолосаВкладокЗнаетПятьЭкранов(): void
     {
-        self::assertCount(4, NEWS_ADMIN_TABS);
+        self::assertCount(5, NEWS_ADMIN_TABS);
 
         foreach (NEWS_ADMIN_TABS as $tab) {
             self::assertStringStartsWith('/news/admin', (string) $tab['href'], (string) $tab['label']);
             self::assertNotSame('', (string) $tab['label']);
         }
+    }
+
+    public function testПолосаВкладокОтмечаетЭкранБлоков(): void
+    {
+        $nav = newsAdminNav(NEWS_ADMIN_BLOCKS_PATH);
+
+        self::assertSame(1, substr_count($nav, 'aria-current="page"'), 'Отмеченной бывает одна вкладка');
+        self::assertStringContainsString('href="/news/admin/blocks" aria-current="page"', $nav);
+        self::assertStringContainsString('>Блоки</a>', $nav);
     }
 
     public function testПолосаВкладокОтмечаетТекущийЭкран(): void

@@ -9,6 +9,7 @@ require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/actions/items.php';
 require_once __DIR__ . '/actions/item.php';
 require_once __DIR__ . '/actions/catalog.php';
+require_once __DIR__ . '/actions/blocks.php';
 
 // Порядок важен: /news/c/{slug} и /news/t/{slug} стоят до /news/{slug}. Сами адреса «c» и «t»
 // заняты в NEWS_RESERVED_SLUGS, поэтому материал не может увести у рубрики её страницу.
@@ -39,6 +40,12 @@ addRoute('GET', '/news/admin/categories', 'newsAdminCategories', ['app' => 'news
 addRoute('POST', '/news/admin/categories', 'newsCategoriesAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/news/admin/tags', 'newsAdminTags', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/news/admin/tags', 'newsTagsAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+
+// Экран блоков вывода: GET печатает три таблицы зон, POST выполняет девять действий. Пути —
+// строковые литералы по той же причине, что у справочников: регулярка CsrfCoverageTest читает
+// путь маршрута, и константа в этом месте спрятала бы обработчик от проверки токена.
+addRoute('GET', '/news/admin/blocks', 'newsAdminBlocks', ['app' => 'news', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/news/admin/blocks', 'newsBlocksAction', ['app' => 'news', 'private' => true, 'permission' => 'login']);
 
 // Карта сайтов: раздел добавляет свои адреса фильтром, а не правкой ядра (§5.4). Порядок
 // фиксирован — ядро кладёт главную первым, раздел дописывает свои следом.

@@ -11,14 +11,14 @@ use PHPUnit\Framework\TestCase;
 
 final class NewsCatalogRulesTest extends TestCase
 {
-    public function testВкладокСталоЧетыреИОниВедутНаЭкраныРаздела(): void
+    public function testВкладокСталоПятьИОниВедутНаЭкраныРаздела(): void
     {
         self::assertSame(
-            ['/news/admin', '/news/admin/items', '/news/admin/categories', '/news/admin/tags'],
+            ['/news/admin', '/news/admin/items', '/news/admin/categories', '/news/admin/tags', '/news/admin/blocks'],
             array_column(NEWS_ADMIN_TABS, 'href')
         );
         self::assertSame(
-            ['Сводка', 'Материалы', 'Рубрики', 'Теги'],
+            ['Сводка', 'Материалы', 'Рубрики', 'Теги', 'Блоки'],
             array_column(NEWS_ADMIN_TABS, 'label')
         );
     }

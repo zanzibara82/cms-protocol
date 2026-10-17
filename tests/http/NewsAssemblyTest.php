@@ -120,7 +120,7 @@ final class NewsAssemblyTest extends TestCase
         self::assertStringContainsString('/login?next=', (string) $anonymous['headers']['location']);
 
         $this->login();
-        foreach (['/news/admin', '/news/admin/items', '/news/admin/categories', '/news/admin/tags'] as $path) {
+        foreach (['/news/admin', '/news/admin/items', '/news/admin/categories', '/news/admin/tags', '/news/admin/blocks'] as $path) {
             $page = Kernel::get($path);
 
             self::assertSame(200, $page['status'], $path);

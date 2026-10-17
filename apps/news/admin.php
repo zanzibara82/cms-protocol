@@ -161,3 +161,21 @@ function newsAdminTags(array $params = []): void
         'labelMax' => fieldLimit(TAG_FIELDS, 'label', 'max'),
     ], ['title' => 'Теги — админка', 'noindex' => true]);
 }
+
+/** @param array<string, string> $params */
+function newsAdminBlocks(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+
+    render('news/admin/blocks', [
+        'nav' => newsAdminNav(requestPath()),
+        'notice' => noticeForAdminScreen(NEWS_BLOCK_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => groupBlockRows(adminBlockRows()),
+        'targetOptions' => blockTargetOptions(),
+        'titleMax' => fieldLimit(BLOCK_FIELDS, 'title', 'max'),
+        'takeMin' => fieldLimit(BLOCK_FIELDS, 'take', 'min'),
+        'takeMax' => fieldLimit(BLOCK_FIELDS, 'take', 'max'),
+    ], ['title' => 'Блоки — админка', 'noindex' => true]);
+}

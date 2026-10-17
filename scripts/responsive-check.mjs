@@ -136,6 +136,7 @@ const ADMIN_PAGES = [
   { name: 'новости: форма', href: '/news/admin/items/new' },
   { name: 'новости: рубрики', href: '/news/admin/categories' },
   { name: 'новости: теги', href: '/news/admin/tags' },
+  { name: 'новости: блоки', href: '/news/admin/blocks' },
 ]
 
 // Chrome поднимается отдельным процессом и открывает порт отладки не мгновенно: адрес сокета

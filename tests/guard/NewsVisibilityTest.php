@@ -119,7 +119,7 @@ final class NewsVisibilityTest extends TestCase
             static fn (string $name): bool => str_starts_with($name, '{closure:')
         ));
 
-        self::assertSame(['{closure:48}'], $closures, 'Хук карты сайтов — единственное замыкание файла, его строка — 48');
+        self::assertSame(['{closure:55}'], $closures, 'Хук карты сайтов — единственное замыкание файла, его строка — 55');
     }
 
     // Прежний сборщик считал фигурные скобки внутри строковых литералов: тело функции с `'}'` молча
