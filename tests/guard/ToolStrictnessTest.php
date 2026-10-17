@@ -117,6 +117,11 @@ final class ToolStrictnessTest extends TestCase
     // краснит списком, даже если его автор синхронно вычеркнул строку из `CS_FIXER_RULES`.
     private const CS_FIXER_DISABLED_RULES = ['phpdoc_align'];
 
+    // Закреплённое множество исключённых путей (пункт М284-Г2-1): исключённый путь вынимает каталог
+    // из-под шага «стиль» так же молча, как снятое правило, и перечень обязан меняться осознанно —
+    // иначе `->notPath('core')` снимает проверку стиля со всего ядра, а прогон остаётся зелёным.
+    private const CS_FIXER_EXCLUDED_PATHS = ['public/assets', 'public/setup.php.lock'];
+
     // Пять шагов ворот и признаки самой работы каждого (пункт Т2): не подстрока имени исполняемого
     // файла — она стоит в `scripts/gate.sh` трижды, в проверке наличия сборщика, в тексте об его
     // отсутствии и в самой сборке, — а вызов с явными аргументами и точкой сравнения. У шага обязаны
@@ -537,6 +542,100 @@ final class ToolStrictnessTest extends TestCase
             'В `.php-cs-fixer.dist.php` набор выключенных правил разошёлся с закреплённым: выключено `'
                 . implode('`, `', $disabled) . '`, а разрешено только `' . implode('`, `', $allowed)
                 . '` — каждое новое отключение правил молча ослабляет шаг ворот'
+        );
+
+        // Пункт М284-Г2-1: множество `->notPath('…')` закрепляется поимённо — по образцу сверки
+        // выключенных правил выше. Самопроверка эталона обязательна: без неё закреплённый список
+        // можно было бы сузить, и сравнение ниже перестало бы чего-либо требовать.
+        self::assertSame(
+            ['public/assets', 'public/setup.php.lock'],
+            self::CS_FIXER_EXCLUDED_PATHS,
+            'Закреплённый список исключённых путей фиксера в самом страже подменён'
+        );
+
+        $excluded = $this->csFixerExcludedPaths($config);
+        sort($excluded);
+        $allowedPaths = self::CS_FIXER_EXCLUDED_PATHS;
+        sort($allowedPaths);
+
+        self::assertSame(
+            $allowedPaths,
+            $excluded,
+            'В `.php-cs-fixer.dist.php` набор исключённых путей разошёлся с закреплённым: исключено `'
+                . implode('`, `', $excluded) . '`, а разрешено только `' . implode('`, `', $allowedPaths)
+                . '` — каждый новый `notPath` снимает шаг «стиль» с целого каталога, и это не видно'
+                . ' по зелёному прогону'
+        );
+    }
+
+    public function testВКомпозереНетРантаймЗависимостей(): void
+    {
+        // Пункт М284-Г2-2: «ноль рантайм-зависимостей» — ограничение спецификации, и до этого пункта
+        // его не закрепляла ни одна проверка: строка в `require` проходила ворота незамеченной, а на
+        // боевом хостинге, где `composer install` не запускается, такой код просто не находится.
+        $decoded = json_decode($this->read('composer.json'), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            self::fail(
+                '`composer.json` не разобран как JSON (' . json_last_error_msg()
+                    . '): сверять состав зависимостей нечем, а молчать здесь означало бы зелёный прогон'
+                    . ' при любом содержимом файла'
+            );
+        }
+
+        if (!is_array($decoded)) {
+            self::fail(
+                '`composer.json` разобран не списком (скаляр или `null`): сверять состав зависимостей нечем,'
+                    . ' а молчать здесь означало бы зелёный прогон при любом содержимом файла'
+            );
+        }
+
+        /** @var array<mixed> $json */
+        $json = $decoded;
+
+        // Отсутствие ключа — красное падение с его именем: `?? []` превратил бы исчезнувший `require`
+        // в пустой список, и проверка прошла бы на дереве без единой записи.
+        self::assertArrayHasKey('require', $json, 'В `composer.json` нет ключа `require` — рантайм-состав сверять нечем');
+        self::assertArrayHasKey('require-dev', $json, 'В `composer.json` нет ключа `require-dev` — инструменты разработки сверять нечем');
+
+        /** @var mixed $require */
+        $require = $json['require'];
+        if (!is_array($require)) {
+            self::fail('В `composer.json` ключ `require` не разобран как объект — перечисление зависимостей сверять нечем');
+        }
+
+        /** @var mixed $requireDev */
+        $requireDev = $json['require-dev'];
+        if (!is_array($requireDev)) {
+            self::fail('В `composer.json` ключ `require-dev` не разобран как объект — перечисление инструментов сверять нечем');
+        }
+
+        /** @var list<string> $requireNames */
+        $requireNames = array_values(array_map('strval', array_keys($require)));
+        $extra = array_values(array_diff($requireNames, ['php']));
+        self::assertSame(
+            ['php'],
+            $requireNames,
+            'В `composer.json` в `require` названо лишнее (' . implode(', ', $extra)
+                . '): любая строка там превращает проект в зависимый от чужого кода на боевом хостинге,'
+                . ' где `composer install` не запускается'
+        );
+
+        // Порядок записей в `require-dev` не закреплён файлом, поэтому сравнивается множество имён:
+        // `ksort` до сравнения, иначе переставка строк краснила бы корректный конфиг.
+        ksort($requireDev);
+        /** @var list<string> $devNames */
+        $devNames = array_values(array_map('strval', array_keys($requireDev)));
+        $allowedDev = ['friendsofphp/php-cs-fixer', 'phpstan/phpstan', 'phpunit/phpunit'];
+        $unexpectedDev = array_values(array_diff($devNames, $allowedDev));
+        $lostDev = array_values(array_diff($allowedDev, $devNames));
+        self::assertSame(
+            $allowedDev,
+            $devNames,
+            'В `composer.json` перечень `require-dev` разошёлся с закреплённым: названо `'
+                . implode('`, `', $devNames) . '`, лишнее — `' . implode('`, `', $unexpectedDev)
+                . '`, отсутствующее — `' . implode('`, `', $lostDev)
+                . '` — инструменты разработки живут только в `require-dev` и не должны переезжать в `require`'
         );
     }
 
@@ -1528,6 +1627,39 @@ final class ToolStrictnessTest extends TestCase
         self::assertNotSame([], $dirs, 'Обход `in([...])` в `.php-cs-fixer.dist.php` не отдал ни одного каталога — проверять нечего');
 
         return $dirs;
+    }
+
+    /**
+     * Множество исключённых путей из `->notPath('путь')` конфига стилевых правил (пункт М284-Г2-1).
+     * Разбор требует захваченных одинарных кавычек: двойные кавычки, конкатенация или переменная —
+     * форма, которую страж не читает, поэтому число вхождений `->notPath(` сверяется с числом
+     * захватов. Молчать здесь означало бы зелёный прогон при любом содержимом файла: «одна
+     * разобралась, две нет» прошло бы как норма.
+     *
+     * @return list<string>
+     */
+    private function csFixerExcludedPaths(string $config): array
+    {
+        $occurrences = substr_count($config, '->notPath(');
+
+        $matched = [];
+        if (preg_match_all("#->notPath\(\s*'([^']*)'\s*\)#", $config, $matched) === false) {
+            self::fail('Набор исключённых путей в `.php-cs-fixer.dist.php` не разобран — сверять нечем');
+        }
+
+        /** @var list<string> $paths */
+        $paths = array_values(array_map('strval', $matched[1]));
+
+        if ($occurrences !== count($paths)) {
+            self::fail(
+                'В `.php-cs-fixer.dist.php` не разобран `notPath`: вхождений `->notPath(` — ' . $occurrences
+                    . ', захвачено путей — ' . count($paths) . '. Запись двойными кавычками, конкатенацией'
+                    . ' или переменной стражу не видна, а значит целый каталог мог быть снят с шага «стиль»'
+                    . ' незамеченным'
+            );
+        }
+
+        return $paths;
     }
 
     /**

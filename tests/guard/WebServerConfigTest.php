@@ -474,6 +474,8 @@ final class WebServerConfigTest extends TestCase
     // Директивы mod_rewrite вне обёртки — это 500 на весь сайт там, где модуль не включён:
     // Apache считает неизвестную директиву ошибкой конфигурации, а не пропускает блок. Обёртка
     // ищется по тексту, а не по отступам: перенос строки внутрь блока ничего не меняет.
+    // Пункт М284-Г2-6: узор открытия читает и `<IfModule mod_rewrite.c >` — пробел перед скобкой
+    // Apache допускает, а прежняя строгая форма не видела обёртки и красила корректный конфиг.
     private function hasRewriteOutsideWrapper(string $config): bool
     {
         $inside = false;
@@ -482,7 +484,7 @@ final class WebServerConfigTest extends TestCase
         // переводом и байт 0x85, а он входит в кириллическую «х». Директива, стоящая в строке после
         // русского текста, оказалась бы во втором фрагменте и не была бы найдена.
         foreach (explode("\n", $config) as $line) {
-            if ($this->find($line, '/<IfModule\s+mod_rewrite\.c>/i') !== null) {
+            if ($this->find($line, '/<IfModule\s+mod_rewrite\.c\s*>/i') !== null) {
                 $inside = true;
 
                 continue;
@@ -681,6 +683,37 @@ final class WebServerConfigTest extends TestCase
         self::assertTrue(
             $this->hasRewriteOutsideWrapper($config),
             'Закрывающий тег </ifmodule> не снял обёртку — RewriteEngine считается защищённым'
+        );
+    }
+
+    // Пункт М284-Г2-6: `<IfModule mod_rewrite.c >` — валидная форма Apache (пробел перед
+    // закрывающей скобкой допустим), а прежний узор открывающей обёртки её не читал. Живущее внутри
+    // правило засчитывалось стоящим вне обёртки, и страж краснил корректный конфиг — ровно тот
+    // ложный отказ, из-за которого страж начинают обходить. Фикстура строковая: живой `.htaccess`
+    // правке не подлежит, а помощник читает текст.
+    public function testОбёрткаModRewriteСПробеломПередСкобкойСчитаетсяОбёрткой(): void
+    {
+        $spaced = "<IfModule mod_rewrite.c >\n    RewriteEngine On\n    RewriteRule ^ index.php [L]\n</IfModule>\n";
+
+        self::assertFalse(
+            $this->hasRewriteOutsideWrapper($spaced),
+            'Правило внутри обёртки `<IfModule mod_rewrite.c >` с пробелом перед скобкой засчитано'
+                . ' стоящим вне обёртки — ложное падение на корректной конфигурации'
+        );
+
+        // Вежливость к пробелу не должна была сломать живую форму без пробела.
+        $plain = "<IfModule mod_rewrite.c>\n    RewriteEngine On\n    RewriteRule ^ index.php [L]\n</IfModule>\n";
+
+        self::assertFalse(
+            $this->hasRewriteOutsideWrapper($plain),
+            'Правило внутри обычной обёртки `<IfModule mod_rewrite.c>` засчитано стоящим вне обёртки'
+        );
+
+        // Голое правило вне обёртки обязано краснить и после правки узора: иначе сверка уехала
+        // бы в молчание.
+        self::assertTrue(
+            $this->hasRewriteOutsideWrapper("RewriteEngine On\nRewriteRule ^ index.php [L]\n"),
+            'Голое правило mod_rewrite вне обёртки пропущено'
         );
     }
 

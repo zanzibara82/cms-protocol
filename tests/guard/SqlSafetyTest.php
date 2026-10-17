@@ -179,13 +179,15 @@ final class SqlSafetyTest extends TestCase
     // за которым не идёт `ESCAPE` (отрицательное опережение), поэтому корректная строка
     // `LIKE ? ESCAPE ?` не считается нарушением. Пробел перед плейсхолдером необязателен
     // (`\s*` в обеих частях узора): `LIKE?` — валидный MySQL по образцу `id=?`, и с узором
-    // `\s+` такой запрос проходил ворота, нарушая инвариант. Обход каталога рекурсивный, поэтому
-    // нарушение во вложенном подкаталоге `apps/news/lib` тоже попадается.
+    // `\s+` такой запрос проходил ворота, нарушая инвариант.
+    // Пункт М284-Г2-4: обход расширен на весь раздел `apps/news`. Прежний `apps/news/lib`
+    // обещал «раздел», а читал только `lib`: запрос `LIKE ?` в `apps/news/actions`,
+    // `apps/news/templates` или в новом подкаталоге вне `lib` проходил ворота незамеченным.
     public function testКаждыйLikeВРазделеНовостиОбъявляетEscape(): void
     {
         $violations = [];
 
-        foreach ($this->newsLibFiles() as $file) {
+        foreach ($this->newsSectionFiles() as $file) {
             $code = $this->withoutComments((string) file_get_contents($file));
             if (preg_match_all('/LIKE\s*\?(?!\s*ESCAPE)/i', $code) > 0) {
                 $violations[] = $this->relative($file) . ': LIKE ? без объявления ESCAPE';
@@ -195,17 +197,18 @@ final class SqlSafetyTest extends TestCase
         self::assertSame(
             [],
             $violations,
-            'Каждый LIKE ? в apps/news/lib обязан объявлять ESCAPE — иначе снятие обратным слэшем живёт только при отсутствии NO_BACKSLASH_ESCAPES'
+            'Каждый LIKE ? в apps/news обязан объявлять ESCAPE — иначе снятие обратным слэшем живёт только при отсутствии NO_BACKSLASH_ESCAPES'
         );
     }
 
     /** @return list<string> */
-    private function newsLibFiles(): array
+    private function newsSectionFiles(): array
     {
-        // Рекурсивный обход (`files()`), а не плоский `glob`: иначе файл во вложенном подкаталоге
-        // `apps/news/lib` вовсе не попадал в область проверки, и инвариант можно было нарушить
-        // в новом каталоге, оставив ворота зелёными.
-        return $this->files(['apps/news/lib'], 'php');
+        // Рекурсивный обход (`files()`) по всему разделу, а не по одному его каталогу. Порог
+        // непустоты даёт сам helper `files()` (строки с `assertDirectoryExists` и `assertNotEmpty`
+        // в его теле): исчезнувший каталог раздела или каталог без единого PHP-файла краснит,
+        // а не превращает проверку в «нечего проверять», поэтому дублировать порог здесь не нужно.
+        return $this->files(['apps/news'], 'php');
     }
 
     /** @return list<string> */

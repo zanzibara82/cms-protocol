@@ -270,9 +270,13 @@ final class NoIndexNoStoreSourceTest extends TestCase
     }
 
     /**
-     * Обход шаблонов по образцу реестра: файлы с расширением `php` в каталогах `theme` и
-     * `core/templates` целиком и всё дерево `templates` каждого приложения в `apps`;
-     * файл автономен, если одна и та же строка несёт и `name="robots"`, и `noindex`.
+     * Обход шаблонов по образцу реестра (пункт М284-Г2-3): обход рекурсивный — файлы берутся со
+     * всего дерева каталогов `theme` и `core/templates` и со всего дерева `templates` каждого
+     * приложения в `apps`; файл автономен, если одна и та же строка несёт и `name="robots"`,
+     * и `noindex`.
+     *
+     * Прежний плоский `glob` читал один уровень: автономный экран, положенный в `theme/partials/`
+     * или `core/templates/admin/`, страж не видел вовсе, хотя докблок обещал каталоги «целиком».
      *
      * @return list<string> относительные пути, отсортированные
      */
@@ -281,12 +285,11 @@ final class NoIndexNoStoreSourceTest extends TestCase
         $root = dirname(__DIR__, 2);
         $files = [];
 
-        // Каждый узор обязан отдать хотя бы один файл: пустой ответ `glob` означает исчезнувший
-        // каталог шаблонов, и без порога страж проверял бы пустой список молча.
-        foreach (['theme/*.php', 'core/templates/*.php'] as $pattern) {
-            $found = glob($root . '/' . $pattern) ?: [];
-            self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного PHP-файла — каталог шаблонов исчез');
-            foreach ($found as $file) {
+        // Порог непустоты и сверка существования каталога живут в `phpFiles()`: она падает и на
+        // исчезнувшем каталоге, и на каталоге без единого PHP-файла, поэтому прежние
+        // `assertNotEmpty` по узорам `*.php` убраны как дубли.
+        foreach ([$root . '/theme', $root . '/core/templates'] as $dir) {
+            foreach ($this->phpFiles($dir) as $file) {
                 $files[] = $file;
             }
         }

@@ -21,9 +21,18 @@ use PHPUnit\Framework\TestCase;
 // Живых нарушений эта зона не скрывает: вне ядра `requestMethod()` не вызывает ни один обработчик,
 // а в `core/router.php:106` он читается в переменную при разборе таблицы маршрутов, не как ветка.
 // Правка убирает латентную зону, а не чинит сломанное место.
+//
+// Пункт М284-Г2-5 закрыл пятую слепую зону: `postBranchBodies()` собирает тела только для `if` и
+// `elseif`, поэтому пост-обработчик через `switch`, `match` или прямое чтение
+// `$_SERVER['REQUEST_METHOD']` выпадал из обхода целиком и молча. Такую форму не разбирают, а
+// краснят: страж обязан различать «нарушений нет» и «нарушение стоит там, где обход не видит».
 final class CsrfCoverageTest extends TestCase
 {
     private const CODE_DIRS = ['core', 'admin', 'theme', 'apps', 'public'];
+
+    // Единственное законное место прямого чтения `$_SERVER['REQUEST_METHOD']` — определитель метода
+    // (пункт М284-Г2-5): вне него форма не читается обходом тел веток, а значит краснится.
+    private const REQUEST_METHOD_HOME = 'core/request.php';
 
     // Примитивы PDO-слоя. Функция, которая зовёт их напрямую или через цепочку помощников,
     // обращается к базе — поиск по телу обработчика идёт по всему замыкающему множеству.
@@ -31,6 +40,15 @@ final class CsrfCoverageTest extends TestCase
 
     public function testКаждыйPostОбработчикПроверяетТокенДоПервогоОбращенияКБазе(): void
     {
+        // Пункт М284-Г2-5: слепая зона распознавания называется первым делом и отдельно от порядка
+        // проверок, чтобы падение различало «нарушений нет» и «нарушение стоит в ветке, которую
+        // обход тел не читает».
+        self::assertSame(
+            [],
+            $this->unreadablePostBranches(),
+            'Найдена пост-ветка в форме, которую обход тел веток не читает: сверка порядка токенов по такому файлу ничего не стоит'
+        );
+
         $reaching = $this->dbReachingFunctions();
         $endpoints = $this->postEndpointSources();
         $violations = [];
@@ -45,6 +63,49 @@ final class CsrfCoverageTest extends TestCase
         // ничего не проверяя.
         self::assertNotSame([], $endpoints, 'Ни одного POST-эндпоинта не найдено: стражу не на чём работать');
         self::assertSame([], $violations, 'Найден POST-эндпоинт, где база вызывается до сверки токена');
+    }
+
+    // Пункт М284-Г2-5: пост-ветка, объявленная не через `if`/`elseif`, из обхода тел выпадает
+    // целиком. Разбирать гипотетическую форму не решено, а решено краснить на ней, поэтому фикстуры
+    // живут здесь же, строками: каждая обязан дать ровно одну находку, названную меткой и строкой.
+    public function testПостВеткаЧерезСwitchИлиMatchКраснит(): void
+    {
+        $switch = "<?php switch (requestMethod()) { case 'POST': attemptLogin('a@b.c', 'x'); csrfCheck(); break; }";
+        $match = "<?php match (isPost()) { true => attemptLogin('a@b.c', 'x'), false => null };";
+        $server = "<?php \$m = \$_SERVER['REQUEST_METHOD']; if (\$m === 'POST') { attemptLogin('a@b.c', 'x'); csrfCheck(); }";
+        $readable = "<?php if (isPost()) { attemptLogin('a@b.c', 'x'); csrfCheck(); }";
+        $noPostMarker = "<?php switch (\$page) { case 2: \$rows = all('SELECT 1'); break; }";
+
+        $fromSwitch = $this->unreadableFormsIn($switch, 'probe.php');
+        self::assertSame(1, count($fromSwitch), 'Пост-ветка через `switch (requestMethod())` не названа ровно одной находкой');
+        self::assertStringContainsString('probe.php, строка 1:', $fromSwitch[0] ?? '', 'Находка `switch` не названа файлом и номером строки');
+        self::assertStringContainsString('switch', $fromSwitch[0] ?? '', 'Находка `switch` не названа самой формой');
+
+        $fromMatch = $this->unreadableFormsIn($match, 'probe.php');
+        self::assertSame(1, count($fromMatch), 'Пост-ветка через `match` с признаком поста не названа ровно одной находкой');
+        self::assertStringContainsString('match', $fromMatch[0] ?? '', 'Находка `match` не названа самой формой');
+
+        $fromServer = $this->unreadableFormsIn($server, 'probe.php');
+        self::assertSame(1, count($fromServer), 'Прямое чтение `$_SERVER[\'REQUEST_METHOD\']` вне определителя метода не названо ровно одной находкой');
+        self::assertStringContainsString('REQUEST_METHOD', $fromServer[0] ?? '', 'Находка прямого чтения не названа формой');
+
+        // Контроль на норме: разбираемая ветка `if` и `switch` без признака поста краснить не должны,
+        // иначе проверка превращается в ложное падение на всём дереве.
+        self::assertSame([], $this->unreadableFormsIn($readable, 'probe.php'), 'Разбор покраснел на разбираемой ветке `if (isPost())`');
+        self::assertSame([], $this->unreadableFormsIn($noPostMarker, 'probe.php'), 'Разбор покраснел на `switch` без признака пост-запроса');
+
+        // Белый список прямых обращений ровно один и ровно этот файл: тот же текст вне его краснит,
+        // а в самом определителе метода он легален — иначе страж краснил бы собственную норму.
+        self::assertSame(
+            [],
+            $this->unreadableFormsIn($server, self::REQUEST_METHOD_HOME),
+            'Определитель метода краснится собственным литералом — белый список не работает'
+        );
+        self::assertSame(
+            1,
+            count($this->unreadableFormsIn($server, 'admin/probe.php')),
+            'Тот же литерал в чужом файле не краснится — белый список шире одного файла'
+        );
     }
 
     public function testКаждаяPostФормаНесётПолеТокенаВнутриСебя(): void
@@ -412,6 +473,147 @@ PHP;
         }
 
         return $out;
+    }
+
+    /**
+     * Пост-ветки в формах, которые `postBranchBodies()` не читает (пункт М284-Г2-5): `switch` или
+     * `match`, условие которых несёт признак поста, и прямое чтение `$_SERVER['REQUEST_METHOD']`
+     * вне определителя метода. Обход опирается на `phpFiles()`, и порог непустоты отдаёт он же:
+     * пустой список каталогов краснит, а не превращает проверку в «нечего проверять».
+     *
+     * @return list<string>
+     */
+    private function unreadablePostBranches(): array
+    {
+        $out = [];
+
+        foreach ($this->phpFiles() as $file) {
+            $label = $this->relative($file);
+            $code = $this->withoutComments((string) file_get_contents($file));
+
+            foreach ($this->unreadableFormsIn($code, $label) as $violation) {
+                $out[] = $violation;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Неразбираемые пост-формы одного исходника. Вынесено отдельно, чтобы замеры шли тем же путём,
+     * что и живой обход дерева: разбор вызывается и по файлу, и по строковой фикстуре. Текст
+     * обязан быть без комментариев — закомментированная форма живой не считается.
+     *
+     * `switch` и `match` ищутся под тем же предфильтром файла, что и живой обход веток, а прямое
+     * чтение `$_SERVER['REQUEST_METHOD']` ищется всегда: такой файл может не содержать ни `isPost`,
+     * ни `requestMethod` вовсе, и предфильтр не имел права превращать эту форму в молчание.
+     * Белый список у него ровно один и берётся из метки: `core/request.php` — определитель метода,
+     * единственный файл, где прямое чтение легально.
+     *
+     * @return list<string>
+     */
+    private function unreadableFormsIn(string $code, string $label): array
+    {
+        $out = [];
+
+        if ($this->mentionsDirectPost($code)) {
+            $tokens = token_get_all($code);
+            $count = count($tokens);
+
+            for ($i = 0; $i < $count; $i++) {
+                $token = $tokens[$i];
+                if (!is_array($token) || !in_array($token[0], [T_SWITCH, T_MATCH], true)) {
+                    continue;
+                }
+
+                $condition = $this->conditionText($tokens, $i);
+                if ($condition === null || !$this->mentionsMethodReader($condition)) {
+                    continue;
+                }
+
+                $out[] = $this->unreadableViolation($label, (int) $token[2], $token[0] === T_SWITCH ? 'switch' : 'match');
+            }
+        }
+
+        if ($label === self::REQUEST_METHOD_HOME) {
+            return $out;
+        }
+
+        foreach ($this->serverLiteralLines($code) as $line) {
+            $out[] = $this->unreadableViolation($label, $line, "\$_SERVER['REQUEST_METHOD']");
+        }
+
+        return $out;
+    }
+
+    /**
+     * Признак того, что условие `switch` или `match` читает метод запроса. Отличается от
+     * `mentionsDirectPost()`: у разбираемой ветки `if` литера `POST` стоит в самом условии, а у
+     * формы `switch` она уезжает в `case`, у `match` — в ветку сопоставления, поэтому требовать её
+     * в условии означало бы не находить ничего.
+     */
+    private function mentionsMethodReader(string $condition): bool
+    {
+        return str_contains($condition, 'requestMethod') || str_contains($condition, 'isPost');
+    }
+
+    /**
+     * Строки, в которых стоит литерал `$_SERVER['REQUEST_METHOD']`. Форма записи, которую разбор
+     * не ждёт (двойные кавычки, `getenv`, переменная-ключ), краснит: иначе новая форма стала бы
+     * ещё одной молчаливой слепой зоной вместо проверяемой.
+     *
+     * @return list<int>
+     */
+    private function serverLiteralLines(string $code): array
+    {
+        $out = [];
+        $offset = 0;
+
+        while (true) {
+            $position = strpos($code, "\$_SERVER['REQUEST_METHOD']", $offset);
+            if ($position === false) {
+                break;
+            }
+
+            $out[] = substr_count(substr($code, 0, $position), "\n") + 1;
+            $offset = $position + 1;
+        }
+
+        if ($out === [] && str_contains($code, 'REQUEST_METHOD')) {
+            self::fail(
+                'В тексте встречено `REQUEST_METHOD` в форме, которую разбор не читает: сверить прямое'
+                    . ' чтение метода нечем, а молчать означало бы зелёный прогон при слепой зоне'
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * Текст условия, стоящего сразу за `switch` или `match`: от открывающей круглой скобки до
+     * парной закрывающей, вместе с обеими скобками. Запись, в которой скобка не найдена или не
+     * закрылась до конца текста, отдаёт null: такая форма признака поста не несёт и проходит
+     * молча, а не превращает проверку в ложное падение на разборчике.
+     *
+     * @param array<int, array{0: int, 1: string, 2: int}|string> $tokens
+     */
+    private function conditionText(array $tokens, int $index): ?string
+    {
+        $count = count($tokens);
+        $start = $this->skipWhitespace($tokens, $index + 1);
+
+        if ($start >= $count || $this->text($tokens[$start]) !== '(') {
+            return null;
+        }
+
+        return $this->group($tokens, $start, '(', ')');
+    }
+
+    private function unreadableViolation(string $label, int $line, string $form): string
+    {
+        return $label . ', строка ' . $line . ': пост-ветка в форме `' . $form
+            . '`, которую обход стража `CsrfCoverageTest` не читает; перепишите её через `if`/`elseif`'
+            . ' или расширьте распознавание осознанно';
     }
 
     /**
