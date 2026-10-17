@@ -260,7 +260,7 @@ region(string $name, array $data = []): void
    раздела из своих partial'ов, пользовательского ввода в нём нет. Имя переменной обязано быть
    `$content` — именно его читает `OutputEscapingTest::MARKED_VARS`.
 
-- [ ] **Шаг 1: Написать падающие проверки `region()`**
+- [x] **Шаг 1: Написать падающие проверки `region()`**
 
 Сначала страница-фикстура, через которую шестая проверка попадёт в полный каркас темы. Каталог
 `tests/fixtures/theme` уже подключён к иерархии шаблонов настройкой `EXTRA_THEME_DIR`
@@ -372,13 +372,13 @@ declare(strict_types=1);
     }
 ```
 
-- [ ] **Шаг 2: Прогнать и убедиться, что проверки красные**
+- [x] **Шаг 2: Прогнать и убедиться, что проверки красные**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter TemplateTest`
 Ожидание: шесть падений `Call to undefined function region()` — в последних двух оно приходит из
 шаблона-фикстуры, куда его зовёт `render()`; остальные проверки файла — зелёные.
 
-- [ ] **Шаг 3: Создать обёртку зоны**
+- [x] **Шаг 3: Создать обёртку зоны**
 
 `core/templates/region.php`:
 
@@ -401,7 +401,7 @@ declare(strict_types=1);
 </section>
 ```
 
-- [ ] **Шаг 4: Добавить `region()` в ядро**
+- [x] **Шаг 4: Добавить `region()` в ядро**
 
 В `core/template.php` после `richText()` (файл кончается на :154) дописать:
 
@@ -428,7 +428,7 @@ function region(string $name, array $data = []): void
 Функция дописывается в конец файла: спецификация ссылается на `core/template.php:64-94`, `:75-77`
 и `:103-109`, и правка в середине сдвинула бы эти якоря.
 
-- [ ] **Шаг 5: Добавить правило стиля и пересобрать артефакт**
+- [x] **Шаг 5: Добавить правило стиля и пересобрать артефакт**
 
 Сначала — замер до правки, чтобы цена нового правила была названа числом, а не оценкой (§6
 спецификации требует снять вес артефакта до и после):
@@ -455,14 +455,14 @@ Run после сборки: `wc -c src-css/app.css public/assets/app.css`
 запрещает автору прогона менять их «чтобы пролезло» — заводить на одно правило CSS бюджет означало бы
 ослабить страж.
 
-- [ ] **Шаг 6: Прогнать зелёный результат**
+- [x] **Шаг 6: Прогнать зелёный результат**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l core/template.php && php -l core/templates/region.php && php -l tests/fixtures/theme/probe-region.php"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter TemplateTest`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter "StyleSourceTest|OutputEscapingTest"`
 Ожидание: всё зелёное, шесть новых проверок пройдены.
 
-- [ ] **Шаг 7: Шесть обратных замеров**
+- [x] **Шаг 7: Шесть обратных замеров**
 
 Каждый — правка, затем прогон, затем откат. Замер без дословного вывода инструмента находку не
 закрывает.
@@ -476,13 +476,13 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 | убрать класс из `core/templates/region.php`, оставив правило в `src-css/app.css` | `StyleSourceTest::testКлассыИсточникаСтилейИспользуютсяВРазметке` (мёртвое правило) |
 | убрать вызов `region('home')` из `tests/fixtures/theme/probe-region.php` | `testВыводЗоныПопадаетВСтрокуКоторуюВозвращаетRenderToString`, а остальные пять остаются зелёными: проверка держит именно связку точки вывода со собранной страницей, а не повторяет проверку 3 |
 
-- [ ] **Шаг 8: Ворота**
+- [x] **Шаг 8: Ворота**
 
 Run: `bash scripts/gate.sh`
 Ожидание: пять шагов зелёные. Падающий PHPStan или фиксер чинится кодом этого шага, а не
 `ignore`-правкой.
 
-- [ ] **Шаг 9: Коммит и отчёт**
+- [x] **Шаг 9: Коммит и отчёт**
 
 ```bash
 git add core/template.php core/templates/region.php src-css/app.css public/assets/app.css tests/unit/TemplateTest.php tests/fixtures/theme/probe-region.php
@@ -523,7 +523,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
 4. **Внешних ключей нет.** Блок переживает удаление рубрики: цель может исчезнуть, и тогда
    читатель не печатает блок, а не роняет страницу (решение 8 спецификации).
 
-- [ ] **Шаг 1: Переписать падающие проверки схемы**
+- [x] **Шаг 1: Переписать падающие проверки схемы**
 
 В `tests/db/NewsSchemaTest.php`:
 
@@ -626,13 +626,13 @@ f) Две новые проверки — в конец класса, перед
     }
 ```
 
-- [ ] **Шаг 2: Прогнать и убедиться, что проверки красные**
+- [x] **Шаг 2: Прогнать и убедиться, что проверки красные**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsSchemaTest`
 Ожидание: падения на отсутствующей таблице (расхождение `Existing tables`, `SQLSTATE[42S02]` в двух
 новых проверках, журнал помнит два релиза, версия `1.0.0`).
 
-- [ ] **Шаг 3: Написать файл релиза**
+- [x] **Шаг 3: Написать файл релиза**
 
 `apps/news/sql/20261016_0003_blocks.sql`:
 
@@ -666,13 +666,13 @@ INSERT IGNORE INTO tbl_news_block (id, zone, kind, title, target_kind, target_id
     VALUES ('newsblk-home', 'home', 'list', 'Свежие материалы', NULL, NULL, 5, 1, 0, '2026-10-16 00:00:00', '2026-10-16 00:00:00');
 ```
 
-- [ ] **Шаг 4: Поднять версию раздела**
+- [x] **Шаг 4: Поднять версию раздела**
 
 `apps/news/manifest.php:10`: `'version' => '1.0.0',` → `'version' => '1.1.0',`.
 Версия обязана вырасти вместе с релизом схемы — кнопка «Обновить» в реестре появляется по
 расхождению `manifestVersion` и версии в `tbl_app_installation`.
 
-- [ ] **Шаг 5: Прогнать остальные затронутые проверки**
+- [x] **Шаг 5: Прогнать остальные затронутые проверки**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter "NewsSchemaTest|NewsRegistryTest"`
 Ожидание: `NewsSchemaTest` зелёный; `NewsRegistryTest` красный в трёх местах — две строки версии
@@ -689,7 +689,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 
 В `tests/http/NewsAssemblyTest.php` правятся две строки: версия → `'1.1.0'`, счётчик журнала → `3`.
 
-- [ ] **Шаг 6: Добавить таблицу блоков в тестовую подставку**
+- [x] **Шаг 6: Добавить таблицу блоков в тестовую подставку**
 
 В `tests/db/NewsDbTestCase.php` — два списка и ни одного нового метода:
 
@@ -704,7 +704,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Комментарий над `clearNews()` дополняется одной строкой: закладка релиза после первой очистки
 не возвращается (`seedApp()` сеет только рубрики), поэтому задачи 4 и 6 заводят блоки сами.
 
-- [ ] **Шаг 7: Прогнать зелёный результат**
+- [x] **Шаг 7: Прогнать зелёный результат**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/manifest.php"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db`
@@ -713,7 +713,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Ожидание: всё зелёное. `AppSqlTest` и `SqlSafetyTest` обходят `apps/*/sql/*.sql` `glob`-ом, поэтому
 новый файл попадает под их проверку сам, правок этих двух стражей задача не требует.
 
-- [ ] **Шаг 8: Обратные замеры**
+- [x] **Шаг 8: Обратные замеры**
 
 | Мутация | Что обязано покраснеть |
 | --- | --- |
@@ -733,7 +733,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 поэтому порча этих значений обязана окраситься. Каждый прогон — ровно одна правка файла релиза,
 с дословным выводом падения и последующей откачкой.
 
-- [ ] **Шаг 9: Ворота, коммит и отчёт**
+- [x] **Шаг 9: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
@@ -791,7 +791,7 @@ blockTargetProblem(string $kind, string $targetKind, string $targetId, bool $tar
 4. **Правила не трогают базу.** Два этих чистых правила проверяются unit-набором без подключения к
    MySQL — так же, как правила справочников в `NewsCatalogRulesTest`.
 
-- [ ] **Шаг 1: Написать падающий unit-тест правил**
+- [x] **Шаг 1: Написать падающий unit-тест правил**
 
 Создать `tests/unit/NewsBlockRulesTest.php`:
 
@@ -895,12 +895,12 @@ final class NewsBlockRulesTest extends TestCase
         $dictionaries = ['материал' => NEWS_NOTICE_TEXT, 'справочники' => CATALOG_NOTICE_TEXT, 'блоки' => NEWS_BLOCK_NOTICE_TEXT];
 ```
 
-- [ ] **Шаг 2: Прогнать и убедиться, что тест красный**
+- [x] **Шаг 2: Прогнать и убедиться, что тест красный**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter NewsBlockRulesTest`
 Ожидание: `Undefined constant NEWS_BLOCK_ZONES`, затем `Call to undefined function checkBlockFields()`.
 
-- [ ] **Шаг 3: Дописать константы**
+- [x] **Шаг 3: Дописать константы**
 
 В `apps/news/lib/constants.php` после `CATEGORY_FIELDS` / `TAG_FIELDS` (перед `OLD_SLUGS_MAX`)
 добавить:
@@ -947,7 +947,7 @@ const NEWS_BLOCK_NOTICE_TEXT = [
 ];
 ```
 
-- [ ] **Шаг 4: Создать файл правил**
+- [x] **Шаг 4: Создать файл правил**
 
 `apps/news/lib/blocks.php` — заголовок и два чистых правила (задачи 4 и 6 допишут сюда читатель
 и операции):
@@ -1047,7 +1047,7 @@ function blockTargetProblem(string $kind, string $targetKind, string $targetId, 
 }
 ```
 
-- [ ] **Шаг 5: Подключить файл к загрузке раздела**
+- [x] **Шаг 5: Подключить файл к загрузке раздела**
 
 В `apps/news/lib/boot.php` после строки `require_once __DIR__ . '/feed.php';` (:12) вставить:
 
@@ -1058,13 +1058,13 @@ require_once __DIR__ . '/blocks.php';
 Порядок важен: `blocks.php` вызывает `collapseSpace()` из ранее подключённого `catalog.php`, а
 с задачи 4 — `feedScope()`, `toCard()` и `takeLimit()` из `feed.php`.
 
-- [ ] **Шаг 6: Прогнать зелёный результат**
+- [x] **Шаг 6: Прогнать зелёный результат**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/blocks.php && php -l apps/news/lib/constants.php && php -l apps/news/lib/boot.php"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter "NewsBlockRulesTest|NewsConstantsTest|NewsCatalogRulesTest|NewsAdminRulesTest"`
 Ожидание: зелёное; существующие unit-наборы раздела не задеты.
 
-- [ ] **Шаг 7: Обратные замеры**
+- [x] **Шаг 7: Обратные замеры**
 
 | Мутация | Что обязано покраснеть |
 | --- | --- |
@@ -1077,7 +1077,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 | убрать проверку `$targetId === ''` во второй ветке | тот же тест: идентификатор без вида цели принимается |
 | убрать `$targetExists` | тот же тест: несуществующая рубрика и несуществующая метка принимаются |
 
-- [ ] **Шаг 8: Ворота, коммит и отчёт**
+- [x] **Шаг 8: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
@@ -1117,7 +1117,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
 `target_id` в слаг (§4 требует именно слаг, потому что фильтр `feedScope()` ждёт слаг, а в базе
 лежит `id` — см. Р4) и делает это для обоих видов цели. Контракт §4 от этого не меняется.
 
-- [ ] **Шаг 1: Фабрика блока в db-подставке**
+- [x] **Шаг 1: Фабрика блока в db-подставке**
 
 В `tests/db/NewsDbTestCase.php` после метода `oldSlug()` вставить:
 
@@ -1155,7 +1155,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
 `clearNews()` чистит `news_block` на каждом тесте начиная с задачи 2, поэтому блок в зоне — всегда
 руками теста.
 
-- [ ] **Шаг 2: RED — тесты читателя**
+- [x] **Шаг 2: RED — тесты читателя**
 
 Создать `tests/db/NewsBlocksTest.php`:
 
@@ -1435,13 +1435,13 @@ final class NewsBlocksTest extends NewsDbTestCase
 }
 ```
 
-- [ ] **Шаг 3: Прогнать RED**
+- [x] **Шаг 3: Прогнать RED**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsBlocksTest`
 Ожидание: ошибки «Call to undefined function newsBlockRows()» (и далее `blockFeedRows`,
 `newsRegionHtml`) — тесты поставлены до читателя, красными они и должны быть.
 
-- [ ] **Шаг 4: GREEN — читатель**
+- [x] **Шаг 4: GREEN — читатель**
 
 В `apps/news/lib/blocks.php` после `blockTargetProblem()` вставить:
 
@@ -1589,7 +1589,7 @@ function newsRegionHtml(string $html, string $zone, array $data = []): string
 `$filter['now'] ?? nowUtc()`, и тестам, которым нужна фиксированная минута, достаточно положить
 `now` в фильтр.
 
-- [ ] **Шаг 5: GREEN — вид блока**
+- [x] **Шаг 5: GREEN — вид блока**
 
 Создать `apps/news/templates/partials/block.php`:
 
@@ -1619,7 +1619,7 @@ declare(strict_types=1);
 </div>
 ```
 
-- [ ] **Шаг 6: Прогнать GREEN**
+- [x] **Шаг 6: Прогнать GREEN**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/blocks.php && php -l apps/news/templates/partials/block.php"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsBlocksTest`
@@ -1630,7 +1630,7 @@ Run: `bash scripts/css && git status --porcelain public/assets/app.css`
 в разметке до него не было: это находка по задаче, а не повод молча коммитить пересборку — сверить
 список классов разметки со списком правил артефакта.
 
-- [ ] **Шаг 7: Обратные замеры**
+- [x] **Шаг 7: Обратные замеры**
 
 | Мутация | Что обязано покраснеть |
 | --- | --- |
@@ -1650,7 +1650,7 @@ Run: `bash scripts/css && git status --porcelain public/assets/app.css`
 | related без рубрики страницы брать общую ленту | `testRelatedБезРубрикиСтраницыМолчит` |
 | не передавать `$data['slug']` исключением | `testRelatedБерётРубрикуСтраницыИИсключаетЕёМатериал` |
 
-- [ ] **Шаг 8: Ворота, коммит и отчёт**
+- [x] **Шаг 8: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
@@ -1691,7 +1691,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
 4. **Вызов печатающий, а не возвращающий.** `region()` ставится в шаблонах страниц, а не в
    partial'ах: `partial()` собирает строку, `region()` печатает в общий поток.
 
-- [ ] **Шаг 1: Переписать публичный http-тест (RED)**
+- [x] **Шаг 1: Переписать публичный http-тест (RED)**
 
 В `tests/http/NewsPublicTest.php` заменить метод `testУМатериалаВидноПохожиеИзЕгоРубрики` (:281-289)
 на три метода:
@@ -1735,7 +1735,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
     }
 ```
 
-- [ ] **Шаг 2: Убедиться, что тест красный**
+- [x] **Шаг 2: Убедиться, что тест красный**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter "NewsPublicTest::testУМатериалаВидноПохожиеИзЕгоРубрики|NewsPublicTest::testНаГлавнойБлокСвежихМатериалов|NewsPublicTest::testЗонаБезБлоковНеПечатаетОбёртку"`
 Ожидание: первые два падают («Похожие материалы» и обёртки `region region-…` на страницах нет —
@@ -1743,7 +1743,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 лежат в базе с задачи 2, но подписки и вызова ещё нет), третий проходит: обёртку печатать пока
 некому.
 
-- [ ] **Шаг 3: Подписать зоны в маршрутах**
+- [x] **Шаг 3: Подписать зоны в маршрутах**
 
 В `apps/news/routes.php` после строки `}, 10);` (:54, закрытие фильтра карты сайтов) вставить:
 
@@ -1760,7 +1760,7 @@ foreach (NEWS_BLOCK_ZONES as $regionZone) {
 }
 ```
 
-- [ ] **Шаг 4: Перевести карточку материала на блок**
+- [x] **Шаг 4: Перевести карточку материала на блок**
 
 В `apps/news/routes.php` удалить строку 211 целиком:
 
@@ -1781,7 +1781,7 @@ foreach (NEWS_BLOCK_ZONES as $regionZone) {
 правило «черновик и материал скрытой рубрики наружу не выходят» держит `feedScope()` — вторая
 формулировка того же правила в шаблоне была бы дырой (вердикт Р6).
 
-- [ ] **Шаг 5: Поставить вызовы в четыре остальных шаблона**
+- [x] **Шаг 5: Поставить вызовы в четыре остальных шаблона**
 
 В `theme/home.php` после строки 11 (ссылка «Читать новости»), внутри `<section class="py-8">`:
 
@@ -1800,7 +1800,7 @@ foreach (NEWS_BLOCK_ZONES as $regionZone) {
 Три страницы-списка делят одну зону: настройка означает «страница со списком», и у человека в
 редакторе один предсказуемый ответ на вопрос «куда встанет блок» (§3 спецификации).
 
-- [ ] **Шаг 6: Прогнать GREEN**
+- [x] **Шаг 6: Прогнать GREEN**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/routes.php && php -l apps/news/templates/single.php && php -l apps/news/templates/feed.php && php -l apps/news/templates/category.php && php -l apps/news/templates/tag.php && php -l theme/home.php"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite http --filter NewsPublicTest`
@@ -1809,7 +1809,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 Ожидание: всё зелёное; `NewsVisibilityTest` называет `{closure:48}` — подписка ниже этой строки и
 номер не двигает (вердикт Р3).
 
-- [ ] **Шаг 7: Обратные замеры**
+- [x] **Шаг 7: Обратные замеры**
 
 | Мутация | Что обязано покраснеть |
 | --- | --- |
@@ -1821,7 +1821,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 | напечатать обёртку до проверки пустоты в `core/template.php` | `testЗонаБезБлоковНеПечатаетОбёртку` и unit-проверка задачи 1 |
 | вернуть `'related' => …` в `render('news/single', …)`, не вернув виджет | тест зелёный, а PHPStan краснеет на незапрошенную переменную — строка удалена вместе с потребителем, держать её нельзя |
 
-- [ ] **Шаг 8: Ворота, коммит и отчёт**
+- [x] **Шаг 8: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
@@ -1883,7 +1883,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
    печатает плашку «Блок добавлен», и там, где ничего не добавилось, плашки быть не должно
    (договор `NewsNoticeCoverageTest::testОтказНикогдаНеНесётКлючаУведомления`).
 
-- [ ] **Шаг 1: RED — проверки операций**
+- [x] **Шаг 1: RED — проверки операций**
 
 В `tests/db/NewsBlocksTest.php` после проверок читателя дописать секцию. Две последние проверки
 читают `checkBlockFields()` напрямую — это намеренно: операция обязана отвечать тем же текстом,
@@ -2135,14 +2135,14 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
 Помощники `blockIdOf()` и `orderOf()` приватные и нестатические, потому что опираются на
 `column()` подставки: тот же приём, что `lastCategoryId()` в `NewsNoticeCoverageTest`.
 
-- [ ] **Шаг 2: Убедиться, что проверки красные**
+- [x] **Шаг 2: Убедиться, что проверки красные**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsBlocksTest`
 Ожидание: проверки читателя задачи 4 зелёные, новые падают на `Call to undefined function
 createBlock()` (далее — `renameBlock`, `retargetBlock`, `limitBlock`, `setBlockVisibility`,
 `deleteBlock`).
 
-- [ ] **Шаг 3: GREEN — операции записи**
+- [x] **Шаг 3: GREEN — операции записи**
 
 В `apps/news/lib/blocks.php` после читателя задачи 4:
 
@@ -2347,7 +2347,7 @@ function deleteBlock(string $id): array
 `toggleBlockVisibility()`: экран шлёт два разных намерения (`show` и `hide`), и слежение за
 состоянием в имени означало бы, что кнопка «Скрыть» на скрытом блоке показывает блок.
 
-- [ ] **Шаг 4: Достижимость семи ключей словаря**
+- [x] **Шаг 4: Достижимость семи ключей словаря**
 
 В `tests/db/NewsNoticeCoverageTest.php`: после `private array $itemHits = [];` добавить свойство,
 рядом с `testОтказНикогдаНеНесётКлючаУведомления` — новый метод, в перечне отказов — семь строк,
@@ -2416,7 +2416,7 @@ function deleteBlock(string $id): array
             deleteBlock('net-takogo-identifikatora'),
 ```
 
-- [ ] **Шаг 5: Прогнать зелёный результат**
+- [x] **Шаг 5: Прогнать зелёный результат**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/blocks.php"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter "NewsBlocksTest|NewsNoticeCoverageTest"`
@@ -2427,7 +2427,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 и `feedScope(`. `NoticeKeyTest` молчит: ни одна из семи функций не вызывает
 `finishAppAction()` — это делает файл действий задачи 9.
 
-- [ ] **Шаг 6: Обратные замеры**
+- [x] **Шаг 6: Обратные замеры**
 
 | Мутация | Что обязано покраснеть |
 | --- | --- |
@@ -2443,7 +2443,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 | `setBlockVisibility()` — переключатель `!$row['visible']` вместо направления | `testПоказИСкрытиеБлока` (второе «скрыть» возвращает `shown`) |
 | убрать ветку `if ($row === null)` в `deleteBlock()` | `testЧужойИдентификаторОтказываетсяОднимТекстом` (несуществующий блок «удаляется») |
 
-- [ ] **Шаг 7: Ворота, коммит и отчёт**
+- [x] **Шаг 7: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
@@ -2500,7 +2500,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
    обновляется `updated_at`; экран блока это поле не печатает (задача 8), поэтому расхождения в
    разметке не видно.
 
-- [ ] **Шаг 1: RED — проверки движения**
+- [x] **Шаг 1: RED — проверки движения**
 
 В `tests/db/NewsBlocksTest.php` после `testЧужойИдентификаторОтказываетсяОднимТекстом` (то есть
 перед приватными помощниками) дописать секцию. В первой проверке заголовки идут обратно порядку:
@@ -2634,13 +2634,13 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
 и в его комментарии цифры правятся на шесть: «Шесть операций правки, удаления и движения отвечают
 одной строкой … а не различать шесть формулировок».
 
-- [ ] **Шаг 2: Убедиться, что проверки красные**
+- [x] **Шаг 2: Убедиться, что проверки красные**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter "NewsBlocksTest|NewsNoticeCoverageTest"`
 Ожидание: шесть новых проверок и перечень чужих идентификаторов падают на `Call to undefined
 function moveBlock()`; десять проверок читателя и операций задачи 6 остаются зелёными.
 
-- [ ] **Шаг 3: GREEN — седьмая операция**
+- [x] **Шаг 3: GREEN — седьмая операция**
 
 В `apps/news/lib/blocks.php` после `deleteBlock()`:
 
@@ -2721,7 +2721,7 @@ function moveBlock(string $id, string $direction): array
 может покраснеть, в этом проекте чинят, а не оставляют (требование к силе проверок из §6
 спецификации).
 
-- [ ] **Шаг 4: Достижимы все десять ключей**
+- [x] **Шаг 4: Достижимы все десять ключей**
 
 В `tests/db/NewsNoticeCoverageTest.php`: после `$this->block(setBlockVisibility($id, true), 'shown', $id);`
 вставить движение, промежуточное утверждение задачи 6 заменить на пустой список, и в перечень
@@ -2754,7 +2754,7 @@ function moveBlock(string $id, string $direction): array
             moveBlock('net-takogo-identifikatora', 'up'),
 ```
 
-- [ ] **Шаг 5: Прогнать зелёный результат**
+- [x] **Шаг 5: Прогнать зелёный результат**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter "NewsBlocksTest|NewsNoticeCoverageTest"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite guard --filter "NewsVisibilityTest|NoticeKeyTest|DateUsageTest|SqlSafetyTest"`
@@ -2762,7 +2762,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 его маркеры стоят на `tbl_news_item`, `newsItemFrom(` и `feedScope(`. `SqlSafetyTest` молчит: оба
 запроса собраны конкатенацией с `t()` и плейсхолдерами, переменная в текст SQL не попадает.
 
-- [ ] **Шаг 6: Обратные замеры**
+- [x] **Шаг 6: Обратные замеры**
 
 | Мутация | Что обязано покраснеть |
 | --- | --- |
@@ -2775,7 +2775,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 | убрать ветку `if ($zone === '')` | `testЧужойИдентификаторОтказываетсяОднимТекстом` (несуществующий блок получает `topped`) |
 | `logInfo('news.block_moved', …)` → `logInfo('news.block_saved', …)` | доказывается рецензией, а не тестом: ни одна проверка не читает вывод журнала (§6 спецификации, тот же приём, что у `news.category_moved`) |
 
-- [ ] **Шаг 7: Ворота, коммит и отчёт**
+- [x] **Шаг 7: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
@@ -2859,7 +2859,7 @@ groupBlockRows(array $rows): array<string, list<array{id: string, zone: string, 
    `NEWS_BLOCK_ZONES`, а не база: человек, который ничего ещё не настроил, обязан найти, где
    начинать. Строка с необъявленной зоной не печатается нигде (вердикт Р12).
 
-- [ ] **Шаг 1: RED — unit-проверки разбора цели**
+- [x] **Шаг 1: RED — unit-проверки разбора цели**
 
 В `tests/unit/NewsBlockRulesTest.php` перед закрывающей скобкой класса дописать секцию:
 
@@ -2907,7 +2907,7 @@ groupBlockRows(array $rows): array<string, list<array{id: string, zone: string, 
     }
 ```
 
-- [ ] **Шаг 2: RED — unit-проверки правил экрана**
+- [x] **Шаг 2: RED — unit-проверки правил экрана**
 
 В `tests/unit/NewsAdminRulesTest.php` после приватного помощника `item()` вставить помощник, а
 перед закрывающей скобкой класса — секцию:
@@ -3010,7 +3010,7 @@ groupBlockRows(array $rows): array<string, list<array{id: string, zone: string, 
 Пятая проверка секции — `testПравкиСтрокиНеКнопкиАПоля`: она держит договор «правка заголовка,
 цели и числа — это поля внутри строки, а не кнопка», который задача 9 печатает в шаблоне.
 
-- [ ] **Шаг 3: RED — db-проверки строк экрана**
+- [x] **Шаг 3: RED — db-проверки строк экрана**
 
 В `tests/db/NewsBlocksTest.php` перед закрывающей скобкой класса дописать секцию:
 
@@ -3165,7 +3165,7 @@ groupBlockRows(array $rows): array<string, list<array{id: string, zone: string, 
     }
 ```
 
-- [ ] **Шаг 4: Прогнать и убедиться, что проверки красные**
+- [x] **Шаг 4: Прогнать и убедиться, что проверки красные**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter "NewsBlockRulesTest|NewsAdminRulesTest"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite db --filter NewsBlocksTest`
@@ -3174,7 +3174,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 `Undefined constant NEWS_BLOCK_ZONE_LABEL`, `Call to undefined function newsBlockRowActions()`,
 `Call to undefined function groupBlockRows()`.
 
-- [ ] **Шаг 5: GREEN — словари и правила строк в `lib/admin.php`**
+- [x] **Шаг 5: GREEN — словари и правила строк в `lib/admin.php`**
 
 В `apps/news/lib/admin.php` после `catalogFailure()` вставить:
 
@@ -3289,7 +3289,7 @@ function groupBlockRows(array $rows): array
 }
 ```
 
-- [ ] **Шаг 6: GREEN — разбор цели, строки экрана и опции в `lib/blocks.php`**
+- [x] **Шаг 6: GREEN — разбор цели, строки экрана и опции в `lib/blocks.php`**
 
 В `apps/news/lib/blocks.php` в конце файла (после `moveBlock()` задачи 7) вставить:
 
@@ -3436,7 +3436,7 @@ function blockTargetOptions(): array
 `NEWS_ID_MAX` (`apps/news/lib/items.php:15`) здесь не нужен: идентификаторы цели приходят из
 `parseBlockTarget()` и режутся в файле действий задачи 9, где этот предел уже стоит на месте.
 
-- [ ] **Шаг 7: Прогнать зелёный результат**
+- [x] **Шаг 7: Прогнать зелёный результат**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/lib/blocks.php && php -l apps/news/lib/admin.php"`
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter "NewsBlockRulesTest|NewsAdminRulesTest|NewsConstantsTest"`
@@ -3447,7 +3447,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 и договор действий проверяется там же. `NewsVisibilityTest` молчит: `adminBlockRows()` читает
 `t('news_block')` и справочники, а её маркеры стоят на `tbl_news_item` и `feedScope(`.
 
-- [ ] **Шаг 8: Обратные замеры**
+- [x] **Шаг 8: Обратные замеры**
 
 Каждая мутация — правка `apps/news/lib/blocks.php` или `apps/news/lib/admin.php`, прогон набора,
 красное падение и возврат. Ни одна не считается пройденной, если список упавших проверок пуст.
@@ -3470,7 +3470,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 | в `groupBlockRows()` писать строку с чужой зоной под её собственным ключом (убрать `continue`) | `testСтрокиРаздаютсяПоЗонамВСпискеЗон` (ключей становится четыре) |
 | в `NEWS_BLOCK_OPS` выбросить `retarget` | `testДействияБлоковОбещаныДевятьИУКаждогоЕстьПодпись` (в задаче 9 к этому же краснеет `AppActionContractTest`) |
 
-- [ ] **Шаг 9: Ворота, коммит и отчёт**
+- [x] **Шаг 9: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
@@ -3559,7 +3559,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
     один («Выбранной цели уже нет — обновите страницу.»), поэтому в шаге 12 он честно помечен
     неловящейся мутацией, а не выдуманной проверкой.
 
-- [ ] **Шаг 1: RED — пять вкладок в unit-наборах**
+- [x] **Шаг 1: RED — пять вкладок в unit-наборах**
 
 В `tests/unit/NewsAdminRulesTest.php` заменить метод целиком:
 
@@ -3600,7 +3600,7 @@ GIT_AUTHOR_NAME=Алексей GIT_AUTHOR_EMAIL=zanzibaradevil@gmail.com GIT_COM
     }
 ```
 
-- [ ] **Шаг 2: RED — экран настоящим запросом**
+- [x] **Шаг 2: RED — экран настоящим запросом**
 
 Создать `tests/http/NewsBlocksAdminTest.php`:
 
@@ -4139,7 +4139,7 @@ final class NewsBlocksAdminTest extends TestCase
 рубрику) и читать его частями полагалось бы через весь файл. Идентификатор созданной рубрики тест берёт
 из выборки `adminCategoryRows()` — `createCategory()` его не возвращает (§4 плана задачи 8).
 
-- [ ] **Шаг 2а: тело проверки мёртвой цели**
+- [x] **Шаг 2а: тело проверки мёртвой цели**
 
 ```php
     public function testМёртваяЦельОстаётсяВСтрокеИВыбраннойОпцией(): void
@@ -4175,7 +4175,7 @@ final class NewsBlocksAdminTest extends TestCase
     }
 ```
 
-- [ ] **Шаг 3: Прогон RED**
+- [x] **Шаг 3: Прогон RED**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpunit --testsuite unit --filter "NewsAdminRulesTest|NewsCatalogRulesTest"`
 
@@ -4186,7 +4186,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 
 Ожидание: `Undefined constant NEWS_ADMIN_BLOCKS_PATH` на первом же методе; остальные — за ним.
 
-- [ ] **Шаг 4: GREEN — файл действий `apps/news/actions/blocks.php`**
+- [x] **Шаг 4: GREEN — файл действий `apps/news/actions/blocks.php`**
 
 Создать файл целиком:
 
@@ -4241,7 +4241,7 @@ function newsBlocksAction(array $params = []): void
 вызовы, и пара `'kind' => …` внутри ветки обманула бы разбор стража, который ищет ключи веток
 регуляркой `/'([a-z]+)'\s*=>/`.
 
-- [ ] **Шаг 5: GREEN — шаблон экрана `apps/news/templates/admin/blocks.php`**
+- [x] **Шаг 5: GREEN — шаблон экрана `apps/news/templates/admin/blocks.php`**
 
 Создать файл целиком. Классы берутся только из уже собранного артефакта (правило 10), каждый
 видимый контрол несёт `min-h-[44px]` в литерале атрибута (правило 11), вывод — одна строка с
@@ -4458,7 +4458,7 @@ $notice = $notice === '' ? null : $notice;
 `value` (проверка живой цели) и ровно одно `name="target"` на стартовом экране (форма цели
 печатается только у вида `list`).
 
-- [ ] **Шаг 6: GREEN — адрес экрана, пятая вкладка, предел цели и контроллер**
+- [x] **Шаг 6: GREEN — адрес экрана, пятая вкладка, предел цели и контроллер**
 
 В `apps/news/lib/admin.php` после строки `const NEWS_ADMIN_TAGS_PATH = '/news/admin/tags';` вставить:
 
@@ -4509,7 +4509,7 @@ function newsAdminBlocks(array $params = []): void
 }
 ```
 
-- [ ] **Шаг 7: GREEN — подключение и маршруты экрана**
+- [x] **Шаг 7: GREEN — подключение и маршруты экрана**
 
 В `apps/news/routes.php` после `require_once __DIR__ . '/actions/catalog.php';` вставить:
 
@@ -4532,7 +4532,7 @@ addRoute('POST', '/news/admin/blocks', 'newsBlocksAction', ['app' => 'news', 'pr
 Обе вставки поднимают подписку карты сайтов на шесть строк ниже, и `NewsVisibilityTest` назовёт
 новый номер строки замыкания падением — шаг 8 правит его по этому выводу.
 
-- [ ] **Шаг 8: стражи общей сборки и адрес экрана в проверке адаптивности**
+- [x] **Шаг 8: стражи общей сборки и адрес экрана в проверке адаптивности**
 
 В `tests/guard/AppActionContractTest.php` константу `ACTIONS` заменить целиком:
 
@@ -4610,7 +4610,7 @@ addRoute('POST', '/news/admin/blocks', 'newsBlocksAction', ['app' => 'news', 'pr
   { name: 'новости: блоки', href: '/news/admin/blocks' },
 ```
 
-- [ ] **Шаг 9: Прогнать зелёный результат**
+- [x] **Шаг 9: Прогнать зелёный результат**
 
 Run: `docker compose -f docker-compose.dev.yml run --rm -T php bash -c "php -l apps/news/actions/blocks.php && php -l apps/news/templates/admin/blocks.php && php -l apps/news/lib/admin.php && php -l apps/news/admin.php && php -l apps/news/routes.php"`
 
@@ -4624,7 +4624,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 номером строки замыкания. Этот номер — единственное, что план не мог замерить до правки дерева
 (вердикт Р3): после подстановки в тест прогон повторяется, и красным в нём не остаётся ничего.
 
-- [ ] **Шаг 10: Стили — экран не добавляет правил**
+- [x] **Шаг 10: Стили — экран не добавляет правил**
 
 Run: `bash scripts/css && git status --porcelain public/assets/app.css`
 
@@ -4636,7 +4636,7 @@ Run: `docker compose -f docker-compose.dev.yml run --rm -T php vendor/bin/phpuni
 
 Ожидание: всё зелёное.
 
-- [ ] **Шаг 11: Адаптивность экрана блоков**
+- [x] **Шаг 11: Адаптивность экрана блоков**
 
 Run: `node --check scripts/responsive-check.mjs`
 
@@ -4651,7 +4651,7 @@ Run: `npm run responsive -- --base=http://localhost:8080`
 
 Run: `docker compose -f docker-compose.dev.yml stop`
 
-- [ ] **Шаг 12: Обратные замеры**
+- [x] **Шаг 12: Обратные замеры**
 
 Каждая мутация вносится в рабочее дерево, прогоняется указанным набором и отменяется (`git
 checkout -- <файл>`). Мутация, после которой всё остаётся зелёным, — находка: проверка этого
@@ -4678,7 +4678,7 @@ checkout -- <файл>`). Мутация, после которой всё ос�
 страницу.». Предел `NEWS_BLOCK_TARGET_MAX` (правило 14) — страховка против ухода произвольной
 строки в `WHERE`, а не правило с отдельным исходом, и различающей проверки у него нет.
 
-- [ ] **Шаг 13: Ворота, коммит и отчёт**
+- [x] **Шаг 13: Ворота, коммит и отчёт**
 
 Run: `bash scripts/gate.sh`
 
