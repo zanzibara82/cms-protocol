@@ -25,7 +25,11 @@ declare(strict_types=1);
         <a class="inline-flex min-h-[44px] items-center hover:underline" href="/news">Новости</a>
         <?php if ((string) $item['categoryTitle'] !== ''): ?>
             <span aria-hidden="true">→</span>
-            <a class="inline-flex min-h-[44px] items-center hover:underline" href="<?= e((string) $item['categoryHref']) ?>"><?= e((string) $item['categoryTitle']) ?></a>
+            <?php if ($item['categoryVisible'] === true): ?>
+                <a class="inline-flex min-h-[44px] items-center hover:underline" href="<?= e((string) $item['categoryHref']) ?>"><?= e((string) $item['categoryTitle']) ?></a>
+            <?php else: ?>
+                <span class="inline-flex min-h-[44px] items-center"><?= e((string) $item['categoryTitle']) ?></span>
+            <?php endif; ?>
         <?php endif; ?>
     </nav>
 

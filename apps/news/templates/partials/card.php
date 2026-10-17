@@ -13,8 +13,12 @@ declare(strict_types=1);
         <p class="flex flex-wrap items-center gap-2 text-xs text-ink/70">
             <span><?= e((string) $card['date']) ?></span>
             <?php if ((string) $card['categoryTitle'] !== ''): ?>
-                <a class="inline-flex min-h-[44px] items-center rounded bg-accent/10 px-2 py-0.5 hover:opacity-80"
-                   href="<?= e((string) $card['categoryHref']) ?>"><?= e((string) $card['categoryTitle']) ?></a>
+                <?php if ($card['categoryVisible'] === true): ?>
+                    <a class="inline-flex min-h-[44px] items-center rounded bg-accent/10 px-2 py-0.5 hover:opacity-80"
+                       href="<?= e((string) $card['categoryHref']) ?>"><?= e((string) $card['categoryTitle']) ?></a>
+                <?php else: ?>
+                    <span class="inline-flex min-h-[44px] items-center rounded bg-accent/10 px-2 py-0.5"><?= e((string) $card['categoryTitle']) ?></span>
+                <?php endif; ?>
             <?php endif; ?>
             <?php if ($card['pinned'] === true): ?>
                 <span class="rounded bg-ink px-2 py-0.5 text-cream">Важное</span>

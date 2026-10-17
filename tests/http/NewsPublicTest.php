@@ -108,6 +108,15 @@ final class NewsPublicTest extends TestCase
         ]), $editor);
 
         saveOldSlugs($withdrawn['id'], ['byvshee-nazvanie']);
+
+        // Материал в закрытой рубрике: рубрика снята с показа в setUpBeforeClass, поэтому страница
+        // открывается по прямому адресу (§8.4), а чип рубрики обязан печататься без ссылки.
+        createItem(self::input([
+            'title' => 'Заметка в закрытой рубрике',
+            'slug' => 'v-zakrytoj-rubrike',
+            'categoryId' => categoryIdOf('metodika'),
+            'tags' => [],
+        ]), $editor);
     }
 
     private function login(): void
@@ -156,6 +165,17 @@ final class NewsPublicTest extends TestCase
         self::assertStringContainsString('Начинаем <strong>в шесть</strong> вечера.', $page['body'], 'выделение звёздочками');
         self::assertStringContainsString('/news/t/vypusknik', $page['body'], 'тег ведёт на свою страницу');
         self::assertStringContainsString('Программа', $page['body'], 'заголовок абзаца напечатан');
+        self::assertStringContainsString('/news/c/zhizn-shkoly', $page['body'], 'ссылка на видимую рубрику остаётся живой');
+    }
+
+    public function testСтраницаМатериалаВСкрытойРубрикеНеПечатаетСсылку(): void
+    {
+        $page = Kernel::get('/news/v-zakrytoj-rubrike');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Заметка в закрытой рубрике', $page['body']);
+        self::assertStringContainsString('Методика', $page['body']);
+        self::assertStringNotContainsString('/news/c/metodika', $page['body']);
     }
 
     public function testСтраницаМатериалаНесётРазметкуСтатьи(): void

@@ -13,7 +13,8 @@ const NEWS_PAGER_WINDOW = 7;
 // Колонки карточки — явный список. SELECT * притащил бы в ленту JSON каждого материала:
 // страница из 12 карточек читала бы 12 полных текстов, которые на ней не печатаются.
 const NEWS_CARD_COLUMNS = 'i.id, i.slug, i.title, i.lead_text, i.cover, i.pinned, i.status, i.published_at,'
-    . ' c.slug AS category_slug, c.title AS category_title';
+    . ' c.slug AS category_slug, c.title AS category_title,'
+    . ' c.visible AS category_visible';
 
 // К колонкам карточки добавляется то, что читает страница материала: абзацы, метаданные для
 // поисковика, снимок автора и момент последней правки. Теги — отдельным запросом (itemTags()).
@@ -274,7 +275,7 @@ function findFeed(array $filter = [], int $page = 1): array
  * @return array{
  *     id: string, slug: string, title: string, lead: string, cover: string, pinned: bool,
  *     open: bool, status: string, href: string, publishedAt: DateTimeImmutable|null, date: string,
- *     categorySlug: string, categoryTitle: string, categoryHref: string
+ *     categorySlug: string, categoryTitle: string, categoryVisible: bool, categoryHref: string
  * }
  */
 function toCard(array $row, DateTimeImmutable $now): array
@@ -297,6 +298,7 @@ function toCard(array $row, DateTimeImmutable $now): array
         'date' => formatRuDate($published),
         'categorySlug' => $categorySlug,
         'categoryTitle' => (string) ($row['category_title'] ?? ''),
+        'categoryVisible' => (int) ($row['category_visible'] ?? 0) === 1,
         'categoryHref' => newsHref(['category' => $categorySlug]),
     ];
 }

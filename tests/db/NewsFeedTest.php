@@ -174,11 +174,30 @@ final class NewsFeedTest extends NewsDbTestCase
         self::assertSame('/news/itogi-goda', (string) $item['href']);
         self::assertSame('Жизнь школы', (string) $item['categoryTitle']);
         self::assertSame('/news/c/zhizn-shkoly', (string) $item['categoryHref']);
+        // Рубрика «Жизнь школы» заранее видима: признак на материале видимой рубрики обязан быть
+        // истинным, иначе карточка потеряла бы ссылку на живой раздел.
+        self::assertTrue((bool) $item['categoryVisible']);
         self::assertTrue((bool) $item['open']);
         self::assertNotSame('—', (string) $item['date']);
         self::assertSame([['title' => 'Итоги', 'text' => 'Текст про **итоги**.']], $item['paragraphs']);
         self::assertSame(['olimpiada'], array_column((array) $item['tags'], 'slug'));
         self::assertSame(['/news/t/olimpiada'], array_column((array) $item['tags'], 'href'));
+    }
+
+    public function testСкрытаяРубрикаНеДаётСсылкуНоМатериалОткрывается(): void
+    {
+        // Материал лежит в «Жизни школы», а рубрика скрыта после публикации: страница материала
+        // продолжает открываться (§8.4), название рубрики остаётся, но признак видимости гаснет —
+        // шаблон печатает чип рубрики без ссылки (§8.6).
+        $this->published('v-skrytoy-rubrike');
+        toggleCategoryVisibility(categoryIdOf('zhizn-shkoly'));
+
+        $item = findPublished('v-skrytoy-rubrike', nowUtc());
+
+        self::assertIsArray($item);
+        self::assertSame('Жизнь школы', (string) $item['categoryTitle']);
+        self::assertFalse((bool) $item['categoryVisible']);
+        self::assertTrue((bool) $item['open']);
     }
 
     public function testЧерновикНеОткрываетсяПоАдресуНоВиденЧерезПоискРедактора(): void

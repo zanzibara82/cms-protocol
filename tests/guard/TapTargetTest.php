@@ -20,6 +20,15 @@ final class TapTargetTest extends TestCase
     // Класс, задающий минимальную зону нажатия: он уже есть в собранном артефакте стилей.
     private const REQUIRED_CLASS = 'min-h-[44px]';
 
+    // Ширина — та же зона нажатия по другой оси: правило 44 px в требовании не разделяет оси.
+    // Признак прицеплен к совмещению «высота + центрирует содержимое»: элемент, который держит
+    // высоту и центрирует короткий текст, — это компактная квадратная цель, чью ширину набирает
+    // только сам текст и отступы; у ссылки с произвольным текстом ширина по правилу не
+    // проверяется. Совмещение этих двух классов в дереве встречается ровно в пагинаторе, поэтому
+    // ни один другой контрол под признак не попадает.
+    private const REQUIRED_WIDTH_CLASS = 'min-w-[44px]';
+    private const SQUARE_HINT_CLASS = 'justify-center';
+
     // min-height не действует на строчном элементе, а ссылка по умолчанию строчная: чтобы высота
     // вообще стала зоной нажатия, нужен блочный или строчно-блочный вывод.
     private const BLOCK_DISPLAY_CLASSES = ['block', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid'];
@@ -134,6 +143,37 @@ final class TapTargetTest extends TestCase
         self::assertSame([], $this->violations($mixed, 'probe.php'));
     }
 
+    // Квадратная компактная цель: класс квадратности рядом с высотой требует и ширины 44 px.
+    public function testКвадратныйКонтролБезШириныЛовится(): void
+    {
+        // Совмещение признаков без ширины — одна находка с предписанным текстом.
+        self::assertSame(
+            ['probe.php: строка 1: <a> с ' . self::REQUIRED_CLASS . ' и ' . self::SQUARE_HINT_CLASS . ', но без ' . self::REQUIRED_WIDTH_CLASS],
+            $this->violations('<a class="inline-flex min-h-[44px] min-w-9 items-center justify-center" href="/news/2">2</a>', 'probe.php')
+        );
+
+        // Ширина доросла до правила — защита молчит.
+        self::assertSame([], $this->violations('<a class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center" href="/news/2">2</a>', 'probe.php'));
+
+        // Признака квадратности нет: ширина у ссылки с произвольным текстом не требуется.
+        self::assertSame([], $this->violations('<a class="inline-flex min-h-[44px] items-center" href="/news">Новости</a>', 'probe.php'));
+
+        // Класс собирается переменной: ветка с признаком квадратности несёт и ширину.
+        $squareVar = "\$class = 'inline-flex min-h-[44px] items-center justify-center';\n"
+            . "\$items .= '<li><a class=\"' . \$class . '\" href=\"/news/2\">2</a></li>';\n";
+        self::assertSame(
+            ['probe.php: строка 2: <a> берёт class из $class, а его ветка несёт ' . self::SQUARE_HINT_CLASS . ', но не ' . self::REQUIRED_WIDTH_CLASS],
+            $this->violations($squareVar, 'probe.php')
+        );
+
+        // Порядок веток закреплён текстом нарушения: зона нажатия важнее ширины, поэтому элемент
+        // без высоты отчитывается ею, а не шириной.
+        self::assertSame(
+            ['probe.php: строка 1: <a> без ' . self::REQUIRED_CLASS],
+            $this->violations('<a class="inline-flex justify-center" href="/news">Новости</a>', 'probe.php')
+        );
+    }
+
     // Исключения читают значения атрибутов, а не подстроку тега: `data-type="hidden"` — видимый
     // контрол, а класс `not-sr-only` появляется на экране и обязан быть крупным.
     public function testСкрытоеПолеИКлавиатурнаяСсылкаНеСчитаютсяЦелямиДляПальца(): void
@@ -236,6 +276,13 @@ final class TapTargetTest extends TestCase
             return ['с ' . self::REQUIRED_CLASS . ', но min-height к строчной ссылке не применяется — нужен block, inline-block, flex, inline-flex или grid'];
         }
 
+        // Квадратная компактная цель: признак квадратности стоит вместе с высотой, поэтому ширина
+        // обязана дорасти до тех же 44 px. Ветка стоит после зоны нажатия, потому что первая
+        // претензия возвращает сразу: порядок веток не перекрывает существующих нарушений.
+        if (in_array(self::SQUARE_HINT_CLASS, $declared, true) && !in_array(self::REQUIRED_WIDTH_CLASS, $declared, true)) {
+            return ['с ' . self::REQUIRED_CLASS . ' и ' . self::SQUARE_HINT_CLASS . ', но без ' . self::REQUIRED_WIDTH_CLASS];
+        }
+
         return [];
     }
 
@@ -268,6 +315,10 @@ final class TapTargetTest extends TestCase
 
                 if ($tag === 'a' && array_intersect($branch, self::BLOCK_DISPLAY_CLASSES) === []) {
                     return ['берёт class из $' . $variable . ', а его ветка не задала block, inline-block, flex, inline-flex или grid'];
+                }
+
+                if (in_array(self::SQUARE_HINT_CLASS, $branch, true) && !in_array(self::REQUIRED_WIDTH_CLASS, $branch, true)) {
+                    return ['берёт class из $' . $variable . ', а его ветка несёт ' . self::SQUARE_HINT_CLASS . ', но не ' . self::REQUIRED_WIDTH_CLASS];
                 }
             }
         }
