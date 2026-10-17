@@ -93,7 +93,7 @@ function region(string $name, array $data = []): void
 ## 2. Данные: таблица, релиз схемы, версия манифеста
 
 Настройки живут в таблице раздела `tbl_news_block`. Релиз — `apps/news/sql/20261016_0003_blocks.sql`,
-версия манифеста `apps/news/manifest.php:11` растёт с `1.0.0` на `1.1.0`. Ядро считает план обновления по
+версия манифеста `apps/news/manifest.php:10` растёт с `1.0.0` на `1.1.0`. Ядро считает план обновления по
 отсортированному обходу `apps/*/sql/*.sql` и журналу (`core/migrations.php:21-86`), поэтому кнопка «Обновить»
 в реестре подхватит файл без правок ядра.
 
@@ -145,7 +145,7 @@ const NEWS_BLOCK_PER_ZONE = 6;
 | `category` | `apps/news/templates/feed.php` | после `partial('news/partials/list', …)` |
 | `category` | `apps/news/templates/category.php` | то же |
 | `category` | `apps/news/templates/tag.php` | то же |
-| `article` | `apps/news/templates/single.php` | после виджета «Читайте также», перед закрывающим `</article>` |
+| `article` | `apps/news/templates/single.php` | после списка тегов, перед закрывающим `</article>` (здесь же сидел прежний виджет «Читайте также», снят при переезде) |
 
 Инвариант: зона — всегда хвост основного содержимого, после того, что нарисовало само приложение. Пагинатор
 живёт внутри частичного списка (`apps/news/templates/partials/list.php:19`), поэтому блок на странице-списке
@@ -185,10 +185,11 @@ function newsRegionHtml(string $html, string $zone, array $data = []): string;
 - `newsBlockRows()` — одна выборка на страницу: `SELECT … FROM tbl_news_block WHERE zone = ? AND visible = 1
   ORDER BY order_index LIMIT 6`. Ограничитель стоит и в SQL, и в проверке редактора: строка, попавшая в базу
   мимо редактора, страницу не раздурует.
-- `blockFeedRows()` — собирается поверх `feedScope()` (`apps/news/lib/feed.php:162-215`): берёт `from`, `where`
+- `blockFeedRows()` — собирается поверх `feedScope()` (`apps/news/lib/feed.php:163-216`): берёт `from`, `where`
   и `args`, где уже лежат правила видимости и `c.visible = 1`, добавляет `AND i.slug <> ?` для исключения и
   `ORDER BY … LIMIT …` из существующих помощников. Правило видимости не заводится вторым экземпляром — тот же
-  довод, что держит `inCategory()` и `relatedLinks()` в одном теле (`apps/news/lib/feed.php:450-457`).
+  довод, что держит `inCategory()` (`apps/news/lib/feed.php:497`) и `relatedLinks()` (`:508`) в одном
+  теле `categoryFeedRows()` (`:463-488`) — правило видимости живёт там один раз.
 - `newsRegionHtml()` — обходит блоки зоны, для каждого просит карточки и печатает заголовок плюс сетку через
   существующий `partial('news/partials/card', …)`, то есть карточка блока и карточка ленты визуально не
   расходятся и не расъезжаются позже. `target_kind = NULL` — вся лента, `category` и `tag` — `feedScope` с
@@ -223,7 +224,7 @@ foreach (NEWS_BLOCK_ZONES as $zone) {
 исчез бы из-под проверки токена незаметно (`apps/news/routes.php:27-30`). Статические пути маршрутизатор
 ставит раньше параметрических, поэтому адрес материала не перехватит экран раздела — как сейчас с `/news/admin`.
 
-**Вкладка.** Пятый пункт в `NEWS_ADMIN_TABS` (`apps/news/lib/admin.php:23`), который обходит `newsAdminNav()`
+**Вкладка.** Пятый пункт в `NEWS_ADMIN_TABS` (`apps/news/lib/admin.php:27`), который обходит `newsAdminNav()`
 (`apps/news/lib/admin.php:125-142`): зона нажатия 44 px и отмеченная активная вкладка достаются новому экрану
 готовыми.
 
@@ -246,7 +247,7 @@ foreach (NEWS_BLOCK_ZONES as $zone) {
 - `title` — через `collapseSpace()` и предел поля по образцу `checkCategoryTitle()`
   (`apps/news/lib/catalog.php:71`); дубликат заголовка внутри зоны не запрещён (две «Свежие материалы» —
   легальная настройка);
-- `take_limit` — сверяется с `takeLimit()` (`apps/news/lib/feed.php:72`): просят 999 — отказ, а не тихое
+- `take_limit` — сверяется с `takeLimit()` (`apps/news/lib/feed.php:73`): просят 999 — отказ, а не тихое
   зажатие до предела; просят ноль — отказ;
 - цель — `categoryExists()` (`apps/news/lib/catalog.php:103`) для рубрики, существование тега для метки;
   `kind = related` цели не имеет вовсе, и сочетание «похожие + цель» — противоречие, отказ;
@@ -276,7 +277,8 @@ foreach (NEWS_BLOCK_ZONES as $zone) {
   черновик и материал, наступивший позже срока, то есть правило видимости работает сквозь `feedScope()`;
   «похожие» не содержат саму статью; выборка зоны упирается в шесть строк, даже если в базе семь.
 - `tests/http/NewsPublicTest.php` и `tests/http/NewsAdminTest.php` — на главной после настройки появился заголовок
-  блока и ссылка на материал; на карточке «Читайте также» ровно один раз (переезд не оставил второго виджета);
+  блока и ссылка на материал; на карточке заголовок «Похожие материалы» ровно один раз, а прежний
+  «Читайте также» снят вместе с виджетом (переезд не оставил второй копии);
   `/news/admin/blocks` без входа — отказ с `Cache-Control: no-store`, как остальные экраны раздела; действие экрана
   без токена отклоняется и ничего не меняет в базе.
 

@@ -1171,9 +1171,9 @@ curl -sS https://домен/robots.txt
 curl -sS https://домен/sitemap.xml | head -20
 ```
 
-В базе (`tbl_app_migration` — ровно две строки установки, `tbl_app_installation` — `version`
-`1.0.0`), в браузере — `/news`, `/news/admin` анонимом (403 или редирект на `/login`), три
-стартовые рубрики, HTTPS и `secure`-куки.
+В базе (`tbl_app_migration` — одна строка ядра плюс три строки релизов раздела, `tbl_app_installation`
+— `version` `1.1.0` в обеих строках), в браузере — `/news`, `/news/admin` анонимом (403 или редирект
+на `/login`), три стартовые рубрики, HTTPS и `secure`-куки.
 
 ## Шаг 6. Приёмка §12 на хостинге
 
@@ -1185,7 +1185,7 @@ curl -sS https://домен/sitemap.xml | head -20
 | № §12 | Что проверяем | Чем |
 |---|---|---|
 | 1 | `setup.php` создаёт ядро и администратора, после замка — 404 | экран, шаг 4; `tests/http/SetupTest.php` |
-| 2 | «Новости» не установлены → «Установить» → таблицы, две строки журнала, `version`, три рубрики | экран `/admin/apps`, шаг 5; `tests/db/AppsRegistryTest.php` |
+| 2 | «Новости» не установлены → «Установить» → таблицы, три строки журнала раздела, `version` `1.1.0`, три рубрики | экран `/admin/apps`, шаг 5; `tests/db/AppsRegistryTest.php` |
 | 3 | `requiresCore` выше ядра — отказ человеческим текстом, таблиц нет | fixture `future`; `tests/db/MigrationsTest.php` |
 | 4 | повтор установки не дублирует журнал; «Обновить» только при версии ниже манифеста | fixture `demo`; `tests/db/MigrationsTest.php` |
 | 5 | аноним на `/news/admin/**` — 403 или редирект, страницы с `noindex`, `robots.txt` с `Disallow` | экран + `curl`; `tests/http/NewsAdminTest.php` |
