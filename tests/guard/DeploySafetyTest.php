@@ -109,6 +109,18 @@ final class DeploySafetyTest extends TestCase
         // public/assets/app.css, вторым проходом уехал бы в public/index.php — вместо стилей
         // отдалась бы разметка, и проверка адаптивности молча тестировала бы 404.
         self::assertStringContainsString('RewriteCond $1 !^public/', $htaccess);
+
+        // RewriteBase закрепляет корень URL-пространства для per-directory переписывания:
+        // Apache строит результат относительно каталога с .htaccess, и на хостинге, где дерево
+        // выкладки не совпадает с корнем документ-корня, подстановка public/… склеилась бы с
+        // путём к .htaccess вместо корня. Якорь на конец строки не даёт утверждению засчитать
+        // упоминание директивы в комментарии вместо самой директивы.
+        self::assertMatchesRegularExpression(
+            '/^\s*RewriteBase\s+\/\s*$/m',
+            $htaccess,
+            'RewriteBase / обязателен: в per-directory контексте результат строится от каталога, '
+            . 'и без этой строки подстановка public/… склеится с путём к .htaccess вместо корня'
+        );
     }
 
     private function read(string $relative): string

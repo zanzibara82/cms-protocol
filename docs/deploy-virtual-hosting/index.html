@@ -525,8 +525,9 @@ php_value post_max_size 12M</code></pre>
       <div class="note"><strong>Файл лежит в репозитории, правила писать не нужно.</strong> Корневой
       <code>.htaccess</code> с этими правилами существует. Блокировка служебного обязана идти до переписывания,
       а тормоз повторного прохода <code>RewriteCond $1 !^public/</code> обязателен: оба требования проверяет
-      страж <code>tests/guard/DeploySafetyTest.php</code>. Правило <code>RewriteBase /</code> в файле есть, но
-      тестом не закреплено.
+      страж <code>tests/guard/DeploySafetyTest.php</code>. Он же закрепляет правило
+      <code>RewriteBase /</code>: без него переписывание в per-directory контексте строится
+      от пути каталога, а не от корня.
       Закрытию подлежат каталоги <code>admin</code>, <code>apps</code>, <code>core</code>, <code>docker</code>,
       <code>scripts</code>, <code>sql</code>, <code>tests</code>, <code>docs</code>, <code>theme</code>,
       <code>vendor</code>, <code>node_modules</code>, файлы <code>config.php</code> и <code>config.sample.php</code>,
