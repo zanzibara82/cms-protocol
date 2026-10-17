@@ -215,7 +215,7 @@ final class SqlSafetyTest extends TestCase
         $out = [];
 
         // Тот же порог, что и у `schemaSqlFiles()`: обход по списку узоров, и каждый узор обязан
-        // отдать файл. Пустой ответ glob — исчезнувший каталог миграций, а не «нечего проверять».
+        // отдать файл. Пустой ответ `glob` — исчезнувший каталог миграций, а не «нечего проверять».
         foreach (['sql/*.sql', 'apps/*/sql/*.sql'] as $pattern) {
             $found = glob($root . '/' . $pattern) ?: [];
             self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного SQL-файла — каталог миграций исчез');
@@ -240,7 +240,7 @@ final class SqlSafetyTest extends TestCase
         foreach ($dirs as $dir) {
             self::assertDirectoryExists(
                 $root . '/' . $dir,
-                $dir . ': каталог исчез из дерева — страж проверял бы меньше, чем требует правило'
+                $dir . ': каталог исчез из дерева — страж запросов проверял бы меньше, чем требует правило'
             );
 
             $found = [];

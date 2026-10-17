@@ -281,7 +281,7 @@ final class NoIndexNoStoreSourceTest extends TestCase
         $root = dirname(__DIR__, 2);
         $files = [];
 
-        // Каждый узор обязан отдать хотя бы один файл: пустой ответ glob означает исчезнувший
+        // Каждый узор обязан отдать хотя бы один файл: пустой ответ `glob` означает исчезнувший
         // каталог шаблонов, и без порога страж проверял бы пустой список молча.
         foreach (['theme/*.php', 'core/templates/*.php'] as $pattern) {
             $found = glob($root . '/' . $pattern) ?: [];

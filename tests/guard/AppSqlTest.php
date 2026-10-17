@@ -148,17 +148,11 @@ final class AppSqlTest extends TestCase
     private function appSqlFiles(): array
     {
         $root = dirname(__DIR__, 2);
-        $files = [];
 
-        // Обход идёт списком узоров, и порог непустоты живёт в теле цикла: пустой ответ glob
-        // означает исчезнувший каталог миграций раздела, а не «проверять нечего».
-        foreach (['apps/*/sql/*.sql'] as $pattern) {
-            $found = glob($root . '/' . $pattern) ?: [];
-            self::assertNotEmpty($found, 'Обход ' . $pattern . ' не отдал ни одного SQL-файла — каталог миграций исчез');
-            foreach ($found as $file) {
-                $files[] = $file;
-            }
-        }
+        // Порог непустоты: пустой ответ `glob` означает исчезнувший каталог миграций раздела,
+        // а не «проверять нечего». Число файлов не закрепляется — его прибавляет каждый релиз схемы.
+        $files = glob($root . '/apps/*/sql/*.sql') ?: [];
+        self::assertNotEmpty($files, 'Обход apps/*/sql/*.sql не отдал ни одного SQL-файла — каталог миграций исчез');
 
         sort($files);
 

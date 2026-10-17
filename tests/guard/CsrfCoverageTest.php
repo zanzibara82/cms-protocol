@@ -16,6 +16,11 @@ use PHPUnit\Framework\TestCase;
 //   замыкания из routes.php разделов и «прямые» POST-ветки public/*.php выпадали из обхода;
 // — формы искали только в theme, admin и apps и сравнивали их количество с количеством полей на
 //   весь файл: форма без токена в core/templates рядом с двумя полями оставалась зелёной.
+// Пакет #290б закрыл четвёртую слепую зону: ветку «если метод — пост», написанную через
+// `requestMethod()`, а не через `isPost()`, не видел ни предфильтр файла, ни распознавание условия.
+// Живых нарушений эта зона не скрывает: вне ядра `requestMethod()` не вызывает ни один обработчик,
+// а в `core/router.php:106` он читается в переменную при разборе таблицы маршрутов, не как ветка.
+// Правка убирает латентную зону, а не чинит сломанное место.
 final class CsrfCoverageTest extends TestCase
 {
     private const CODE_DIRS = ['core', 'admin', 'theme', 'apps', 'public'];
@@ -121,6 +126,55 @@ PHP;
         );
     }
 
+    // Незакавыченное значение метода — корректная разметка, и прежний шаблон форм не считал её
+    // вовсе: форма `method=post` без поля токена оставалась зелёной. Пара проб ниже закрепляет оба
+    // конца, а третья проба проверяет границу значения: шаблон не имеет права ловить `postfix`.
+    public function testФормаБезКавычекВЗначенииМетодаУчтена(): void
+    {
+        $withoutToken = <<<'PHP'
+<?php
+return '<form method=post><input name="title"></form>';
+PHP;
+
+        $withToken = <<<'PHP'
+<?php
+return '<form method=post>' . csrfField() . '</form>';
+PHP;
+
+        $suffixed = <<<'PHP'
+<?php
+return '<form method=postfix><input name="title"></form>';
+PHP;
+
+        self::assertSame(
+            1,
+            $this->formsScan($withoutToken)['forms'],
+            'Незакавыченная форма без поля токена не посчитана: обход её не видит'
+        );
+        self::assertSame(
+            ['probe.php, строка 2: форма method="post" без поля токена внутри своих границ'],
+            $this->formsScan($withoutToken)['violations'],
+            'Незакавыченная форма без поля токена не названа находкой'
+        );
+
+        self::assertSame(
+            1,
+            $this->formsScan($withToken)['forms'],
+            'Незакавыченная форма с полем токена не посчитана'
+        );
+        self::assertSame(
+            [],
+            $this->formsScan($withToken)['violations'],
+            'Незакавыченная форма с полем токена покраснела ложно'
+        );
+
+        self::assertSame(
+            0,
+            $this->formsScan($suffixed)['forms'],
+            'Шаблон схватил значение `postfix`: граница значения не обязательна'
+        );
+    }
+
     // «Покрыт» значит «сверено поле формы с токеном сессии постоянным по времени сравнением».
     // Если проверка переписана на куку, GET-параметр или «==», обработчики формально содержат
     // csrfCheck(), но защита не работает — страж обязан увидеть это в самом механизме.
@@ -152,6 +206,7 @@ PHP;
             'проверка после запроса через помощника' => "<?php attemptLogin('a@b.c', 'x'); csrfCheck();",
             'обработчик вовсе без проверки' => "<?php insert('user', []); render('home');",
             'проверка обращена к другому механизму' => "<?php cookieTokenCheck(); one('SELECT 1');",
+            'проверка после запроса в ветке помощника метода' => "<?php if (requestMethod() === 'POST') { attemptLogin('a@b.c', 'x'); csrfCheck(); } ?>",
         ];
 
         foreach ($broken as $title => $body) {
@@ -161,11 +216,51 @@ PHP;
         $correct = [
             'порядок соблюдён' => "<?php csrfCheck(); \$r = attemptLogin('a@b.c', 'x');",
             'метод с тем же именем — не вызов базы' => "<?php \$s->all(); \$s->insert('x'); csrfCheck();",
+            'чтение базы в ветке гета после сверки токена' => "<?php if (requestMethod() === 'GET') { csrfCheck(); all('SELECT 1'); } ?>",
         ];
 
         foreach ($correct as $title => $body) {
             self::assertSame([], $this->orderViolations('probe', $body, $reaching), 'Страж ложно сработал: ' . $title);
         }
+    }
+
+    // Распознавание ветки — тоже сила стража, и оно проверяется полным путём обхода: предфильтр по
+    // файлу, разбор условия и сверка порядка в теле ветки. Прежний предфильтр знал одно слово
+    // `isPost`, поэтому обработчик «если метод — пост», написанный через `requestMethod()`, выпадал
+    // из проверки молча: латентная слепая зона, а не сломанное место.
+    public function testВеткаПомощникаМетодаНеВыпадаетИзОбхода(): void
+    {
+        $reaching = $this->dbReachingFunctions();
+
+        $postBranch = "<?php\nif (requestMethod() === 'POST') {\n    attemptLogin('a@b.c', 'x');\n    csrfCheck();\n}\n";
+        $isPostBranch = "<?php\nif (isPost()) {\n    attemptLogin('a@b.c', 'x');\n    csrfCheck();\n}\n";
+        // Файл упоминает POST в поле формы, поэтому предфильтр его пускает: отбраковать ветку гета
+        // обязано условие самой ветки, а не файл.
+        $getBranch = "<?php\n\$token = \$_POST['_token'] ?? '';\nif (requestMethod() === 'GET') {\n    attemptLogin('a@b.c', 'x');\n}\n";
+
+        self::assertNotSame(
+            [],
+            $this->branchOrderViolations($postBranch, 'probe.php', $reaching),
+            'Страж пропустил нарушение: ветка `requestMethod() === \'POST\'` не дошла до сверки порядка'
+        );
+
+        self::assertCount(
+            1,
+            $this->directPostBranchesIn($postBranch, 'probe.php'),
+            'Ветка через `requestMethod()` не распознана либо распознана дважды: обход читает файл неверно'
+        );
+
+        self::assertCount(
+            1,
+            $this->directPostBranchesIn($isPostBranch, 'probe.php'),
+            'Распознавание по `isPost()` сломано: ветка живого помощника метода выпала из обхода'
+        );
+
+        self::assertSame(
+            [],
+            $this->directPostBranchesIn($getBranch, 'probe.php'),
+            'Ветка «метод — гет» посчитана пост-обработчиком: страж краснеет ложно на чтении базы вне поста'
+        );
     }
 
     /** @return array<string, string> подпись эндпоинта => исходник обработчика */
@@ -230,13 +325,8 @@ PHP;
         $out = [];
 
         foreach ($this->phpFiles() as $file) {
-            $code = (string) file_get_contents($file);
-            if (!str_contains($code, 'isPost')) {
-                continue;
-            }
-
-            foreach ($this->postBranchBodies($code) as $index => $body) {
-                $out[$this->relative($file) . ', ветка isPost() №' . ($index + 1)] = $body;
+            foreach ($this->directPostBranchesIn((string) file_get_contents($file), $this->relative($file)) as $label => $body) {
+                $out[$label] = $body;
             }
         }
 
@@ -244,9 +334,62 @@ PHP;
     }
 
     /**
-     * Тела веток «if (... isPost() ...) { ... }»: условие и тело читаются балансом скобок по
-     * токенам. Берётся именно тело, чтобы порядок считался по ветке, а не по файлу: иначе
-     * csrfCheck() из соседней ветки закрывал бы нарушение.
+     * Прямые пост-ветки одного исходника. Выделено отдельно, чтобы проба-нарушение шла тем же
+     * путём, что и живой обработчик: предфильтр по файлу, распознавание ветки и только потом
+     * сверка порядка. Прежний предфильтр знал одно слово `isPost`, поэтому обработчик «если метод
+     * — пост», написанный через готовый помощник `requestMethod()`, выпадал из обхода целиком.
+     *
+     * @return array<string, string> подпись ветки => её исходник
+     */
+    private function directPostBranchesIn(string $code, string $fileLabel): array
+    {
+        if (!$this->mentionsDirectPost($code)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($this->postBranchBodies($code) as $index => $body) {
+            $out[$fileLabel . ', ветка прямого пост-запроса №' . ($index + 1)] = $body;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Признак прямого пост-запроса в тексте: готовый помощник `isPost()` либо обращение к
+     * `requestMethod()` при обязательной литере `POST`. Литера нужна, чтобы ветка «если метод —
+     * гет» не сошлась пост-обработчиком: иначе страж покраснел бы ложно на всём дереве.
+     */
+    private function mentionsDirectPost(string $text): bool
+    {
+        return str_contains($text, 'isPost')
+            || (str_contains($text, 'requestMethod') && str_contains($text, 'POST'));
+    }
+
+    /**
+     * Нарушения порядка по пост-веткам одного исходника — тот же путь обхода, что у живого дерева.
+     *
+     * @param array<string, true> $reaching
+     * @return list<string>
+     */
+    private function branchOrderViolations(string $code, string $fileLabel, array $reaching): array
+    {
+        $out = [];
+
+        foreach ($this->directPostBranchesIn($code, $fileLabel) as $label => $body) {
+            foreach ($this->orderViolations($label, $body, $reaching) as $violation) {
+                $out[] = $violation;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Тела веток прямого пост-запроса: условие читает `isPost()` либо `requestMethod()` с литерой
+     * `POST`. Условие и тело читаются балансом скобок по токенам. Берётся именно тело, чтобы
+     * порядок считался по ветке, а не по файлу: иначе csrfCheck() из соседней ветки закрывал бы
+     * нарушение.
      *
      * @return list<string>
      */
@@ -263,7 +406,7 @@ PHP;
             }
 
             $branch = $this->ifBranch($tokens, $i);
-            if ($branch !== null && str_contains($branch['condition'], 'isPost')) {
+            if ($branch !== null && $this->mentionsDirectPost($branch['condition'])) {
                 $out[] = $branch['body'];
             }
         }
@@ -563,7 +706,13 @@ PHP;
         // Совпадений может быть несколько на файл: экран «Приложения» собирает по форме на каждую
         // строку списка. Условие «ровно одно» молча возвращало пустой список и оставляло весь
         // такой файл вне проверки — форма без токена рядом с формой с токеном проходила зелёной.
-        $found = preg_match_all('/<form\b[^>]*method=["\']post["\'][^>]*>/i', $code, $matches, PREG_OFFSET_CAPTURE);
+        //
+        // Значение метода пишется и без кавычек: `method=post` — корректный HTML, а прежний шаблон
+        // требовал кавычки и такую форму не считал вовсе. Для незакавыченного варианта обязательна
+        // граница значения — пробел, слэш или закрывающая скобка тега: после литеры `post` обязан
+        // идти один из них, поэтому `method=postfix` в список не попадает. Жадное `post.*` сюда не
+        // подходит: оно схватало бы и `postfix`, и всё, что стоит после значения.
+        $found = preg_match_all('/<form\b[^>]*method=(?:"post"|\'post\'|post(?=[\s\/>]))[^>]*>/i', $code, $matches, PREG_OFFSET_CAPTURE);
         if ($found === false || $found === 0) {
             return [];
         }

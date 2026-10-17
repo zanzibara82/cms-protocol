@@ -9,7 +9,8 @@ use PHPUnit\Framework\TestCase;
 // Страж строгости самих инструментов (пункт M-15 широкой рецензии ветки): ворота ровно так сильны,
 // как их настройки. Стереть `level: 6` в `phpstan.neon`, выключить флаг в `phpunit.xml` или вырезать
 // шаг из `scripts/gate.sh` сегодня нечем: прогон остаётся зелёным, а дерево под ним перестаёт
-// проверяться. Поэтому этот страж читает три файла конфигурации как текст, ничего не запускает
+// проверяться. Поэтому этот страж читает четыре файла конфигурации как текст (`phpstan.neon`,
+// `phpunit.xml`, `scripts/gate.sh` и `.php-cs-fixer.dist.php`), ничего не запускает
 // и не зависит от того, установлен ли PHP или помощники в окружении: отсутствие шага или флага
 // видно по самому файлу. Каждый assert отвечает на вопрос «что начнёт проходить мимо ворот, если
 // эту строку убрать». Фикс-раунд M2 усилил проверки ровно там, где рецензия нашла «проверка слабее,
@@ -91,6 +92,31 @@ final class ToolStrictnessTest extends TestCase
     // сокращаться или терять имя — иначе проворот набора остаётся незамеченным.
     private const PHPUNIT_SUITES = ['unit', 'db', 'guard', 'http'];
 
+    // Содержание `.php-cs-fixer.dist.php` (пакет #290б): шаг «стиль» — единственный шаг ворот, о
+    // настройках которого этот страж ничего не знал. Вычеркнуть правило из набора, сузить обход или
+    // снять `setRiskyAllowed(true)` было нечем: фиксер молча переставал править код, а прогон
+    // оставался зелёным. Значения списаны дословно из файла; проверка читает текст и не зовёт
+    // фиксер. Отдельного списка каталогов здесь нет: обход правил сверяется с `PHPSTAN_ANALYSED_PATHS`,
+    // и сузить его можно только вместе с путями анализа.
+    /** @var array<string, string> каждое правило конфига с его закреплённым значением */
+    private const CS_FIXER_RULES = [
+        '@PSR12' => 'true',
+        'declare_strict_types' => 'true',
+        'no_unused_imports' => 'true',
+        'single_quote' => 'true',
+        'array_syntax' => "['syntax' => 'short']",
+        'binary_operator_spaces' => "['default' => 'single_space']",
+        'concat_space' => "['spacing' => 'one']",
+        'no_trailing_whitespace' => 'true',
+        'ordered_imports' => "['sort_algorithm' => 'alpha']",
+        'phpdoc_align' => 'false',
+        'blank_line_after_opening_tag' => 'true',
+    ];
+
+    // Выключенных правил разрешено ровно столько, сколько сейчас, и поимённо: новое отключение
+    // краснит списком, даже если его автор синхронно вычеркнул строку из `CS_FIXER_RULES`.
+    private const CS_FIXER_DISABLED_RULES = ['phpdoc_align'];
+
     // Пять шагов ворот и признаки самой работы каждого (пункт Т2): не подстрока имени исполняемого
     // файла — она стоит в `scripts/gate.sh` трижды, в проверке наличия сборщика, в тексте об его
     // отсутствии и в самой сборке, — а вызов с явными аргументами и точкой сравнения. У шага обязаны
@@ -149,6 +175,12 @@ final class ToolStrictnessTest extends TestCase
         'стиль' => ['vendor/bin/php-cs-fixer fix --dry-run --diff'],
         'тесты' => ['vendor/bin/phpunit'],
     ];
+
+    // Имена каталогов, которые шаг синтаксиса ворот обязан вырезать из обхода (пакет #290б):
+    // `vendor` и `node_modules` — зависимости, `.git` — служба репозитория, `.superpowers` — рабочий
+    // каталог заметок, файлов которого нет в репозитории. Порядок в списке ворот не значим, поэтому
+    // сверяется наличие каждого имени, а не строка целиком.
+    private const SYNTAX_PRUNE_NAMES = ['vendor', 'node_modules', '.git', '.superpowers'];
 
     public function testPhpstanУровеньНеНижеШести(): void
     {
@@ -420,6 +452,140 @@ final class ToolStrictnessTest extends TestCase
             [],
             $wrong,
             'В `phpunit.xml` набор смотрит не в свой каталог: ' . implode('; ', $wrong) . ' — такой набор тихо собирает чужие тесты или не собирает ничего'
+        );
+    }
+
+    public function testФиксерНеВыключаетКаталогиИПравилаМолча(): void
+    {
+        // Пункт #290б: `.php-cs-fixer.dist.php` — четвёртый файл конфигурации ворот; про его настройки
+        // этот страж раньше молчал, и шаг «стиль» оставался без стража содержания. Закомментированная
+        // строка не пройдёт: комментарии вырезаются до любого поиска, а разбор непонятной формы
+        // краснит, а не молчит. Фиксер здесь не запускается и его настройки не правятся — проверка
+        // читает текст.
+        $config = $this->oneLineText($this->stripPhpComments($this->read('.php-cs-fixer.dist.php')));
+
+        // Опорный список каталогов закрепляет и себя: без этой строки его можно было бы сузить, и
+        // сверка обхода ниже перестала бы чего-либо требовать.
+        self::assertCount(7, self::PHPSTAN_ANALYSED_PATHS, 'Опорный список каталогов анализа в самом страже урезан');
+        self::assertCount(11, self::CS_FIXER_RULES, 'Эталонный набор правил фиксера в самом страже урезан');
+        self::assertSame(['phpdoc_align'], self::CS_FIXER_DISABLED_RULES, 'Закреплённый список выключенных правил в самом страже подменён');
+
+        $dirs = $this->csFixerDirs($config);
+
+        $missing = [];
+        foreach (self::PHPSTAN_ANALYSED_PATHS as $path) {
+            if (!in_array($path, $dirs, true)) {
+                $missing[] = $path;
+            }
+        }
+
+        self::assertSame(
+            [],
+            $missing,
+            'Из обхода `in([...])` в `.php-cs-fixer.dist.php` исчез каталог (' . implode(', ', $missing)
+                . '): его файлы перестанут правиться стилем, и это не видно по зелёному прогону'
+        );
+
+        self::assertMatchesRegularExpression(
+            '/->setRiskyAllowed\(\s*true\s*\)/',
+            $config,
+            'В `.php-cs-fixer.dist.php` нет `setRiskyAllowed(true)`: рискованные правила набора не применяются, а прогон остаётся зелёным'
+        );
+
+        $changed = [];
+        $absent = [];
+        foreach (self::CS_FIXER_RULES as $rule => $value) {
+            if (str_contains($config, "'" . $rule . "' => " . $value)) {
+                continue;
+            }
+
+            if (str_contains($config, "'" . $rule . "' =>")) {
+                $changed[] = $rule . ' → значение не совпадает с закреплённым `' . $value . '`';
+                continue;
+            }
+
+            $absent[] = $rule;
+        }
+
+        self::assertSame(
+            [],
+            $changed,
+            'В `.php-cs-fixer.dist.php` закреплённое правило переписано: ' . implode('; ', $changed)
+                . ' — шаг «стиль» перестанет исправлять этот класс нарушений, оставшись зелёным'
+        );
+        self::assertSame(
+            [],
+            $absent,
+            'Из `.php-cs-fixer.dist.php` исчезло правило (' . implode(', ', $absent)
+                . '): вычеркнутое правило не краснит прогон, оно просто перестаёт действовать'
+        );
+
+        $matched = [];
+        if (preg_match_all("/'([A-Za-z@][A-Za-z0-9_]*)' => false/", $config, $matched) === false) {
+            self::fail('Список выключенных правил в `.php-cs-fixer.dist.php` не разобран');
+        }
+
+        /** @var list<string> $disabled */
+        $disabled = array_values(array_unique(array_map('strval', $matched[1])));
+        sort($disabled);
+        $allowed = self::CS_FIXER_DISABLED_RULES;
+        sort($allowed);
+
+        self::assertSame(
+            $allowed,
+            $disabled,
+            'В `.php-cs-fixer.dist.php` набор выключенных правил разошёлся с закреплённым: выключено `'
+                . implode('`, `', $disabled) . '`, а разрешено только `' . implode('`, `', $allowed)
+                . '` — каждое новое отключение правил молча ослабляет шаг ворот'
+        );
+    }
+
+    public function testШагСинтаксисаОтсекаетЛокальныеКаталоги(): void
+    {
+        // Пункт #290б: шаг синтаксиса обходил рабочий каталог заметок, файлов которого нет в
+        // репозитории, — зелёный прогон зависел от содержимого каталога, которого на чистой выкладке
+        // не будет. Комментарии вырезаются до поиска: строка обязана быть вызовом, а не упоминанием.
+        $code = $this->stripShellComments($this->read('scripts/gate.sh'));
+        $findLine = null;
+
+        foreach (preg_split('/\r\n|\r|\n/', $code) ?: [] as $line) {
+            if (str_contains(ltrim($line), 'find . -type d')) {
+                $findLine = ltrim($line);
+                break;
+            }
+        }
+
+        if ($findLine === null) {
+            self::fail('В `scripts/gate.sh` не найдена строка поиска PHP-файлов шага синтаксиса — область проверки сверить нечем');
+        }
+
+        $missing = [];
+        foreach (self::SYNTAX_PRUNE_NAMES as $name) {
+            // Порядок имён в списке ворот не значим, поэтому сверяется наличие каждого, а не строка
+            // целиком: переставленный список остаётся правильным.
+            if (preg_match('/-name\s+' . preg_quote($name, '/') . '\b/', $findLine) !== 1) {
+                $missing[] = $name;
+            }
+        }
+
+        self::assertSame(
+            [],
+            $missing,
+            'Шаг синтаксиса в `scripts/gate.sh` перестал отсекать каталог (' . implode(', ', $missing)
+                . '): в обход возвращаются файлы, которых нет в репозитории, и зелёный прогон перестаёт воспроизводиться'
+        );
+
+        // Имена в списке — ещё не отсечение: без `-prune` группа становится простым условием, и
+        // каталоги перестают вырезаться, сохранив все четыре имени на месте.
+        self::assertStringContainsString(
+            '-prune',
+            $findLine,
+            'В строке поиска шага синтаксиса не осталось `-prune`: перечисленные каталоги перестают вырезаться из обхода'
+        );
+        self::assertStringContainsString(
+            '-print0',
+            $findLine,
+            'В строке поиска шага синтаксиса не осталось `-print0`: имена передаются без нулевого разделителя'
         );
     }
 
@@ -1312,6 +1478,56 @@ final class ToolStrictnessTest extends TestCase
     private function stripXmlComments(string $xml): string
     {
         return (string) preg_replace('/<!--.*?-->/s', '', $xml);
+    }
+
+    /**
+     * Текст PHP-настройки без целострочных и блочных комментариев: закомментированное
+     * `->setRiskyAllowed(true)` или `'=> true'` не должно считаться живым значением — анализатор и
+     * фиксер комментария не видят, а прежний текстовый поиск находил его как настоящее.
+     */
+    private function stripPhpComments(string $code): string
+    {
+        $code = (string) preg_replace('#/\*.*?\*/#s', '', $code);
+
+        return (string) preg_replace('/^\s*(?:#|\/\/).*$/m', '', $code);
+    }
+
+    /**
+     * Весь текст одной строкой: переносы и отступы схлопываются в один пробел, чтобы значение
+     * правила, записанное в несколько строк, сверялось с закреплённым побайтово.
+     */
+    private function oneLineText(string $code): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', $code));
+    }
+
+    /**
+     * Каталоги обхода из `in([...])` конфига стилевых правил: значения вида `__DIR__ . '/core'`
+     * без ведущего слэша. Неразобранная запись краснит, а не отдаёт пустой список: молчаливая
+     * тишина здесь означала бы зелёный прогон при любом содержимом файла.
+     *
+     * @return list<string>
+     */
+    private function csFixerDirs(string $config): array
+    {
+        if (preg_match('/->in\(\[(.*?)\]\)/', $config, $found) !== 1) {
+            self::fail('В `.php-cs-fixer.dist.php` не разобран список каталогов `in([...])` — обход сверить нечем');
+        }
+
+        $matched = [];
+        if (preg_match_all("#__DIR__\s*\.\s*'(/[^']*)'#", $found[1], $matched) === false) {
+            self::fail('В `.php-cs-fixer.dist.php` не разобран перечень каталогов внутри `in([...])`');
+        }
+
+        /** @var list<string> $dirs */
+        $dirs = array_values(array_map(
+            static fn (string $path): string => ltrim($path, '/'),
+            array_map('strval', $matched[1])
+        ));
+
+        self::assertNotSame([], $dirs, 'Обход `in([...])` в `.php-cs-fixer.dist.php` не отдал ни одного каталога — проверять нечего');
+
+        return $dirs;
     }
 
     /**
