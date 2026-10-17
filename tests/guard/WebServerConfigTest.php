@@ -488,7 +488,7 @@ final class WebServerConfigTest extends TestCase
                 continue;
             }
 
-            if ($this->find($line, '/<\/IfModule>/') !== null) {
+            if ($this->find($line, '/<\/IfModule>/i') !== null) {
                 $inside = false;
 
                 continue;
@@ -669,6 +669,19 @@ final class WebServerConfigTest extends TestCase
         }
 
         return str_replace($needle, $replacement, $sample);
+    }
+
+    // Закрывающий тег в нижнем регистре: Apache допускает любой регистр тегов IfModule, и страж
+    // обязан видеть обёртку независимо от него. Синтетический вход из описания кандидата #301:
+    // обёртка открывается и сразу закрывается в нижнем регистре, а правило стоит после неё.
+    public function testЗакрывающийТегВНижнемРегистреСнимаетОбёрткуRewrite(): void
+    {
+        $config = "<IfModule mod_rewrite.c>\n</ifmodule>\nRewriteEngine On\n";
+
+        self::assertTrue(
+            $this->hasRewriteOutsideWrapper($config),
+            'Закрывающий тег </ifmodule> не снял обёртку — RewriteEngine считается защищённым'
+        );
     }
 
     // Корректный образец: тот же набор барьеров, что предписан корневому файлу, но в изолированном
