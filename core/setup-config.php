@@ -332,7 +332,7 @@ function setupWriteConfig(string $content, string $target): array
 
     if (@rename($tmp, $target) === false) {
         // Причина та же, что и выше: без журнала отказ уровня диска неотличим от сотен других;
-        // путь цели живёт в журнале, а не в ответе昼 (инвариант 5).
+        // путь цели живёт в журнале, а не в ответе (инвариант 5).
         logWarn('setup.config_write_failed', ['path' => dirname($target), 'reason' => (string) (error_get_last()['message'] ?? '')]);
         $result['error'] = 'Не удалось записать файл настроек: проверьте права на каталог.';
         // Временный файл обязан удалиться — иначе повторный заход оставляет мусор.
