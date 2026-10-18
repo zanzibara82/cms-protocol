@@ -21,3 +21,4 @@ require dirname(__DIR__) . '/core/bootstrap.php';
 // а отдельный require привёл бы к «Cannot redeclare db()».
 require dirname(__DIR__) . '/tests/TestDb.php';
 require_once dirname(__DIR__) . '/apps/news/lib/boot.php';
+require_once dirname(__DIR__) . '/apps/commerce/lib/boot.php';

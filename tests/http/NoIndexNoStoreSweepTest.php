@@ -38,11 +38,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
     private const OPEN = 'открытый экран без метки';
     private const REDIRECT = 'перенаправление';
 
-    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 22 строки таблицы
-    // метода GET (ядро 6, раздел 11, фикстуры 5) дают 29 вариантов, ещё 4 адреса вне таблицы —
-    // всего 33 запроса, из них помеченных 25 (ядро 2, раздел 15, фикстуры 5, добавки 3).
-    // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
-    // а молча удалённый из списка вариант краснит нижней границей объёма.
+    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 33 строки таблицы
+    // метода GET (ядро 6, новости 11, магазин 11, фикстуры 5) дают 42 варианта (новости 18,
+    // магазин 13), ещё 4 адреса вне таблицы — всего 46 запросов, из них помеченных 34
+    // (ядро 2, новости 15, магазин 9, фикстуры 5, добавки 3).
     //
     // Адресов вне таблицы стало четыре с пакетом M6: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -50,13 +49,15 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // обязан знать план: человек набирает и короткий адрес, и адрес с шагом. Третий — шаг 2, он
     // закрыт гейтом отметки сессии и без отметки отвечает перенаправлением (причина — в
     // `additions()`).
-    private const VARIANTS_TOTAL = 33;
-    private const MARKED_TOTAL = 25;
+    // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
+    // а молча удалённый из списка вариант краснит нижней границей объёма.
+    private const VARIANTS_TOTAL = 46;
+    private const MARKED_TOTAL = 34;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (33 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 32;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (46 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 45;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -93,6 +94,25 @@ final class NoIndexNoStoreSweepTest extends TestCase
         // Материалы садятся штатным сохранением раздела: лента обязана влезать на вторую страницу,
         // иначе ветка «метка из параметра `page`» не проверяется вовсе.
         $items = self::seedItems();
+
+        // Раздел «Магазин» идёт в тот же обход: CommerceHttpSetup поднимает две рубрики,
+        // товар и черновик, а заказ-фикстура питает адрес подтверждения (номер 1 проставит
+        // сам AUTO_INCREMENT колонки `number`).
+        CommerceHttpSetup::install();
+        CommerceHttpSetup::hideCategory();
+        insert('commerce_order', [
+            'id' => newId(),
+            'customer_name' => 'Фикстура обхода',
+            'customer_email' => 'obhod@school.dev',
+            'customer_phone' => null,
+            'address' => null,
+            'comment' => null,
+            'currency' => 'RUB',
+            'total' => 28.00,
+            'status' => 'NEW',
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
 
         self::$tokens = self::buildTokens($items);
 
@@ -462,6 +482,50 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ['path' => '/news/admin/blocks', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
+            // Магазин: витрина, рубрика, корзина и админка — шесть экранов без метки со
+            // статусом 200; отказ же (нет товар с таким адресом, рубрика не видима,
+            // подтверждение без отметки сессии) обрабатывает notFound() и потому помечен.
+            'GET /shop' => [
+                ['path' => '/shop', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+            'GET /shop/c/{slug}' => [
+                ['path' => '/shop/c/{shopcategory}', 'outcome' => self::OPEN, 'status' => 200],
+                // Скрытая рубрика CommerceHttpSetup (ветка hideCategory): гейт видимости
+                // обрабатывает notFound(), и отказ обязан быть с меткой.
+                ['path' => '/shop/c/drobnost', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /shop/cart' => [
+                ['path' => '/shop/cart', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+            'GET /shop/order/{number}' => [
+                // Проверка требует отметку сессии: заказ №1 в базе есть (фикстура в setUpBeforeClass),
+                // а сессия обхода не оформляла его — гейс уверенно отвечает помеченным 404.
+                ['path' => '/shop/order/1', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /shop/{slug}' => [
+                ['path' => '/shop/{product}', 'outcome' => self::OPEN, 'status' => 200],
+                // Черновик «draft-tovar» из CommerceHttpSetup не в поиске витрины: адрес 404.
+                ['path' => '/shop/net-takogo-tovara', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /commerce/admin' => [
+                ['path' => '/commerce/admin', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/products' => [
+                ['path' => '/commerce/admin/products', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/products/new' => [
+                ['path' => '/commerce/admin/products/new', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/products/{id}' => [
+                ['path' => '/commerce/admin/products/{pid}', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/categories' => [
+                ['path' => '/commerce/admin/categories', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/orders' => [
+                ['path' => '/commerce/admin/orders', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
             // тот же помеченный экран, собранный ядром.
             'GET /broken' => [
@@ -625,8 +689,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
     }
 
     /**
-     * Токены адресов: реальные данные раздела — адрес опубликованного материала, черновика,
+     * Токены адресов: реальные данные разделов — адрес опубликованного материала, черновика,
      * рубрики, тега и номер записи читаются из базы после посадки, а не переписываются руками.
+     * Товар магазинаоснабжается CommerceHttpSetup: адрес витрины и экран правки используют его.
      *
      * @param array{item: array{ok: bool, notice: string, error: string, id: string, slug: string}, draft: array{ok: bool, notice: string, error: string, id: string, slug: string}} $items
      * @return array<string, string>
@@ -644,12 +709,24 @@ final class NoIndexNoStoreSweepTest extends TestCase
         );
         self::assertIsArray($tag, 'Фикстура: у созданного материала нет ни одного тега, страница тега недоступна обходу');
 
+        $product = one('SELECT id, slug FROM ' . t('commerce_product') . ' WHERE status = ?', ['PUBLISHED']);
+        self::assertIsArray($product, 'Фикстура: опубликованный товар магазина не найден, витрина недоступна обходу');
+
+        $shopCategory = one('SELECT slug FROM ' . t('commerce_category') . ' WHERE visible = ?', [1]);
+        self::assertIsArray($shopCategory, 'Фикстура: видимой рубрики магазина нет — витрина рубрики недоступна обходу');
+
+        self::assertNotSame('', CommerceHttpSetup::$productId, 'Фикстура: CommerceHttpSetup не запомнил номер товара');
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
             'draft' => $items['draft']['slug'],
             'category' => (string) $category['slug'],
             'tag' => (string) $tag['slug'],
+            // Товар витрины: адрес карточки и экран правки в админке магазина.
+            'product' => (string) $product['slug'],
+            'pid' => CommerceHttpSetup::$productId,
+            'shopcategory' => (string) $shopCategory['slug'],
         ];
     }
 
