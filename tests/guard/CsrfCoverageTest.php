@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cms\Tests\guard;
 
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
 
 // Порядок важнее факта: csrfCheck() в конце обработчика уже принял бы чужой POST — к этому моменту
@@ -89,10 +90,83 @@ final class CsrfCoverageTest extends TestCase
         self::assertSame(1, count($fromServer), 'Прямое чтение `$_SERVER[\'REQUEST_METHOD\']` вне определителя метода не названо ровно одной находкой');
         self::assertStringContainsString('REQUEST_METHOD', $fromServer[0] ?? '', 'Находка прямого чтения не названа формой');
 
+        // Пункт Г2Ф-1 (Н-3): номер строки в находке обязан быть номером строки исходника. Живой
+        // обход подаёт в разбор текст после `withoutComments()`, поэтому фикстура идёт тем же путём:
+        // если блочный комментарий вырезается вместе со своими переводами строк, `switch` под ним
+        // уезжает на строку выше, и maintainer по красному прогону идёт не туда, где стоит ветка.
+        $docblock = "<?php\n/**\n * Пояснение\n * ещё строка\n */\nswitch (requestMethod()) { case 'POST': attemptLogin('a@b.c', 'x'); csrfCheck(); break; }\n";
+        $fromDocblock = $this->unreadableFormsIn($this->withoutComments($docblock), 'probe.php');
+        self::assertSame(
+            1,
+            count($fromDocblock),
+            'Пост-ветка через `switch` под многострочным докблоком не названа ровно одной находкой'
+        );
+        self::assertStringContainsString(
+            'probe.php, строка 6:',
+            $fromDocblock[0] ?? '',
+            'Находка называет строку текста без комментариев, а не строку исходника: адрес в сообщении'
+            . ' обязан указывать на ту строку файла, где пост-ветка стоит на самом деле'
+        );
+
+        // Пункт Г2Ф-2 (Н-7): условие, которое разбор не смог прочитать, краснит, а не молчит —
+        // зелёный прогон на неразобранном коде правило проекта запрещает, и опираться на шаг
+        // `php -l` ворот нельзя. Ветка «условие разобрано, но признака поста в нём нет» продолжает
+        // молчать: она разбирается, и ложное падение на ней стоило бы красным всем дереву.
+        $brokenSwitch = "<?php switch (requestMethod() { case 'POST': break; }";
+        $brokenMatch = "<?php match (isPost() { true => attemptLogin('a@b.c', 'x'), false => null };";
+
+        $switchFailure = $this->unreadableFormsFailure($brokenSwitch, 'probe.php');
+        self::assertNotNull(
+            $switchFailure,
+            'Неразобранное условие `switch` прошло молча: форма признака поста не сверена, а прогон зелёный'
+        );
+        self::assertStringContainsString(
+            'не разобрано',
+            (string) $switchFailure,
+            'Падение неразобранного условия `switch` не называет причину словами «не разобрано»'
+        );
+        self::assertStringContainsString(
+            'probe.php',
+            (string) $switchFailure,
+            'Падение неразобранного условия `switch` не называет файла, в котором стоит ветка'
+        );
+        self::assertStringContainsString(
+            'строке 1',
+            (string) $switchFailure,
+            'Падение неразобранного условия `switch` не называет строки, на которой стоит ветка'
+        );
+
+        $matchFailure = $this->unreadableFormsFailure($brokenMatch, 'probe.php');
+        self::assertNotNull(
+            $matchFailure,
+            'Неразобранное условие `match` прошло молча: та же слепая зона, что и у `switch`'
+        );
+        self::assertStringContainsString(
+            'не разобрано',
+            (string) $matchFailure,
+            'Падение неразобранного условия `match` не называет причину словами «не разобрано»'
+        );
+        self::assertStringContainsString(
+            'match',
+            (string) $matchFailure,
+            'Падение неразобранного условия `match` не называет формы этой ветки'
+        );
+
         // Контроль на норме: разбираемая ветка `if` и `switch` без признака поста краснить не должны,
         // иначе проверка превращается в ложное падение на всём дереве.
         self::assertSame([], $this->unreadableFormsIn($readable, 'probe.php'), 'Разбор покраснел на разбираемой ветке `if (isPost())`');
         self::assertSame([], $this->unreadableFormsIn($noPostMarker, 'probe.php'), 'Разбор покраснел на `switch` без признака пост-запроса');
+
+        // Пункт Г2Ф-5 (Н-6): форма через посредника — сознательная граница распознавания, а не
+        // пропуск. Ожидание ниже закрепляет решение: молчание без ожидания читатель принимает за
+        // слепую зону, а расширять границу на чтение переменной нечем — в дереве таких форм нет.
+        $mediator = "<?php \$m = requestMethod(); switch (\$m) { case 'POST': attemptLogin('a@b.c', 'x'); csrfCheck(); break; }";
+        self::assertSame(
+            [],
+            $this->unreadableFormsIn($mediator, 'probe.php'),
+            'Форма через посредника (`$m = requestMethod()` и `switch ($m)`) краснит: распознавание'
+            . ' условия по имени помощника — сознательная граница, и сдвигать её можно только вместе с этим ожиданием'
+        );
 
         // Белый список прямых обращений ровно один и ровно этот файл: тот же текст вне его краснит,
         // а в самом определителе метода он легален — иначе страж краснил бы собственную норму.
@@ -400,6 +474,12 @@ PHP;
      * сверка порядка. Прежний предфильтр знал одно слово `isPost`, поэтому обработчик «если метод
      * — пост», написанный через готовый помощник `requestMethod()`, выпадал из обхода целиком.
      *
+     * Сырой текст здесь достаточен сознательно (пункт Г2Ф-6, находка Н-8): разбор веток ищет токены
+     * `T_IF` и `T_ELSEIF`, которых комментарий не даёт вовсе, а комментарии из тела ветки выключает
+     * `withoutComments()` на шаге сверки порядка — отличие от соседа `unreadablePostBranches()` стоит
+     * ровно одного лишнего разбора закомментированной ветки. Номера строк этот обход не вычисляет:
+     * метки веток порядковые, поэтому перевод адресов, важный для пункта Г2Ф-1, сюда не распространяется.
+     *
      * @return array<string, string> подпись ветки => её исходник
      */
     private function directPostBranchesIn(string $code, string $fileLabel): array
@@ -510,6 +590,12 @@ PHP;
      * Белый список у него ровно один и берётся из метки: `core/request.php` — определитель метода,
      * единственный файл, где прямое чтение легально.
      *
+     * Условие, которое `conditionText()` не прочитал, краснит падением (пункт Г2Ф-2), а форма через
+     * посредника (`$m = requestMethod()`, затем `switch ($m)`) находки не даёт осознанно: признак
+     * поста сверяется по имени помощника в самом условии, а чтение переменной потребовало бы
+     * анализа потока данных. Границу сдвигать не решено — в дереве таких форм нет, и закреплено это
+     * ожиданием в `testПостВеткаЧерезСwitchИлиMatchКраснит()`.
+     *
      * @return list<string>
      */
     private function unreadableFormsIn(string $code, string $label): array
@@ -527,7 +613,16 @@ PHP;
                 }
 
                 $condition = $this->conditionText($tokens, $i);
-                if ($condition === null || !$this->mentionsMethodReader($condition)) {
+                if ($condition === null) {
+                    self::fail(
+                        'Условие `' . ($token[0] === T_SWITCH ? 'switch' : 'match') . '` на строке ' . (int) $token[2]
+                            . ' файла `' . $label . '` не разобрано: форма признака поста не сверена, а молчать'
+                            . ' здесь означало бы зелёный прогон на неразобранном коде'
+                    );
+                }
+                if (!$this->mentionsMethodReader($condition)) {
+                    // Условие разобрано, но признака метода запроса в нём нет: это не слепая зона,
+                    // а корректная форма (`switch ($page)`), и краснить её значит дать ложное падение.
                     continue;
                 }
 
@@ -544,6 +639,22 @@ PHP;
         }
 
         return $out;
+    }
+
+    /**
+     * Сообщение падения разбора по одной фикстуре: пустой результат означает, что разбор промолчал.
+     * Нужен ровно для того, чтобы сверить текст падения словами теста, а не уронить весь прогон
+     * (пункт Г2Ф-2).
+     */
+    private function unreadableFormsFailure(string $code, string $label): ?string
+    {
+        try {
+            $this->unreadableFormsIn($code, $label);
+        } catch (AssertionFailedError $error) {
+            return $error->getMessage();
+        }
+
+        return null;
     }
 
     /**
@@ -592,8 +703,9 @@ PHP;
     /**
      * Текст условия, стоящего сразу за `switch` или `match`: от открывающей круглой скобки до
      * парной закрывающей, вместе с обеими скобками. Запись, в которой скобка не найдена или не
-     * закрылась до конца текста, отдаёт null: такая форма признака поста не несёт и проходит
-     * молча, а не превращает проверку в ложное падение на разборчике.
+     * закрылась до конца текста, отдаёт null. Молчания на null больше нет (пункт Г2Ф-2, находка
+     * Н-7): обход `unreadableFormsIn()` краснит такое условие, потому что неразобранный код не
+     * имеет права давать зелёный прогон, а полагаться на шаг `php -l` ворот нельзя.
      *
      * @param array<int, array{0: int, 1: string, 2: int}|string> $tokens
      */
@@ -1002,9 +1114,19 @@ PHP;
         return is_array($token) ? (string) $token[1] : $token;
     }
 
+    /**
+     * Текст без комментариев, который подают разборам все обходы этого стража. Блочный комментарий
+     * заменяется таким же количеством переводов строк, а не вырезается вместе с ними (пункт
+     * Г2Ф-1, находка Н-3): адрес находки считается по этому тексту, и maintainer обязан идти на ту
+     * строку файла, где ветка стоит на самом деле, а не на строку укороченного текста.
+     */
     private function withoutComments(string $code): string
     {
-        $code = (string) preg_replace('#/\*.*?\*/#s', '', $code);
+        $code = (string) preg_replace_callback(
+            '#/\*.*?\*/#s',
+            static fn (array $match): string => str_repeat("\n", substr_count($match[0], "\n")),
+            $code
+        );
 
         return (string) preg_replace('#//[^\n]*#', '', $code);
     }
