@@ -91,8 +91,10 @@ foreach (NEWS_BLOCK_ZONES as $zone) {
         . e((string) $titleMax) . '"></label>'
         . '<label class="text-sm">Что показывать'
         . '<select class="min-h-[44px] ' . $field . '" name="kind">'
+        // Вид «Похожие материалы» берёт рубрику со страницы самого материала, поэтому вне страницы
+        // материала он молчит; пометка в подписи отводит от заведомо пустого выбора (замечание Р3).
         . '<option value="list">' . e(NEWS_BLOCK_KIND_LABEL['list']) . '</option>'
-        . '<option value="related">' . e(NEWS_BLOCK_KIND_LABEL['related']) . '</option>'
+        . '<option value="related">' . e(NEWS_BLOCK_KIND_LABEL['related']) . ' (печатается только на странице материала)</option>'
         . '</select></label>'
         . '<label class="text-sm">Сколько материалов'
         . '<input class="min-h-[44px] ' . $field . '" type="number" name="take" min="' . e((string) $takeMin)

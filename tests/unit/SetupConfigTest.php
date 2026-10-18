@@ -51,7 +51,9 @@ final class SetupConfigTest extends TestCase
         }
 
         foreach ($this->createdDirs as $dir) {
-            foreach (glob($dir . '/*') ?: [] as $stray) {
+            // Скрытые осколки (`.cms-config-*`) маска `/*` не ловит (glob пропускает точечные имена),
+            // поэтому они идут в уборку отдельной маской, как и в проверках ниже.
+            foreach (array_merge(glob($dir . '/*') ?: [], glob($dir . '/.cms-config-*') ?: []) as $stray) {
                 @unlink($stray);
             }
 
@@ -406,7 +408,7 @@ final class SetupConfigTest extends TestCase
 
         self::assertStringContainsString('недоступен для записи', $result['error'], 'Отказ не говорит про недоступность каталога');
         self::assertSame('', $result['warning'], 'Отказ уровня диска выдал предупреждение');
-        self::assertSame([], glob('/tmp/.cms-config-*'), 'После отказа в несуществующем каталоге остались осколки');
+        self::assertSame([], glob($missingDir . '/.cms-config-*'), 'После отказа в несуществующем каталоге остались осколки');
     }
 
     public function testОтказПеремещенияНеОставляетВременногоМусора(): void
@@ -423,8 +425,9 @@ final class SetupConfigTest extends TestCase
 
         $result = setupWriteConfig("<?php\n\nreturn ['КЛЮЧ' => 'значение'];\n", $target);
 
-        self::assertStringStartsWith('Не удалось записать файл настроек по адресу', $result['error'], 'Отказ перемещения на каталог не назван ошибкой');
-        self::assertStringContainsString($target, $result['error'], 'Отказ перемещения не назвал путь цели');
+        self::assertStringStartsWith('Не удалось записать файл настроек', $result['error'], 'Отказ перемещения на каталог не назван ошибкой');
+        // Путь цели шаг 1, доступный любому до установки, не называет (инвариант 5): причина уходит в журнал.
+        self::assertStringNotContainsString($target, $result['error'], 'Отказ перемещения назвал путь цели');
         self::assertSame('', $result['warning'], 'Отказ перемещения выдал предупреждение');
         // Временный файл лежит в каталоге, содержащем путь цели: осколков после отказа не должно остаться.
         self::assertSame([], glob($dir . '/.cms-config-*'), 'Отказ перемещения оставил временные осколки');
@@ -454,7 +457,47 @@ final class SetupConfigTest extends TestCase
         // месте оставил бы прежнюю, и атомарность перестала бы что-то значить.
         self::assertNotSame($inodeAfterFirst, $this->inodeOf($path), 'Вторая запись заменила файл на месте');
         self::assertSame('0600', substr(sprintf('%o', (int) fileperms($path)), -4), 'Права после второй записи не 600');
-        self::assertSame([], glob('/tmp/.cms-config-*'), 'После успешных записей остались осколки');
+        // Маска привязана к каталогу цели: осколок не может жить незамеченным рядом с целью.
+        self::assertSame([], glob($dir . '/.cms-config-*'), 'После успешных записей остались осколки');
+    }
+
+    public function testСидПропускаетНескалярВСуществующемФайле(): void
+    {
+        // Повторный заход шага 1 с существующим config.php, в котором обязательный ключ — массив,
+        // обязан молча пропустить такое значение: configHasKey() внутри делает (string), а на
+        // массиве это предупреждение, которое обработчик ядра превращает в ErrorException —
+        // экран шага 1 умирал пятьсотым вместо формы (замечание Р1-Н-2).
+        $dir = $this->tempDir();
+        file_put_contents($dir . '/config.php', "<?php\n\nreturn ['DB_NAME' => ['массив']];\n");
+        /** @var array<string, mixed> $raw */
+        $raw = require $dir . '/config.php';
+        self::assertIsArray($raw['DB_NAME'] ?? null, 'Фикстура не дала массив по обязательному ключу');
+
+        // Окружение не несёт ключа: иначе сид прошёл бы по ветке окружения и не дошёл до файла.
+        foreach (CONFIG_REQUIRED_KEYS as $conditionalKey) {
+            putenv('CMS_' . $conditionalKey);
+        }
+
+        setupSeedConfig($raw);
+
+        // Не-скаляр обязан быть проигнорирован, как «не задан в файле»: сид берёт значение из
+        // образца, а не складывает строковое представление массива в окружение.
+        self::assertSame(
+            setupSampleConfig()['DB_NAME'],
+            getenv('CMS_DB_NAME'),
+            'Не-скаляр из config.php затёк в окружение строкой вместо значения из образца'
+        );
+
+        foreach (CONFIG_REQUIRED_KEYS as $conditionalKey) {
+            putenv('CMS_' . $conditionalKey);
+        }
+        // Уборка обязана вернуть ключи тестовой среды, а не оставить окружение пустым: без
+        // CMS_DB_NAME configValue('DB_NAME') читает значение из образца (cms_dev), и TestDb::reset()
+        // в соседнем наборе краснеет «Сброс разрешён только для cms_test» — провал чужого класса по
+        // вине здесь; без CMS_DB_HOST дочерний php -S (в префикс команды Kernel::start() хост не
+        // входит) берёт localhost из образца и не находит базу — «Не удалось подключиться».
+        putenv('CMS_DB_NAME=cms_test');
+        putenv('CMS_DB_HOST=db');
     }
 
     public function testСнятиеПодставленногоПутиВозвращаетЗначениеБутстрапа(): void

@@ -14,9 +14,8 @@ const SETUP_MIN_PHP = '8.1.0';
 const SETUP_PASSWORD_MIN = 10;
 const SETUP_STEP_DB = 'db';
 const SETUP_STEP_ADMIN = 'admin';
-// Ключ отметки сессии перехода и белый список полей формы шага 1 (db_pass читается здесь же,
-// но в шаблон не уходит никогда — прежнее правило F9).
-const SETUP_SESSION_DB = 'setup_db';
+// Белый список полей формы шага 1 (db_pass читается здесь же, но в шаблон не уходит никогда —
+// прежнее правило F9). Ключ отметки сессии SETUP_SESSION_DB объявлен в core/setup-probe.php.
 const SETUP_DB_FIELDS = ['db_host', 'db_port', 'db_name', 'db_user', 'db_pass', 'table_prefix', 'site_url', 'site_name'];
 
 // Механика шага 1 живёт в `core/` и подключается здесь, до первого вызова: перенесённые функции

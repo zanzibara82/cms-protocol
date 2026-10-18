@@ -75,7 +75,11 @@ function setupSeedConfig(array $raw): void
 
         $value = '';
 
-        if (configHasKey($raw, (string) $key)) {
+        // Порядок операндов значим, как в setupCheckAssembled(): configHasKey() внутри делает
+        // (string) $config[$key], а массив в существующем config.php по этому ключу — предупреждение,
+        // которое обработчик ядра (core/bootstrap.php:58-63) превращает в ErrorException: повторный
+        // заход шага 1 умирал пятьсотым, вместо того чтобы сесть по образцу. Скалярность стоит первой.
+        if (is_scalar($raw[$key] ?? null) && configHasKey($raw, (string) $key)) {
             $value = (string) $raw[$key];
         } elseif (configHasKey($sample, (string) $key)) {
             $value = (string) $sample[$key];
@@ -312,7 +316,8 @@ function setupWriteConfig(string $content, string $target): array
         // Подавленное предупреждение иначе теряется без следа: человек видит только «каталог
         // недоступен для записи», а причину знает лишь журнал. Ни содержимого файла, ни паролей.
         logWarn('setup.config_write_failed', ['path' => dirname($target), 'reason' => (string) (error_get_last()['message'] ?? '')]);
-        $result['error'] = 'Не удалось подготовить файл настроек: каталог ' . dirname($target) . ' недоступен для записи.';
+        // Шаг 1 откры любому до установки: путь проекта не уходит в ответ (инвариант 5), причина дежурит в журнале.
+        $result['error'] = 'Не удалось подготовить файл настроек: каталог файла настроек недоступен для записи.';
         // Временный файл удаляем, если он всё-таки появился на диске.
         if (is_file($tmp)) {
             @unlink($tmp);
@@ -326,9 +331,10 @@ function setupWriteConfig(string $content, string $target): array
     $chmodOk = @chmod($tmp, 0600);
 
     if (@rename($tmp, $target) === false) {
-        // Причина та же, что и выше: без журнала отказ уровня диска неотличим от сотен других.
+        // Причина та же, что и выше: без журнала отказ уровня диска неотличим от сотен других;
+        // путь цели живёт в журнале, а не в ответе昼 (инвариант 5).
         logWarn('setup.config_write_failed', ['path' => dirname($target), 'reason' => (string) (error_get_last()['message'] ?? '')]);
-        $result['error'] = 'Не удалось записать файл настроек по адресу ' . $target . ': проверьте права на каталог.';
+        $result['error'] = 'Не удалось записать файл настроек: проверьте права на каталог.';
         // Временный файл обязан удалиться — иначе повторный заход оставляет мусор.
         if (is_file($tmp)) {
             @unlink($tmp);

@@ -9,5 +9,5 @@ declare(strict_types=1);
         в приложениях.
     </p>
     <p class="mt-6"><a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-cream hover:opacity-90" href="/news">Читать новости</a></p>
-    <?php region('home'); ?>
+<?php region('home'); ?>
 </section>
