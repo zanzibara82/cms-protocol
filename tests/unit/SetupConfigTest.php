@@ -236,6 +236,26 @@ final class SetupConfigTest extends TestCase
         self::assertSame('Адрес сайта — полный URL со схемой http или https.', $fail['site_url'] ?? '', 'Адрес со схемой ftp принят');
     }
 
+    public function testАдресСайтаНаГраницСтаДевянностаСимволов(): void
+    {
+        // Форма обрезает site_url по maxlength=190 — серверное правило обязано стыковаться
+        // с пределом разметки, иначе браузер пропускает ввод, который сервер отвергает.
+        $label = str_repeat('a', 60);
+        // Три метки по 60 символов: фильтр URL держит метки DNS до 63, а всю строку — 190.
+        $tail = 'https://' . $label . '.' . $label . '.' . $label;
+        self::assertSame(190, strlen($tail), 'Фикстура границы разъехалась');
+
+        $pass = setupValidateDb($this->formValues(['site_url' => $tail]));
+        self::assertArrayNotHasKey('site_url', $pass, 'Адрес в 190 символов отклонён');
+
+        $fail = setupValidateDb($this->formValues(['site_url' => $tail . 'b']));
+        self::assertSame(
+            'Адрес сайта — не длиннее 190 символов.',
+            $fail['site_url'] ?? '',
+            'Адрес в 191 символ принят'
+        );
+    }
+
     public function testНазваниеСайтаНаГраницахДлины(): void
     {
         $short = setupValidateDb($this->formValues(['site_name' => 'А']));

@@ -279,6 +279,33 @@ final class NewsCatalogTest extends TestCase
         self::assertStringContainsString('Осенний бал', Kernel::get('/news')['body']);
     }
 
+    public function testСкрытаяРубрикаНаЭкранеНеПечатаетСсылкуНаСайт(): void
+    {
+        // Порт подхода чипов: на публичных страницах скрытая рубрика печатается без ссылки,
+        // и справочник обязан согласиться — её страница отвечает как несуществующая,
+        // поэтому «Открыть на сайте» у скрытой строки ведёт на 404.
+        $this->login();
+        $id = categoryIdOf('zhizn-shkoly');
+
+        $response = $this->send(NEWS_ADMIN_CATEGORIES_PATH, ['op' => 'hide', 'id' => $id]);
+        self::assertSame('hidden', $this->noticeOf($response));
+
+        $body = $this->body(NEWS_ADMIN_CATEGORIES_PATH);
+        self::assertStringNotContainsString(
+            'href="/news/c/zhizn-shkoly"',
+            $body,
+            'Ссылка на закрытую страницу живёт только у видимой рубрики'
+        );
+        self::assertStringContainsString('Страница закрыта', $body, 'Вместо ссылки экран объясняет, почему кликать некуда');
+
+        $this->send(NEWS_ADMIN_CATEGORIES_PATH, ['op' => 'show', 'id' => $id]);
+        self::assertStringContainsString(
+            'href="/news/c/zhizn-shkoly"',
+            $this->body(NEWS_ADMIN_CATEGORIES_PATH),
+            'Возвращённая рубрика снова печатает ссылку на страницу'
+        );
+    }
+
     public function testПорядокМеняетсяКнопкамиАНаКрайнейСтрокеОтвечаетТекстом(): void
     {
         $this->login();

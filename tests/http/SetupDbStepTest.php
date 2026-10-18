@@ -92,6 +92,44 @@ final class SetupDbStepTest extends TestCase
         return "\0";
     }
 
+    // Предел поля читается из его же тега: maxlength живёт в одном <input> вместе с name=.
+    private static function renderedMax(string $body, string $field): string
+    {
+        if (
+            preg_match('/name="' . preg_quote($field, '/') . '".*?>/s', $body, $tag) === 1
+            && preg_match('/maxlength="([^"]*)"/', $tag[0], $max) === 1
+        ) {
+            return $max[1];
+        }
+
+        return "\0";
+    }
+
+    public function testПределыРазметкиШагаСовпадаютССервернымиПравилами(): void
+    {
+        // Серверные правила (setupValidateDb) обязаны быть видны прямо в разметке: браузер
+        // обрезает ввод по maxlength, поэтому расхождение ловит чужой вводом до сервера —
+        // db_name разрешает 64 символа по пределу MySQL, site_url держит предел 190,
+        // на котором сидит и хост, и пользователь базы.
+        $page = Kernel::get('/setup.php?step=db');
+
+        foreach ([
+            'db_host' => '190',
+            'db_port' => '5',
+            'db_name' => '64',
+            'db_user' => '190',
+            'table_prefix' => '30',
+            'site_url' => '190',
+            'site_name' => '120',
+        ] as $field => $max) {
+            self::assertSame(
+                $max,
+                self::renderedMax($page['body'], $field),
+                'Предел поля ' . $field . ' расходится с серверным правилом'
+            );
+        }
+    }
+
     public function testУспешныйШагПервыйЗаписываетНастройкиИВедётНаШагВторой(): void
     {
         $response = Kernel::passStepOne(self::freshToken());

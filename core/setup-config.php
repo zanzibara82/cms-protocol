@@ -168,6 +168,10 @@ function setupValidateDb(array $values): array
     $siteUrl = $values['site_url'];
     if ($siteUrl === '') {
         $errors['site_url'] = 'Укажите адрес сайта, например https://example.com.';
+    } elseif (strlen($siteUrl) > 190) {
+        // Предел стыкуется с maxlength формы (core/templates/setup-db.php): проверка стоит
+        // до FILTER_VALIDATE_URL, чтобы тратить валидатор только на вводы по длине.
+        $errors['site_url'] = 'Адрес сайта — не длиннее 190 символов.';
     } elseif (filter_var($siteUrl, FILTER_VALIDATE_URL) === false) {
         $errors['site_url'] = 'Адрес сайта — полный URL со схемой http или https.';
     } else {

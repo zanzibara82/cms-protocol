@@ -9,7 +9,9 @@ declare(strict_types=1);
 $fields = [
     'db_host' => ['label' => 'Хост базы', 'type' => 'text', 'max' => 190, 'auto' => ''],
     'db_port' => ['label' => 'Порт базы', 'type' => 'number', 'max' => 5, 'auto' => ''],
-    'db_name' => ['label' => 'Имя базы', 'type' => 'text', 'max' => 190, 'auto' => ''],
+    // Имя базы ограничено 64 символами самим сервером MySQL — разметка держит тот же предел
+    // (правило в setupValidateDb), остальные длины совпадают с серверными проверками.
+    'db_name' => ['label' => 'Имя базы', 'type' => 'text', 'max' => 64, 'auto' => ''],
     'db_user' => ['label' => 'Пользователь базы', 'type' => 'text', 'max' => 190, 'auto' => 'username'],
     'table_prefix' => ['label' => 'Префикс таблиц', 'type' => 'text', 'max' => 30, 'auto' => ''],
     'site_url' => ['label' => 'Адрес сайта', 'type' => 'text', 'max' => 190, 'auto' => 'url'],

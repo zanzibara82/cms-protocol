@@ -65,8 +65,13 @@ foreach ($rows as $row) {
         . e((string) $row['slug']) . '</code></p></div>'
         . '<p class="text-sm">' . $state . ' · ' . e($counts) . '</p>'
         . '<p class="flex flex-wrap items-center gap-2">'
-        . '<a class="inline-flex min-h-[44px] items-center text-sm underline underline-offset-4 hover:text-accent" href="'
-        . e(newsHref(['category' => (string) $row['slug']])) . '">Открыть на сайте</a></p>'
+        // Порт подхода чипов: скрытая рубрика печатается без ссылки — как карточки и путь
+        // материала на сайте, ведь её страница отвечает как несуществующая.
+        . ($visible
+            ? '<a class="inline-flex min-h-[44px] items-center text-sm underline underline-offset-4 hover:text-accent" href="'
+                . e(newsHref(['category' => (string) $row['slug']])) . '">Открыть на сайте</a>'
+            : '<span class="text-sm text-ink/60">Страница закрыта</span>')
+        . '</p>'
         . '<form class="flex flex-wrap items-end gap-2" method="post" action="' . e(NEWS_ADMIN_CATEGORIES_PATH) . '">'
         . csrfField() . '<input type="hidden" name="op" value="rename">'
         . '<input type="hidden" name="id" value="' . e($id) . '">'

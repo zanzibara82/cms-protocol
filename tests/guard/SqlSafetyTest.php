@@ -189,7 +189,7 @@ final class SqlSafetyTest extends TestCase
 
         foreach ($this->newsSectionFiles() as $file) {
             $code = $this->withoutComments((string) file_get_contents($file));
-            if (preg_match_all('/LIKE\s*\?(?!\s*ESCAPE)/i', $code) > 0) {
+            if (preg_match_all(self::LIKE_PATTERN, $code) > 0) {
                 $violations[] = $this->relative($file) . ': LIKE ? без объявления ESCAPE';
             }
         }
@@ -200,6 +200,52 @@ final class SqlSafetyTest extends TestCase
             'Каждый LIKE ? в apps/news обязан объявлять ESCAPE — иначе снятие обратным слэшем живёт только при отсутствии NO_BACKSLASH_ESCAPES'
         );
     }
+
+    // Р4-Н-1: проба-мутант собственного узора LIKE. В живом дереве нарушений нет, поэтому
+    // ослепление или ослабление узора прошли бы ворота незамеченными: замер считал бы «ноль
+    // LIKE без ESCAPE», а проверял бы пустоту. Узор обстрелян на синтетике в обе стороны:
+    // каждая форма нарушения обязана матчиться, каждое узаконенное написание — нет. WITH-путь
+    // закреплён самим примером (CTE с двумя `LIKE ?` в подзапросе): узор без якоря начала строки
+    // находит оба вхождения и внутри WITH, поэтому якорная мутация красится.
+    public function testУзорLikeЛовитНарушенияИОтпускаетУзаконенные(): void
+    {
+        $against = [
+            'WHERE i.title LIKE ?' => 1,
+            'i.title LIKE ? OR i.lead_text LIKE ?' => 2,
+            'WHERE x LIKE?' => 1,
+            '(i.title LIKE ? ESCAPE ? OR i.slug LIKE ?)' => 1,
+            'WITH search AS (SELECT id FROM tbl_item WHERE title LIKE ? OR lead LIKE ?) SELECT * FROM search' => 2,
+        ];
+
+        $allowed = [
+            'i.title LIKE ? ESCAPE ?' => 0,
+            'i.title LIKE ? escape ?' => 0,
+            'LIKE? ESCAPE ?' => 0,
+            "LIKE ?\n    ESCAPE ?" => 0,
+            'LIKE literalLike($query)' => 0,
+            'date LIKE 2026' => 0,
+        ];
+
+        foreach ($against as $sample => $expected) {
+            self::assertSame(
+                $expected,
+                preg_match_all(self::LIKE_PATTERN, $sample),
+                'Узор LIKE не поймал нарушение в пробе: ' . $sample
+            );
+        }
+
+        foreach ($allowed as $sample => $expected) {
+            self::assertSame(
+                $expected,
+                preg_match_all(self::LIKE_PATTERN, $sample),
+                'Узор LIKE красит узаконенное написание в пробе: ' . $sample
+            );
+        }
+    }
+
+    // Узор этой проверки объявлен константой, чтобы проба-мутант ниже сверяла ровно тот же
+    // узор, которым замеряется живой раздел: две копии регуляра разошлись бы молча.
+    private const LIKE_PATTERN = '/LIKE\s*\?(?!\s*ESCAPE)/i';
 
     /** @return list<string> */
     private function newsSectionFiles(): array

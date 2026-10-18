@@ -568,6 +568,67 @@ final class ToolStrictnessTest extends TestCase
         );
     }
 
+    // Р4-Н-2: проба-мутант двух разборов фиксера — `csFixerDirs()` и `csFixerExcludedPaths()`:
+    // в живом файле обе записи одинарными кавычками разобраны этими же разборами, поэтому
+    // опечатка или ослабление узора сломали бы их молча — живой замер перестал бы находить
+    // путь в `in([...])` или захваченный путь в `notPath`, и по зелёному прогону это не видно
+    // до следующего ручного замера. На синтетике обстреляны обе стороны: узаконенная форма
+    // собирается целиком, каждая форма, которую разбор обязан не понимать (двойные кавычки,
+    // переменная вместо `__DIR__`), роняет разбор вместо молчаливого пропуска.
+    public function testРазборыФиксераПонимаютФормыИКраснятЧужие(): void
+    {
+        self::assertSame(
+            ['core', 'admin', 'apps'],
+            $this->guardParse('csFixerDirs', "->in([__DIR__ . '/core', __DIR__ . '/admin', __DIR__ . '/apps'])"),
+            'Разбор каталогов `in([...])` не понял узаконенную запись — на живом файле сверка с эталоном обязана жить этим разбором'
+        );
+
+        self::assertSame(
+            ['public/assets', 'public/setup.php.lock'],
+            $this->guardParse('csFixerExcludedPaths', "->notPath('public/assets')\n->notPath('public/setup.php.lock')"),
+            'Разбор `notPath` не понял узаконенную запись — на живом файле сверка с закреплённым списком обязана жить этим разбором'
+        );
+
+        $hostile = [
+            'csFixerDirs' => [
+                '->in([__DIR__ . "/core"])',
+                '->in([$root . \'/core\'])',
+            ],
+            'csFixerExcludedPaths' => [
+                '->notPath("public/assets")',
+                '->notPath($public . \'/assets\')',
+            ],
+        ];
+
+        foreach ($hostile as $method => $samples) {
+            foreach ($samples as $sample) {
+                $caught = null;
+                try {
+                    $this->guardParse($method, $sample);
+                } catch (\Throwable $error) {
+                    $caught = $error;
+                }
+
+                self::assertNotNull(
+                    $caught,
+                    'Разбор `' . $method . '` пропустил чужую форму записи без падения: `'
+                        . $sample . '` — молчаливый пропуск снимал бы каталог или путь с шага «стиль»'
+                );
+            }
+        }
+    }
+
+    /**
+     * Вызов приватного разбора на синтетическом тексте (проба-мутант Р4-Н-2): разборы принимают
+     * текст конфигурации строкой, поэтому обстреливаются прямо в тесте, без временных файлов.
+     */
+    private function guardParse(string $method, string $config): mixed
+    {
+        $reflected = new \ReflectionMethod(self::class, $method);
+
+        return $reflected->invoke($this, $config);
+    }
+
     public function testВКомпозереНетРантаймЗависимостей(): void
     {
         // Пункт М284-Г2-2: «ноль рантайм-зависимостей» — ограничение спецификации, и до этого пункта
