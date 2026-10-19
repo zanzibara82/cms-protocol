@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cms\Tests\db;
 
+use Cms\Core\Mailer;
+
 final class CommerceOrderTest extends CommerceDbTestCase
 {
     public function testЗаказСписываетОстатокИОчищаетКорзину(): void
@@ -165,13 +167,110 @@ final class CommerceOrderTest extends CommerceDbTestCase
         $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
 
         $order = commerceOrderCreate(self::checkout(), [self::line($product, 'RUB', 1, 10000)]);
+        commerceSetOrderStatus((string) $order['id'], 'PAID');
+        commerceSetOrderStatus((string) $order['id'], 'SHIPPED');
+        commerceSetOrderStatus((string) $order['id'], 'DONE');
+
+        $result = commerceSetOrderStatus((string) $order['id'], 'CANCELLED');
+
+        self::assertFalse($result['ok']);
+        self::assertStringContainsString('Отправленный или завершённый заказ отменить нельзя', $result['error']);
+        self::assertSame('DONE', (string) value('SELECT status FROM ' . t('commerce_order') . ' WHERE id = ?', [$order['id']]));
+
+        // Из финального статуса вообще нет движения.
+        $again = commerceSetOrderStatus((string) $order['id'], 'PAID');
+
+        self::assertFalse($again['ok']);
+        self::assertStringContainsString('ход строго по цепочке', $again['error']);
+    }
+
+    public function testПрыжокЧерезСтатусыОтклоняется(): void
+    {
+        $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
+
+        $order = commerceOrderCreate(self::checkout(), [self::line($product, 'RUB', 1, 10000)]);
+
+        // Из «Нового» невозможно уйти прямо в «Отправлен», минуя «Оплачен».
+        $shipped = commerceSetOrderStatus((string) $order['id'], 'SHIPPED');
+
+        self::assertFalse($shipped['ok']);
+        self::assertStringContainsString('не переходит в «Отправлен»', $shipped['error']);
+
+        $paid = commerceSetOrderStatus((string) $order['id'], 'PAID');
+
+        self::assertTrue($paid['ok'], $paid['error']);
+
+        $done = commerceSetOrderStatus((string) $order['id'], 'DONE');
+
+        self::assertFalse($done['ok']);
+        self::assertStringContainsString('не переходит в «Доставлен»', $done['error']);
+    }
+
+    public function testОформлениеШлётПисьмоПокупателю(): void
+    {
+        $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
+        $product2 = self::makeProduct(['slug' => 'konf', 'sku' => 'KONF-9', 'stock' => 5]);
+        $line = self::line($product, 'RUB', 2, 10000);
+        $line2 = self::line($product2, 'RUB', 1, 4990);
+
+        // Счётчик заказов держится между тестами, поэтому номер берём из результата
+        // того же оформления, на котором ловим письмо.
+        $second = [];
+        $letters = $this->captureMail(static function () use (&$second, $line, $line2): array {
+            $order = commerceOrderCreate(self::checkout(), [$line, $line2]);
+            $second[] = $order;
+
+            return [$order];
+        });
+
+        $order = $second[0];
+        self::assertTrue($order['ok'], $order['error']);
+        self::assertSame(1, count($letters));
+        self::assertSame('anna@example.dev', $letters[0]['to']);
+        self::assertSame('Заказ №' . $order['number'] . ' — Школа английского', (string) $letters[0]['subject']);
+
+        $text = (string) $letters[0]['text'];
+        self::assertStringContainsString('Ваш заказ №' . $order['number'] . ' принят', $text);
+        self::assertStringContainsString('KOLA-1', $text);
+        self::assertStringContainsString('KONF-9', $text);
+        self::assertStringContainsString('Итого', $text);
+
+        // Отправитель письма — конвертный адрес ядра из настроек.
+        self::assertSame('noreply@example.com', commerceMailFrom());
+    }
+
+    public function testСменаСтатусаШлётПисьмоПокупателю(): void
+    {
+        $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
+        $created = commerceOrderCreate(self::checkout(), [self::line($product, 'RUB', 2, 10000)]);
+        self::assertTrue($created['ok'], $created['error']);
+
+        $letters = $this->captureMail(
+            static fn (): array => commerceSetOrderStatus((string) $created['id'], 'PAID')
+        );
+
+        self::assertSame(1, count($letters));
+        self::assertSame('anna@example.dev', $letters[0]['to']);
+        self::assertSame('Заказ №' . $created['number'] . ' — Школа английского', (string) $letters[0]['subject']);
+        $text = (string) $letters[0]['text'];
+        self::assertStringContainsString('Статус вашего заказа', $text);
+        self::assertStringContainsString('«Оплачен»', $text);
+    }
+
+    public function testОтменаОправленногоНеВозвращаетОстаток(): void
+    {
+        $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
+
+        $order = commerceOrderCreate(self::checkout(), [self::line($product, 'RUB', 2, 10000)]);
+        self::assertSame(3, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
+        commerceSetOrderStatus((string) $order['id'], 'PAID');
         commerceSetOrderStatus((string) $order['id'], 'SHIPPED');
 
         $result = commerceSetOrderStatus((string) $order['id'], 'CANCELLED');
 
         self::assertFalse($result['ok']);
-        self::assertStringContainsString('Выполненный заказ не меняется', $result['error']);
-        self::assertNotSame('CANCELLED', (string) value('SELECT status FROM ' . t('commerce_order') . ' WHERE id = ?', [$order['id']]));
+        // Товарные позиции после отправки уже выбраны: отмена не возвращает их наряду.
+        self::assertSame(3, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
     }
 
     // -----------------------------------------------------------------------
@@ -188,6 +287,34 @@ final class CommerceOrderTest extends CommerceDbTestCase
             'address' => '',
             'comment' => '',
         ];
+    }
+
+    /**
+     * Перехват писем: массив сообщения ловится на before_mail_send (там письмо
+     * ещё в читаемых полях), подменный транспорт лишь подтверждает отправку.
+     * Фильтры снимаются после сбора: подписка не выходит за пределы теста.
+     *
+     * @return list<array{to: string, subject: string, text: string}>
+     */
+    private function captureMail(callable $action): array
+    {
+        hooksReset();
+        $sent = [];
+        addFilter('before_mail_send', static function (array $message) use (&$sent): array {
+            $sent[] = $message;
+
+            return $message;
+        });
+        addFilter('commerce_mailer', static fn (mixed $value): Mailer => new Mailer(
+            static fn (array $headers, string $raw): array => ['ok' => true, 'error' => '']
+        ));
+
+        $action();
+
+        hooksReset();
+
+        /** @var list<array{to: string, subject: string, text: string}> */
+        return $sent;
     }
 
     /**

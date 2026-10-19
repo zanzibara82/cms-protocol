@@ -235,7 +235,40 @@ function commerceValidateCheckout(array $post): array
 }
 
 /**
- * Рубрики магазина. Своё правило заголовка: он несёт адрес страницы и печатается в
+ * Гостевой вход к заказу: номер — целое число больше нуля (можно набрать с «№» и
+ * пробелами, как в письме), e-mail — корректный адрес. Совпадение с базой — дело
+ * вызывающей стороны.
+ *
+ * @param array<string, string> $post
+ * @return array{errors: array<string, string>, values: array{number: string, customer_email: string}}
+ */
+function commerceValidateLookup(array $post): array
+{
+    $errors = [];
+
+    $number = trim((string) str_replace(
+        ["\r", "\n", '№', ' '],
+        ['', '', '', ''],
+        (string) ($post['number'] ?? '')
+    ));
+    $email = trim((string) ($post['customer_email'] ?? ''));
+
+    if ($number === '' || ctype_digit($number) === false || (int) $number <= 0) {
+        $errors['number'] = 'Номер заказа — целое число из письма о заказе.';
+    }
+
+    if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+        $errors['customer_email'] = 'Укажите e-mail — тот же, что содержит письмо о заказе.';
+    }
+
+    return [
+        'errors' => $errors,
+        'values' => ['number' => $number, 'customer_email' => $email],
+    ];
+}
+
+/**
+ * Рубрики магазина. Своё правило заголовка: он несет адрес страницы и печатается в
  * хлебных крошках, поэтому пустой или безразмерный заголовок недопустим.
  *
  * @param array<string, string> $post

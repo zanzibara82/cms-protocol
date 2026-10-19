@@ -776,7 +776,9 @@ function commerceOrdersAction(array $params = []): void
     $id = mb_substr(trim(postString('id')), 0, 26);
 
     $result = match ($op) {
+        'paid' => commerceSetOrderStatus($id, 'PAID'),
         'ship' => commerceSetOrderStatus($id, 'SHIPPED'),
+        'deliver' => commerceSetOrderStatus($id, 'DONE'),
         'cancel' => commerceSetOrderStatus($id, 'CANCELLED'),
         default => ['ok' => false, 'error' => 'Неизвестное действие с заказом.', 'notice' => ''],
     };

@@ -490,6 +490,87 @@ function commerceOrderConfirmPage(array $params = []): void
 }
 
 // ---------------------------------------------------------------------------
+// Состояние заказа для гостя (номер + e-mail)
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function commerceOrderLookupPage(array $params = []): void
+{
+    render('commerce/order-lookup', [
+        'values' => ['number' => '', 'customer_email' => ''],
+        'errors' => [],
+        'notice' => '',
+    ], ['title' => 'Состояние заказа — магазин']);
+}
+
+/**
+ * Гостевой поиск заказа: совпали номер и e-mail — открываем подтверждение,
+ * отметив номер за этой сессией. Пять провалов подряд замораживают форму на
+ * десять минут: адрес не становится переборщиком чужих заказов.
+ *
+ * @param array<string, string> $params
+ */
+function commerceOrderLookupAction(array $params = []): void
+{
+    csrfCheck();
+    startSession();
+    $check = commerceValidateLookup($_POST);
+
+    if ($check['errors'] !== []) {
+        commerceLookupRender($check['values'], $check['errors']);
+
+        return;
+    }
+
+    $values = $check['values'];
+    $frozen = (int) ($_SESSION[COMMERCE_SESSION_LOOKUP_UNTIL] ?? 0);
+    $moment = nowUtc()->getTimestamp();
+
+    if ($frozen > $moment) {
+        $minutes = (int) ceil(($frozen - $moment) / 60);
+        commerceLookupRender($values, ['form' => 'Форма временно закрыта — повторите через ' . $minutes . ' мин.']);
+
+        return;
+    }
+
+    $order = commerceOrderByNumber((int) $values['number']);
+    $matches = $order !== null
+        && mb_strtolower((string) $order['customer_email']) === mb_strtolower($values['customer_email']);
+
+    if ($matches) {
+        unset($_SESSION[COMMERCE_SESSION_LOOKUP_FAILS], $_SESSION[COMMERCE_SESSION_LOOKUP_UNTIL]);
+        commerceOrderConfirmSessionMark((int) $values['number']);
+        redirect('/shop/order/' . $values['number']);
+    }
+
+    $fails = (int) ($_SESSION[COMMERCE_SESSION_LOOKUP_FAILS] ?? 0) + 1;
+    $_SESSION[COMMERCE_SESSION_LOOKUP_FAILS] = $fails;
+
+    if ($fails >= COMMERCE_LOOKUP_MAX_FAILS) {
+        $_SESSION[COMMERCE_SESSION_LOOKUP_UNTIL] = $moment + COMMERCE_LOOKUP_COOLDOWN_MIN * 60;
+        commerceLookupRender($values, ['form' => 'Форма временно закрыта — повторите через ' . COMMERCE_LOOKUP_COOLDOWN_MIN . ' мин.']);
+
+        return;
+    }
+
+    commerceLookupRender($values, ['form' => 'Такого сочетания номера и e-mail нет — сверьтесь с письмом о заказе.']);
+}
+
+/**
+ * Рендер экрана с отказом и набранным текстом.
+ * @param array{number: string, customer_email: string} $values
+ * @param array<string, string> $errors
+ */
+function commerceLookupRender(array $values, array $errors): void
+{
+    render('commerce/order-lookup', [
+        'values' => $values,
+        'errors' => $errors,
+        'notice' => '',
+    ], ['title' => 'Состояние заказа — магазин']);
+}
+
+// ---------------------------------------------------------------------------
 // Карта сайтов
 // ---------------------------------------------------------------------------
 

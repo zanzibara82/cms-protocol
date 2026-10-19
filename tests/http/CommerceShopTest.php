@@ -202,7 +202,7 @@ final class CommerceShopTest extends TestCase
 
     public function testЭкраныВариантовИХарактеристикОткрываютсяРедактором(): void
     {
-        TestDb::seedUser(self::EDITOR_EMAIL, self::EDITOR_PASSWORD, 'editor');
+        $this->ensureEditor();
         $this->login();
 
         $variants = Kernel::get('/commerce/admin/products/' . CommerceHttpSetup::$productId . '/variants');
@@ -214,6 +214,111 @@ final class CommerceShopTest extends TestCase
         self::assertSame(200, $attributes['status']);
         self::assertStringContainsString('Характеристики рубрики', $attributes['body']);
         self::assertStringContainsString('Добавить характеристику', $attributes['body']);
+    }
+
+    public function testСтатусЗаказаИщетсяПоНомеруИПочте(): void
+    {
+        $order = CommerceHttpSetup::addOrder();
+
+        Kernel::freshCookies();
+        $form = Kernel::get('/shop/order');
+        self::assertSame(200, $form['status']);
+        self::assertStringContainsString('Состояние заказа', $form['body']);
+        self::assertStringContainsString('name="number"', $form['body']);
+        self::assertStringContainsString('name="customer_email"', $form['body']);
+
+        // «№» и регистр e-mail не мешают: письмо набирали в почтовом клиенте.
+        $found = Kernel::post('/shop/order/lookup', [
+            '_token' => $this->token($form['body']),
+            'number' => '№ ' . $order['number'],
+            'customer_email' => 'BORIS@example.dev',
+        ]);
+
+        self::assertSame(302, $found['status']);
+        self::assertStringContainsString('/shop/order/' . $order['number'], (string) ($found['headers']['location'] ?? ''));
+
+        $confirm = Kernel::get('/shop/order/' . $order['number']);
+        self::assertSame(200, $confirm['status']);
+        self::assertStringContainsString('Борис Колосово', $confirm['body']);
+        self::assertStringContainsString('Новый', $confirm['body']);
+    }
+
+    public function testФормаПодбораЗаказовЗамораживается(): void
+    {
+        CommerceHttpSetup::addOrder();
+
+        Kernel::freshCookies();
+        $form = Kernel::get('/shop/order');
+        $token = $this->token($form['body']);
+
+        // Четыре провала — форма вежлива и держит отказ.
+        for ($attempt = 1; $attempt <= 4; $attempt++) {
+            $response = Kernel::post('/shop/order/lookup', [
+                '_token' => $token,
+                'number' => '9999' . $attempt,
+                'customer_email' => 'perestrelka@example.dev',
+            ]);
+
+            self::assertSame(200, $response['status']);
+            self::assertStringContainsString('Такого сочетания номера и e-mail нет', $response['body']);
+        }
+
+        // Пятый провал замораживает форму: переборщик остановлен, честный клиент подождёт.
+        $frozen = Kernel::post('/shop/order/lookup', [
+            '_token' => $token,
+            'number' => '9999',
+            'customer_email' => 'perestrelka@example.dev',
+        ]);
+
+        self::assertSame(200, $frozen['status']);
+        self::assertStringContainsString('Форма временно закрыта', $frozen['body']);
+
+        // И уже замороженная форма не вычисляет совпадения — даже честная пара не проходит.
+        $held = Kernel::post('/shop/order/lookup', [
+            '_token' => $token,
+            'number' => '1',
+            'customer_email' => 'boris@example.dev',
+        ]);
+
+        self::assertSame(200, $held['status']);
+        self::assertStringContainsString('Форма временно закрыта', $held['body']);
+    }
+
+    public function testАдминПроводитЗаказПоЦепочке(): void
+    {
+        $order = CommerceHttpSetup::addOrder('boris@example.dev', 'NEW');
+        $this->ensureEditor();
+        $this->login();
+
+        $page = Kernel::get('/commerce/admin/orders');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Оплачен', $page['body']);
+        self::assertStringContainsString('Отменить', $page['body']);
+
+        $paid = Kernel::post('/commerce/admin/orders', ['_token' => $this->token($page['body']), 'op' => 'paid', 'id' => $order['id']]);
+        self::assertSame(302, $paid['status']);
+
+        $page = Kernel::get('/commerce/admin/orders');
+        self::assertStringContainsString('Отправить', $page['body']);
+
+        $shipped = Kernel::post('/commerce/admin/orders', ['_token' => $this->token($page['body']), 'op' => 'ship', 'id' => $order['id']]);
+        self::assertSame(302, $shipped['status']);
+
+        $page = Kernel::get('/commerce/admin/orders');
+        self::assertStringContainsString('Доставить', $page['body']);
+
+        $done = Kernel::post('/commerce/admin/orders', ['_token' => $this->token($page['body']), 'op' => 'deliver', 'id' => $order['id']]);
+        self::assertSame(302, $done['status']);
+
+        // Финал: из «Доставлен» кнопок нет, и попытка отменить возвращает отказ.
+        $page = Kernel::get('/commerce/admin/orders');
+        self::assertStringContainsString('Доставлен', $page['body']);
+
+        $cancel = Kernel::post('/commerce/admin/orders', ['_token' => $this->token($page['body']), 'op' => 'cancel', 'id' => $order['id']]);
+        self::assertSame(302, $cancel['status']);
+
+        $page = Kernel::get('/commerce/admin/orders');
+        self::assertStringContainsString('Отправленный или завершённый заказ отменить нельзя', $page['body']);
     }
 
     public function testЧастныйПутьМагазинаЗакрытRobots(): void
@@ -234,5 +339,14 @@ final class CommerceShopTest extends TestCase
             'email' => self::EDITOR_EMAIL,
             'password' => self::EDITOR_PASSWORD,
         ]);
+    }
+
+    /** Редактор завода один на набор: второй тест в классе встречает его уже созданным. */
+    private function ensureEditor(): void
+    {
+        $id = value('SELECT id FROM ' . t('user') . ' WHERE email = ?', [self::EDITOR_EMAIL]);
+        if ($id === null) {
+            TestDb::seedUser(self::EDITOR_EMAIL, self::EDITOR_PASSWORD, 'editor');
+        }
     }
 }

@@ -46,5 +46,10 @@ declare(strict_types=1);
     </dl>
 
     <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5" href="/shop">Вернуться в каталог</a>
+    <p class="text-sm text-ink/60">
+        Эта страница привязана к оформлению на этом устройстве. Позже заказ открывается
+        по номеру и e-mail на экране
+        <a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-ink" href="/shop/order">«Состояние заказа»</a>.
+    </p>
     <?php region('order'); ?>
 </section>

@@ -29,20 +29,31 @@ foreach (['' => 'Все'] + COMMERCE_ORDER_STATUS_LABELS as $value => $label) {
 
 $rowHtml = static function (array $row): string {
     $id = (string) $row['id'];
-    $buttons = '';
+    $status = (string) $row['status'];
 
-    if ((string) $row['status'] === 'NEW') {
+    // Кнопки шагов по жизненному циклу COMMERCE_ORDER_FLOW: показывается только то,
+    // что допустимо сделать из текущего статуса; из конечных статусов кнопок нет.
+    $steps = [
+        'paid' => ['NEW' => 'Оплачен', 'PAID' => 'Оплачен'],
+        'ship' => ['PAID' => 'Отправить'],
+        'deliver' => ['SHIPPED' => 'Доставить'],
+        'cancel' => ['NEW' => 'Отменить', 'PAID' => 'Отменить'],
+    ];
+
+    $buttons = '';
+    foreach ($steps as $op => $available) {
+        $label = (string) ($available[$status] ?? '');
+
+        if ($label === '') {
+            continue;
+        }
+
         $buttons .= '<form class="inline-flex" method="post" action="/commerce/admin/orders">'
             . csrfField()
-            . '<input type="hidden" name="op" value="ship">'
+            . '<input type="hidden" name="op" value="' . e($op) . '">'
             . '<input type="hidden" name="id" value="' . e($id) . '">'
-            . '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" type="submit">Обработан</button>'
-            . '</form>'
-            . '<form class="inline-flex" method="post" action="/commerce/admin/orders">'
-            . csrfField()
-            . '<input type="hidden" name="op" value="cancel">'
-            . '<input type="hidden" name="id" value="' . e($id) . '">'
-            . '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" type="submit">Отменить</button>'
+            . '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" type="submit">'
+            . e($label) . '</button>'
             . '</form>';
     }
 
@@ -54,7 +65,7 @@ $rowHtml = static function (array $row): string {
         . e(commerceFormatMoney(commerceCents((float) $row['total']), (string) $row['currency']))
         . '</td>'
         . '<td class="border-b border-ink/10 px-2 py-3">'
-        . e((string) (COMMERCE_ORDER_STATUS_LABELS[(string) $row['status']] ?? (string) $row['status']))
+        . e((string) (COMMERCE_ORDER_STATUS_LABELS[$status] ?? $status))
         . '</td>'
         . '<td class="border-b border-ink/10 px-2 py-3">' . e((string) $row['created_at']) . '</td>'
         . '<td class="border-b border-ink/10 px-2 py-3">' . $buttons . '</td>'

@@ -20,6 +20,9 @@ declare(strict_types=1);
         <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" href="/shop/cart">
             Корзина<?= e($cartCount > 0 ? ' (' . $cartCount . ')' : '') ?>
         </a>
+        <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" href="/shop/order">
+            Состояние заказа
+        </a>
     </header>
 
     <?php if ($notice !== ''): ?>

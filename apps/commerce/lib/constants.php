@@ -16,13 +16,27 @@ const COMMERCE_PRODUCT_STATUS_LABELS = [
 ];
 
 /** @var list<string> */
-const COMMERCE_ORDER_STATUSES = ['NEW', 'SHIPPED', 'CANCELLED'];
+const COMMERCE_ORDER_STATUSES = ['NEW', 'PAID', 'SHIPPED', 'DONE', 'CANCELLED'];
 
 /** @var array<string, string> */
 const COMMERCE_ORDER_STATUS_LABELS = [
     'NEW' => 'Новый',
-    'SHIPPED' => 'Выполнен',
+    'PAID' => 'Оплачен',
+    'SHIPPED' => 'Отправлен',
+    'DONE' => 'Доставлен',
     'CANCELLED' => 'Отменён',
+];
+
+// Живой цикл заказа (M3): откуда — куда можно. Отмена только до отправки: после неё
+// товар уже уехал к покупателю. Оплаченный и доставленный — конечные точки распечатанных
+// печатей, из них больше нет перехода.
+/** @var array<string, list<string>> */
+const COMMERCE_ORDER_FLOW = [
+    'NEW' => ['PAID', 'CANCELLED'],
+    'PAID' => ['SHIPPED', 'CANCELLED'],
+    'SHIPPED' => ['DONE'],
+    'DONE' => [],
+    'CANCELLED' => [],
 ];
 
 // Адрес «c» служит странице рубрики, «cart» и «order» — служебные экраны витрины,
@@ -37,6 +51,14 @@ const COMMERCE_SLUG_MAX = 60;
 // Копия слота сессии с собственным префиксом: раздел не тянет ключи чужих разделов.
 /** @var list<string> */
 const COMMERCE_SESSION_CART = 'commerce_cart';
+
+// Хост заказов по номеру и e-mail: счётчик проваленных попыток и метка заморозки
+// «до какого табло» в сессии. Строгий порог — прямо в константе: сессия клиента
+// чистится сама по выходу, и не должен превратиться в вечную баня штрих.
+const COMMERCE_SESSION_LOOKUP_FAILS = 'commerce_lookup_fails';
+const COMMERCE_SESSION_LOOKUP_UNTIL = 'commerce_lookup_until';
+const COMMERCE_LOOKUP_MAX_FAILS = 5;
+const COMMERCE_LOOKUP_COOLDOWN_MIN = 10;
 
 const COMMERCE_CART_MAX_QTY = 999;
 const COMMERCE_CART_MAX_LINES = 50;

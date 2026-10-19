@@ -18,6 +18,8 @@ addRoute('POST', '/shop/cart/add', 'commerceCartAddAction', ['app' => 'commerce'
 addRoute('POST', '/shop/cart/update', 'commerceCartUpdateAction', ['app' => 'commerce']);
 addRoute('POST', '/shop/order', 'commerceOrderAction', ['app' => 'commerce']);
 addRoute('GET', '/shop/order/{number}', 'commerceOrderConfirmPage', ['app' => 'commerce']);
+addRoute('GET', '/shop/order', 'commerceOrderLookupPage', ['app' => 'commerce']);
+addRoute('POST', '/shop/order/lookup', 'commerceOrderLookupAction', ['app' => 'commerce']);
 addRoute('GET', '/shop/{slug}', 'commerceProductPage', ['app' => 'commerce']);
 
 // Экраны админки — литералами: страж CsrfCoverageTest::postHandlers() ищет путь

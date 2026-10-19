@@ -115,6 +115,16 @@ function commerceOrderCreate(array $checkout, array $lines): array
     commerceCartClear();
     logInfo('commerce.order_created', ['orderId' => $id, 'number' => $number, 'total_cents' => $total]);
 
+    commerceMailSend(commerceOrderLetter(
+        $number,
+        $checkout['customer_email'],
+        $checkout['customer_name'],
+        'Ваш заказ №' . $number . ' принят. Мы напишем, когда отправим.',
+        $lines,
+        $total,
+        $currency
+    ));
+
     return [
         'ok' => true,
         'error' => '',
@@ -218,9 +228,10 @@ function commerceOrderItems(string $orderId): array
 }
 
 /**
- * Смена статуса заказа. Отмена возвращает остаток против списания — товар снова увидит
- * витрина. Побочное движение статусов запрещено: SHIPPED не превращается в CANCELLED
- * кнопкой «отменить» экрана.
+ * Смена статуса заказа. Статусы идут по жизненному циклу COMMERCE_ORDER_FLOW:
+ * заказ нельзя перепрыгнуть («оплачен» минуя «новый») и нельзя вернуть из
+ * конечного статуса. Отмена до отправки возвращает остаток против списания —
+ * товар снова увидит витрина. После смены покупателю уходит письмо.
  *
  * @return array{ok: bool, error: string, notice: string}
  */
@@ -242,8 +253,23 @@ function commerceSetOrderStatus(string $orderId, string $status): array
         return ['ok' => false, 'error' => 'Статус выбирается из списка.', 'notice' => ''];
     }
 
-    if ($previous === 'SHIPPED') {
-        return ['ok' => false, 'error' => 'Выполненный заказ не меняется — только повторным оформлением.', 'notice' => ''];
+    if (in_array($status, COMMERCE_ORDER_FLOW[$previous] ?? [], true) === false) {
+        // Отменить можно только до отправки: после неё позиции уже выбраны со склада.
+        if ($status === 'CANCELLED' && in_array($previous, ['SHIPPED', 'DONE'], true)) {
+            return [
+                'ok' => false,
+                'error' => 'Отправленный или завершённый заказ отменить нельзя.',
+                'notice' => '',
+            ];
+        }
+
+        return [
+            'ok' => false,
+            'error' => 'Статус «' . COMMERCE_ORDER_STATUS_LABELS[$previous]
+                . '» не переходит в «' . COMMERCE_ORDER_STATUS_LABELS[$status]
+                . '» — ход строго по цепочке: Новый, Оплачен, Отправлен, Доставлен.',
+            'notice' => '',
+        ];
     }
 
     tx(static function () use ($orderId, $status): void {
@@ -273,5 +299,56 @@ function commerceSetOrderStatus(string $orderId, string $status): array
 
     logInfo('commerce.order_status', ['orderId' => $orderId, 'status' => $status, 'previous' => $previous]);
 
+    commerceMailStatusChange($orderId);
+
     return ['ok' => true, 'error' => '', 'notice' => 'order_updated'];
+}
+
+/**
+ * Письмо покупателю о смене статуса. Данные заново читаются базой: на экране
+ * приходят только идентификаторы, а подпись письма обязана быть своей строкой.
+ *
+ * @return array{ok: bool, error: string, notice: string}
+ */
+function commerceMailStatusChange(string $orderId): array
+{
+    $order = one(
+        'SELECT number, customer_name, customer_email, currency, total, status'
+        . ' FROM ' . t('commerce_order') . ' WHERE id = ?',
+        [$orderId]
+    );
+
+    if ($order === null) {
+        return ['ok' => false, 'error' => '', 'notice' => ''];
+    }
+
+    $label = (string) (COMMERCE_ORDER_STATUS_LABELS[(string) $order['status']] ?? (string) $order['status']);
+    $lines = array_map(
+        /**
+         * Строка письма по позиции заказа.
+         * @param array{title: mixed, sku: mixed, qty: mixed, unit_price: mixed, currency: mixed} $row
+         * @return array{title: string, sku: string, qty: int, price_cents: int, currency: string}
+         */
+        static fn (array $row): array => [
+            'title' => (string) $row['title'],
+            'sku' => (string) $row['sku'],
+            'qty' => (int) $row['qty'],
+            'price_cents' => commerceCents((float) $row['unit_price']),
+            'currency' => (string) $row['currency'],
+        ],
+        commerceOrderItems($orderId)
+    );
+    $totalCents = commerceCents((float) $order['total']);
+
+    commerceMailSend(commerceOrderLetter(
+        (int) $order['number'],
+        (string) $order['customer_email'],
+        (string) $order['customer_name'],
+        'Статус вашего заказа №' . (string) $order['number'] . ' теперь «' . $label . '».',
+        $lines,
+        $totalCents,
+        (string) $order['currency']
+    ));
+
+    return ['ok' => true, 'error' => '', 'notice' => ''];
 }

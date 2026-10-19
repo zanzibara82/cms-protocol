@@ -88,6 +88,36 @@ final class CommerceHttpSetup
         return (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [self::$productId]);
     }
 
+    /**
+     * Заказ фикстурой: строка заказа с честным номером AUTO_INCREMENT, идентификатор
+     * возвращается вместе с номером — POST-действия админки работают по id.
+     *
+     * @return array{id: string, number: int}
+     */
+    public static function addOrder(string $email = 'boris@example.dev', string $status = 'NEW'): array
+    {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('commerce_order', [
+            'id' => $id,
+            'customer_name' => 'Борис Колосово',
+            'customer_email' => $email,
+            'customer_phone' => null,
+            'address' => null,
+            'comment' => null,
+            'currency' => 'RUB',
+            'total' => 22.40,
+            'status' => $status,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        $number = (int) value('SELECT number FROM ' . t('commerce_order') . ' WHERE id = ?', [$id]);
+
+        return ['id' => $id, 'number' => $number];
+    }
+
     public static function cleanup(): void
     {
         self::dropTables();
