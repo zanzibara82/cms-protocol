@@ -98,3 +98,35 @@ function parseFormDateTime(string $raw): ?DateTimeImmutable
 
     return $parsed;
 }
+
+// Дни акций «ГГГГ-ММ-ДД» из форм магазина: край 'start' — начало дня по Москве
+// (00:00:00), край 'end' — его окно (23:59:59). Момент возвращается в UTC — тем же
+// правилом «в базе UTC, Москва только на краях», что и у остального модуля.
+// Разбор по дню честный: checkdate() отсекает 2026-02-31, а обратная сборка репексированных
+// полей — лишнее в строке после даты.
+function parseMoscowDay(string $raw, string $edge = 'start'): ?DateTimeImmutable
+{
+    $value = trim($raw);
+
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return null;
+    }
+
+    [$y, $m, $d] = array_map('intval', explode('-', $value));
+
+    if (!checkdate($m, $d, $y)) {
+        return null;
+    }
+
+    $parsed = DateTimeImmutable::createFromFormat(
+        'Y-m-d H:i:s',
+        $value . ($edge === 'end' ? ' 23:59:59' : ' 00:00:00'),
+        moscowZone()
+    );
+
+    if (!$parsed instanceof DateTimeImmutable || $parsed->format('Y-m-d') !== $value) {
+        return null;
+    }
+
+    return $parsed->setTimezone(new DateTimeZone('UTC'));
+}

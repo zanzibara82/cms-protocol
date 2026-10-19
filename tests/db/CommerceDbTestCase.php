@@ -49,6 +49,8 @@ abstract class CommerceDbTestCase extends TestCase
             'commerce_attribute_choice',
             'commerce_attribute',
             'commerce_product_category',
+            'commerce_coupon',
+            'commerce_promo',
             'commerce_product',
             'commerce_category',
         ] as $table) {
@@ -66,6 +68,8 @@ abstract class CommerceDbTestCase extends TestCase
             'commerce_attribute_choice',
             'commerce_attribute',
             'commerce_product_category',
+            'commerce_coupon',
+            'commerce_promo',
             'commerce_product',
             'commerce_category',
         ] as $table) {

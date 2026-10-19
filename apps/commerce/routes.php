@@ -16,6 +16,7 @@ addRoute('GET', '/shop/c/{slug}', 'commerceCategoryPage', ['app' => 'commerce'])
 addRoute('GET', '/shop/cart', 'commerceCartPage', ['app' => 'commerce']);
 addRoute('POST', '/shop/cart/add', 'commerceCartAddAction', ['app' => 'commerce']);
 addRoute('POST', '/shop/cart/update', 'commerceCartUpdateAction', ['app' => 'commerce']);
+addRoute('POST', '/shop/cart/coupon', 'commerceCartCouponAction', ['app' => 'commerce']);
 addRoute('POST', '/shop/order', 'commerceOrderAction', ['app' => 'commerce']);
 addRoute('GET', '/shop/order/{number}', 'commerceOrderConfirmPage', ['app' => 'commerce']);
 addRoute('GET', '/shop/order', 'commerceOrderLookupPage', ['app' => 'commerce']);
@@ -47,11 +48,23 @@ addRoute('POST', '/commerce/admin/categories/{id}/attribute/{attributeId}/delete
 
 addRoute('GET', '/commerce/admin/categories', 'commerceAdminCategories', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/categories', 'commerceCategoriesAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+
+// Купоны и промо-правила (M4): списки по одному экрану на тип скидки, редактирование
+// по адресам вида /{id}.
+addRoute('GET', '/commerce/admin/coupons', 'commerceAdminCoupons', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/commerce/admin/coupons/{id}', 'commerceAdminCoupons', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/coupons', 'commerceCouponAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/coupons/{id}', 'commerceCouponAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/commerce/admin/promos', 'commerceAdminPromos', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/commerce/admin/promos/{id}', 'commerceAdminPromos', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/promos', 'commercePromoAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/promos/{id}', 'commercePromoAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+
 addRoute('GET', '/commerce/admin/orders', 'commerceAdminOrders', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/orders', 'commerceOrdersAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 
 // Карта сайтов: только опубликованные товары без noindex. Страница /shop и рубрики в неё
-// не включаются по отдельному решению этим этапом:核对 видимости рубрик отложено.
+// не включаются по отдельному решению этим этапом: проверка видимости рубрик отложена.
 addFilter('sitemap_urls', static function (array $urls): array {
     if (!isAppActive('commerce')) {
         return $urls;

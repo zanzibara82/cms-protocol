@@ -6,19 +6,18 @@ declare(strict_types=1);
  * Корзина и оформление: один экран, без JavaScript.
  *
  * @var list<array{id: string, slug: string, title: string, variant_title: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}> $lines
- * @var int $totalCents
- * @var int $cartCount
+ * @var array{subtotal_cents: int, count: int, currency: string, coupon_code: string, coupon_error: string, coupon_discount_cents: int, promo_title: string, promo_discount_cents: int, total_cents: int} $totals
  * @var array<string, string> $values
  * @var array<string, string> $errors
  * @var string $notice
  */
-$currency = $lines !== [] ? (string) $lines[0]['currency'] : 'RUB';
+$currency = (string) $totals['currency'];
 $formError = (string) ($errors['form'] ?? '');
 ?>
 <section class="space-y-8">
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Корзина</h1>
-        <p class="text-ink/70"><?= e($cartCount > 0 ? 'Позиций: ' . $cartCount : 'Корзина пуста') ?></p>
+        <p class="text-ink/70"><?= e($totals['count'] > 0 ? 'Позиций: ' . $totals['count'] : 'Корзина пуста') ?></p>
     </header>
 
     <?php if ($notice !== ''): ?>
@@ -64,7 +63,42 @@ $formError = (string) ($errors['form'] ?? '');
             <?php endforeach; ?>
         </ul>
 
-        <p class="text-xl font-bold">Итого: <?= e(commerceFormatMoney($totalCents, $currency)) ?></p>
+        <div class="space-y-2 rounded-xl border border-ink/10 bg-white p-4">
+            <?php if ((int) $totals['promo_discount_cents'] > 0): ?>
+                <p class="text-sm text-ink/70">
+                    Скидка по правилу «<?= e((string) $totals['promo_title']) ?>»: −<?= e(commerceFormatMoney((int) $totals['promo_discount_cents'], $currency)) ?>
+                </p>
+            <?php endif; ?>
+            <?php if ((string) $totals['coupon_code'] !== ''): ?>
+                <?php if ((string) $totals['coupon_error'] !== ''): ?>
+                    <p class="text-sm text-red-700">
+                        Купон <?= e((string) $totals['coupon_code']) ?> не применился: <?= e((string) $totals['coupon_error']) ?>.
+                    </p>
+                <?php else: ?>
+                    <p class="text-sm text-ink/70">
+                        Скидка по купону <?= e((string) $totals['coupon_code']) ?>: −<?= e(commerceFormatMoney((int) $totals['coupon_discount_cents'], $currency)) ?>
+                    </p>
+                <?php endif; ?>
+            <?php endif; ?>
+            <p class="text-xl font-bold">
+                <?= e($totals['subtotal_cents'] === $totals['total_cents'] ? 'Итого: ' : 'Итого к оплате: ') ?><?= e(commerceFormatMoney((int) $totals['total_cents'], $currency)) ?>
+            </p>
+            <?php if ($totals['subtotal_cents'] !== $totals['total_cents']): ?>
+                <p class="text-sm text-ink/50">Подытог: <?= e(commerceFormatMoney((int) $totals['subtotal_cents'], $currency)) ?></p>
+            <?php endif; ?>
+        </div>
+
+        <form class="flex flex-wrap items-end gap-3 rounded-xl border border-ink/10 bg-white p-4" method="post" action="/shop/cart/coupon">
+            <?= csrfField() /* @safe html */ ?>
+            <label class="block" for="coupon-code">
+                <span class="text-sm text-ink/60">Код купона</span>
+                <input class="mt-1 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="coupon-code" name="code" maxlength="<?= e((string) COMMERCE_COUPON_CODE_MAX) ?>" value="<?= e((string) $totals['coupon_code']) ?>" placeholder="SUMMER">
+            </label>
+            <button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">Применить</button>
+            <?php if ((string) $totals['coupon_code'] !== ''): ?>
+                <button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5" type="submit" name="remove" value="1">Снять купон</button>
+            <?php endif; ?>
+        </form>
 
         <form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6" method="post" action="/shop/order">
             <?= csrfField() /* @safe html */ ?>

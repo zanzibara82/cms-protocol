@@ -77,3 +77,20 @@ const COMMERCE_CURRENCY_DEFAULT = 'RUB';
 
 /** @var list<string> */
 const COMMERCE_CURRENCIES = ['RUB', 'USD', 'EUR'];
+
+// Скидки (M4): купоны вводит покупатель, промо-правила работают сами. Оба вида несут
+// одинаковый размер скидки — процент или фиксированную сумму в валюте заказа.
+/** @var list<string> */
+const COMMERCE_DISCOUNT_KINDS = ['PERCENT', 'FIXED'];
+
+/** @var array<string, string> */
+const COMMERCE_DISCOUNT_KIND_LABELS = [
+    'PERCENT' => 'Процент',
+    'FIXED' => 'Фиксированно',
+];
+
+const COMMERCE_COUPON_CODE_MAX = 40;
+
+// Купон идёт из корзины к оформлению с сессией: код набирается на экране корзины,
+// валидность и визиты купона экран показывает свежими данными базы, а не обещаниями.
+const COMMERCE_SESSION_COUPON = 'commerce_coupon';

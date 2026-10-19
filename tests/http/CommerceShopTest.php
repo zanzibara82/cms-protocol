@@ -329,6 +329,258 @@ final class CommerceShopTest extends TestCase
         self::assertStringContainsString('Disallow: /commerce/admin', $robots['body']);
     }
 
+    public function testКупонПрименяетсяИСнимаетсяВКорзине(): void
+    {
+        CommerceHttpSetup::addCoupon('SUMMER', 'PERCENT', 10.0, 100.0);
+
+        $page = Kernel::get('/shop/kofemashina');
+        Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+        $applied = Kernel::post('/shop/cart/coupon', [
+            '_token' => $this->token($cart['body']),
+            'code' => ' summer ',
+        ]);
+
+        self::assertSame(302, $applied['status']);
+
+        $cart = Kernel::get('/shop/cart');
+        self::assertStringContainsString('Скидка по купону SUMMER', $cart['body']);
+        // 10% от 2 240,00: итог к оплате качественно сменён с подытога.
+        self::assertStringContainsString('2 016,00 ₽', $cart['body']);
+        self::assertStringContainsString('Итого к оплате', $cart['body']);
+
+        $removed = Kernel::post('/shop/cart/coupon', [
+            '_token' => $this->token($cart['body']),
+            'code' => '',
+            'remove' => '1',
+        ]);
+
+        self::assertSame(302, $removed['status']);
+
+        $cart = Kernel::get('/shop/cart');
+        self::assertStringNotContainsString('Скидка по купону', $cart['body']);
+    }
+
+    public function testКорзинаОбъясняетОтказКупона(): void
+    {
+        $page = Kernel::get('/shop/kofemashina');
+        Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+        Kernel::post('/shop/cart/coupon', [
+            '_token' => $this->token($cart['body']),
+            'code' => 'NoSuchCode',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+
+        self::assertStringContainsString('Купон NOSUCHCODE не применился', $cart['body']);
+        self::assertStringContainsString('Купона с таким кодом нет', $cart['body']);
+    }
+
+    public function testЗаказСКупономСжигаетВизит(): void
+    {
+        CommerceHttpSetup::addCoupon('SUMMER', 'PERCENT', 10.0);
+
+        $page = Kernel::get('/shop/kofemashina');
+        Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+        Kernel::post('/shop/cart/coupon', [
+            '_token' => $this->token($cart['body']),
+            'code' => 'SUMMER',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+        $checkout = Kernel::post('/shop/order', [
+            '_token' => $this->token($cart['body']),
+            'customer_name' => 'Анна Полугодова',
+            'customer_email' => 'anna@example.dev',
+            'customer_phone' => '',
+            'address' => '',
+            'comment' => '',
+        ]);
+
+        self::assertSame(302, $checkout['status']);
+        $confirm = Kernel::get((string) ($checkout['headers']['location'] ?? ''));
+
+        self::assertStringContainsString('Скидка по купону SUMMER', $confirm['body']);
+        self::assertStringContainsString('Итого к оплате: 2 016,00 ₽', $confirm['body']);
+
+        $row = (array) one('SELECT coupon_code, total FROM ' . t('commerce_order') . ' ORDER BY number DESC LIMIT 1');
+
+        self::assertSame('SUMMER', (string) $row['coupon_code']);
+        self::assertSame(2016.0, (float) $row['total']);
+        self::assertSame(
+            1,
+            (int) value('SELECT used_count FROM ' . t('commerce_coupon') . " WHERE code = 'SUMMER'")
+        );
+    }
+
+    public function testПромоПравилоСкидываетКорзинуБезКода(): void
+    {
+        CommerceHttpSetup::addPromo('Летняя скидка', 'PERCENT', 5.0, null, null, null, true);
+
+        $page = Kernel::get('/shop/kofemashina');
+        Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+        self::assertStringContainsString('Скидка по правилу «Летняя скидка»', $cart['body']);
+        self::assertStringContainsString('Итого к оплате: 2 128,00 ₽', $cart['body']);
+
+        $checkout = Kernel::post('/shop/order', [
+            '_token' => $this->token($cart['body']),
+            'customer_name' => 'Анна Полугодова',
+            'customer_email' => 'anna@example.dev',
+            'customer_phone' => '',
+            'address' => '',
+            'comment' => '',
+        ]);
+
+        self::assertSame(302, $checkout['status']);
+
+        $confirm = Kernel::get((string) ($checkout['headers']['location'] ?? ''));
+        self::assertStringContainsString('Скидка по правилу «Летняя скидка»', $confirm['body']);
+        self::assertStringContainsString('2 128,00 ₽', $confirm['body']);
+
+        $row = (array) one('SELECT promo_title, promo_discount, total FROM ' . t('commerce_order') . ' ORDER BY number DESC LIMIT 1');
+        self::assertSame('Летняя скидка', (string) $row['promo_title']);
+        self::assertSame(112.0, (float) $row['promo_discount']);
+        self::assertSame(2128.0, (float) $row['total']);
+    }
+
+    public function testОтменаЗаказаВозвращаетВизитКупона(): void
+    {
+        $this->ensureEditor();
+        $this->login();
+
+        CommerceHttpSetup::addCoupon('ONCE', 'PERCENT', 10.0, null, null, 2);
+
+        $page = Kernel::get('/shop/kofemashina');
+        Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+        Kernel::post('/shop/cart/coupon', [
+            '_token' => $this->token($cart['body']),
+            'code' => 'ONCE',
+        ]);
+
+        $cart = Kernel::get('/shop/cart');
+        $checkout = Kernel::post('/shop/order', [
+            '_token' => $this->token($cart['body']),
+            'customer_name' => 'Анна Полугодова',
+            'customer_email' => 'anna@example.dev',
+            'customer_phone' => '',
+            'address' => '',
+            'comment' => '',
+        ]);
+
+        self::assertSame(302, $checkout['status']);
+        $orderId = (string) value('SELECT id FROM ' . t('commerce_order') . ' ORDER BY number DESC LIMIT 1');
+
+        $page = Kernel::get('/commerce/admin/orders');
+        $cancel = Kernel::post('/commerce/admin/orders', ['_token' => $this->token($page['body']), 'op' => 'cancel', 'id' => $orderId]);
+        self::assertSame(302, $cancel['status']);
+
+        // Отмена возвращает сгоревший в сделке визит: два заказа можно было унести.
+        self::assertSame(
+            0,
+            (int) value('SELECT used_count FROM ' . t('commerce_coupon') . " WHERE code = 'ONCE'")
+        );
+    }
+
+    public function testЭкраныСкидокОткрываютсяРедактором(): void
+    {
+        $this->ensureEditor();
+        $this->login();
+
+        $coupons = Kernel::get('/commerce/admin/coupons');
+        self::assertSame(200, $coupons['status']);
+        self::assertStringContainsString('Купоны', $coupons['body']);
+
+        $promoId = CommerceHttpSetup::addPromo('Летняя скидка', 'PERCENT', 5.0, null, null, null, true);
+
+        $promos = Kernel::get('/commerce/admin/promos');
+        self::assertSame(200, $promos['status']);
+        self::assertStringContainsString('Летняя скидка', $promos['body']);
+
+        $saved = Kernel::post('/commerce/admin/promos/' . $promoId, [
+            '_token' => $this->token($promos['body']),
+            'op' => 'save',
+            'title' => 'Летняя скидка',
+            'kind' => 'PERCENT',
+            'value' => '7',
+            'min_total' => '',
+            'starts' => '',
+            'ends' => '',
+            'active' => '1',
+        ]);
+        self::assertSame(302, $saved['status']);
+
+        $page = Kernel::get((string) ($saved['headers']['location'] ?? '/commerce/admin/promos'));
+        self::assertStringContainsString('Правило промо сохранено', $page['body']);
+
+        $promo = (array) one('SELECT value FROM ' . t('commerce_promo') . ' WHERE id = ?', [$promoId]);
+        self::assertSame(7.0, (float) $promo['value']);
+    }
+
+    public function testАдминСоздаётКупонСоСписка(): void
+    {
+        $this->ensureEditor();
+        $this->login();
+
+        $page = Kernel::get('/commerce/admin/coupons');
+
+        $saved = Kernel::post('/commerce/admin/coupons', [
+            '_token' => $this->token($page['body']),
+            'op' => 'create',
+            'code' => 'spring-25',
+            'kind' => 'FIXED',
+            'value' => '250,00',
+            'min_total' => '1 000',
+            'expires' => '2099-12-31',
+            'max_uses' => '5',
+            'active' => '1',
+        ]);
+        self::assertSame(302, $saved['status']);
+
+        $page = Kernel::get((string) ($saved['headers']['location'] ?? '/commerce/admin/coupons'));
+        self::assertStringContainsString('Купон сохранён', $page['body']);
+        self::assertStringContainsString('SPRING-25', $page['body']);
+
+        $row = (array) one('SELECT kind, value, min_total, max_uses FROM ' . t('commerce_coupon') . " WHERE code = 'SPRING-25'");
+        self::assertSame('FIXED', (string) $row['kind']);
+        self::assertSame(250.0, (float) $row['value']);
+        self::assertSame(1000.0, (float) $row['min_total']);
+        self::assertSame(5, (int) $row['max_uses']);
+    }
+
     private function login(): void
     {
         $page = Kernel::get('/login');

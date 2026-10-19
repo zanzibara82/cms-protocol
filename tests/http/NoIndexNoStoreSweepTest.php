@@ -38,10 +38,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
     private const OPEN = 'открытый экран без метки';
     private const REDIRECT = 'перенаправление';
 
-    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 36 строк таблицы
-    // метода GET (ядро 6, новости 11, магазин 14, фикстуры 5) дают 45 вариантов (новости 18,
-    // магазин 16), ещё 4 адреса вне таблицы — всего 49 запросов, из них помеченных 36
-    // (ядро 2, новости 15, магазин 11, фикстуры 5, добавки 3).
+    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 40 строк таблицы
+    // метода GET (ядро 6, новости 11, магазин 18, фикстуры 5) дают 49 вариантов (новости 18,
+    // магазин 20), ещё 4 адреса вне таблицы — всего 53 запроса, из них помеченных 40
+    // (ядро 2, новости 15, магазин 15, фикстуры 5, добавки 3).
     //
     // Адресов вне таблицы четыре: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -51,13 +51,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 49;
-    private const MARKED_TOTAL = 36;
+    private const VARIANTS_TOTAL = 53;
+    private const MARKED_TOTAL = 40;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (49 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 48;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (53 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 52;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -110,6 +110,34 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'currency' => 'RUB',
             'total' => 28.00,
             'status' => 'NEW',
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+
+        // Скидки М4 в обход: купон и промо-правило питают адреса правки — экран открывается
+        // по идентификатору, а не по коду или названию.
+        insert('commerce_coupon', [
+            'id' => newId(),
+            'code' => 'OBHOD-10',
+            'kind' => 'PERCENT',
+            'value' => 10.00,
+            'min_total' => null,
+            'expires_at' => null,
+            'max_uses' => null,
+            'used_count' => 0,
+            'active' => 1,
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+        insert('commerce_promo', [
+            'id' => newId(),
+            'title' => 'Правило для обхода',
+            'kind' => 'PERCENT',
+            'value' => 5.00,
+            'min_total' => null,
+            'starts_at' => null,
+            'ends_at' => null,
+            'active' => 1,
             'created_at' => utcStamp(nowUtc()),
             'updated_at' => utcStamp(nowUtc()),
         ]);
@@ -536,6 +564,20 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ['path' => '/commerce/admin/orders', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
+            // Скидки М4: списки купонов и промо-правил, экран правки каждого объекта.
+            'GET /commerce/admin/coupons' => [
+                ['path' => '/commerce/admin/coupons', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/coupons/{id}' => [
+                ['path' => '/commerce/admin/coupons/{coupon}', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/promos' => [
+                ['path' => '/commerce/admin/promos', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/promos/{id}' => [
+                ['path' => '/commerce/admin/promos/{promo}', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
             // тот же помеченный экран, собранный ядром.
             'GET /broken' => [
@@ -739,6 +781,26 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'shopcategory' => (string) $shopCategory['slug'],
             // Рубрика магазина: экран характеристик в админке.
             'cid' => (string) $shopCategory['id'],
+        ] + self::buildDiscountTokens();
+    }
+
+    /**
+     * Токены скидок М4: купон и промо-правило фикстур сада строкой — экран правки
+     * использует их идентификаторы.
+     *
+     * @return array<string, string>
+     */
+    private static function buildDiscountTokens(): array
+    {
+        $coupon = one('SELECT id FROM ' . t('commerce_coupon') . " WHERE code = 'OBHOD-10'");
+        self::assertIsArray($coupon, 'Фикстура: купон обхода не найден, экран правки купона недоступен');
+
+        $promo = one('SELECT id FROM ' . t('commerce_promo') . " WHERE title = 'Правило для обхода'");
+        self::assertIsArray($promo, 'Фикстура: промо-правило обхода не найдено, экран правки недоступен');
+
+        return [
+            'coupon' => (string) $coupon['id'],
+            'promo' => (string) $promo['id'],
         ];
     }
 

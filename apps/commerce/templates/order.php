@@ -8,6 +8,10 @@ declare(strict_types=1);
  * @var array<string, mixed> $order
  * @var list<array{id: string, sku: string, title: string, currency: string, unit_price: float, qty: int}> $items
  */
+$currency = (string) $order['currency'];
+$couponDiscountCents = commerceCents((float) ($order['coupon_discount'] ?? 0));
+$promoDiscountCents = commerceCents((float) ($order['promo_discount'] ?? 0));
+$discounted = $couponDiscountCents > 0 || $promoDiscountCents > 0;
 ?>
 <section class="space-y-6">
     <header class="space-y-2">
@@ -24,7 +28,13 @@ declare(strict_types=1);
         <?php endforeach; ?>
     </ul>
 
-    <p class="text-xl font-bold">Итого: <?= e(commerceFormatMoney(commerceCents((float) $order['total']), (string) $order['currency'])) ?></p>
+    <p class="text-xl font-bold">Итого<?= e($discounted ? ' к оплате: ' : ': ') ?><?= e(commerceFormatMoney(commerceCents((float) $order['total']), (string) $order['currency'])) ?></p>
+    <?php if ($promoDiscountCents > 0): ?>
+        <p class="text-sm text-ink/70">Скидка по правилу «<?= e((string) ($order['promo_title'] ?? '')) ?>»: −<?= e(commerceFormatMoney($promoDiscountCents, $currency)) ?></p>
+    <?php endif; ?>
+    <?php if ($couponDiscountCents > 0): ?>
+        <p class="text-sm text-ink/70">Скидка по купону <?= e((string) ($order['coupon_code'] ?? '')) ?>: −<?= e(commerceFormatMoney($couponDiscountCents, $currency)) ?></p>
+    <?php endif; ?>
 
     <dl class="grid gap-x-8 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
         <dt class="font-medium text-ink/60">Получатель</dt>

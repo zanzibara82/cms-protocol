@@ -68,7 +68,7 @@ final class CommerceHttpSetup
      */
     public static function prepare(): void
     {
-        foreach (['commerce_order_item', 'commerce_order', 'commerce_variant', 'commerce_product_attribute'] as $table) {
+        foreach (['commerce_order_item', 'commerce_order', 'commerce_variant', 'commerce_product_attribute', 'commerce_coupon', 'commerce_promo'] as $table) {
             run('DELETE FROM ' . t($table));
         }
         run('DELETE FROM ' . t('commerce_attribute_choice'));
@@ -118,6 +118,59 @@ final class CommerceHttpSetup
         return ['id' => $id, 'number' => $number];
     }
 
+    /**
+     * Купон фикстурой: код, вид скидки, порог, срок, лимит визитов.
+     *
+     * @return string
+     */
+    public static function addCoupon(string $code, string $kind, float $value, ?float $minTotal = null, ?string $expiresRaw = null, ?int $maxUses = null, int $usedCount = 0, bool $active = true): string
+    {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('commerce_coupon', [
+            'id' => $id,
+            'code' => mb_strtoupper($code),
+            'kind' => $kind,
+            'value' => $value,
+            'min_total' => $minTotal,
+            'expires_at' => $expiresRaw === null ? null : utcStamp(commerceParseDayField($expiresRaw, 'end')),
+            'max_uses' => $maxUses,
+            'used_count' => $usedCount,
+            'active' => $active ? 1 : 0,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
+    /**
+     * Промо-правило фикстурой: автоскидка на период, без кода от покупателя.
+     *
+     * @return string
+     */
+    public static function addPromo(string $title, string $kind, float $value, ?float $minTotal = null, ?string $startsRaw = null, ?string $endsRaw = null, bool $active = true): string
+    {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('commerce_promo', [
+            'id' => $id,
+            'title' => $title,
+            'kind' => $kind,
+            'value' => $value,
+            'min_total' => $minTotal,
+            'starts_at' => $startsRaw === null ? null : utcStamp(commerceParseDayField($startsRaw, 'start')),
+            'ends_at' => $endsRaw === null ? null : utcStamp(commerceParseDayField($endsRaw, 'end')),
+            'active' => $active ? 1 : 0,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
     public static function cleanup(): void
     {
         self::dropTables();
@@ -137,6 +190,8 @@ final class CommerceHttpSetup
             'commerce_attribute_choice',
             'commerce_attribute',
             'commerce_product_category',
+            'commerce_coupon',
+            'commerce_promo',
             'commerce_product',
             'commerce_category',
         ] as $table) {

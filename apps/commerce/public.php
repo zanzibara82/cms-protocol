@@ -341,12 +341,9 @@ function commerceProductHead(array $product, int $priceCents, array $variantOpti
 /** @param array<string, string> $params */
 function commerceCartPage(array $params = []): void
 {
-    $total = commerceCartTotal();
-
     render('commerce/cart', [
         'lines' => commerceCartLines(),
-        'totalCents' => $total['total_cents'],
-        'cartCount' => $total['count'],
+        'totals' => commerceCartTotals(),
         'values' => [],
         'errors' => [],
         'notice' => commerceStoreNotice(),
@@ -385,6 +382,27 @@ function commerceCartErrorFlash(): string
     unset($_SESSION['commerce_cart_error']);
 
     return $reason;
+}
+
+/** @param array<string, string> $params */
+function commerceCartCouponAction(array $params = []): void
+{
+    csrfCheck();
+
+    $code = trim((string) ($_POST['code'] ?? ''));
+
+    // Пустой код или кнопка «снять» — купон уходит с корзины. Иной код записывается
+    // сессией как есть: валидность купона экран показывает свежей строкой базы, а не
+    // обещанием при наборе.
+    if ($code === '' || isOn($_POST['remove'] ?? '')) {
+        commerceSessionCouponDrop();
+
+        redirect('/shop/cart');
+    }
+
+    commerceSessionCouponSet($code);
+
+    redirect('/shop/cart');
 }
 
 /** @param array<string, string> $params */
@@ -429,11 +447,9 @@ function commerceOrderAction(array $params = []): void
     $check = commerceValidateCheckout($_POST);
 
     if ($check['errors'] !== []) {
-        $total = commerceCartTotal();
         render('commerce/cart', [
             'lines' => commerceCartLines(),
-            'totalCents' => $total['total_cents'],
-            'cartCount' => $total['count'],
+            'totals' => commerceCartTotals(),
             'values' => $check['values'],
             'errors' => $check['errors'],
             'notice' => '',
@@ -451,11 +467,9 @@ function commerceOrderAction(array $params = []): void
     }
 
     // Часть товара раскуплена во время заполнения: экран просит поправить количество.
-    $total = commerceCartTotal();
     render('commerce/cart', [
         'lines' => commerceCartLines(),
-        'totalCents' => $total['total_cents'],
-        'cartCount' => $total['count'],
+        'totals' => commerceCartTotals(),
         'values' => $check['values'],
         'errors' => ['form' => $order['error']],
         'notice' => '',

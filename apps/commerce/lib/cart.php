@@ -296,7 +296,8 @@ function commerceCartSet(string $key, int $qty): void
     $_SESSION[COMMERCE_SESSION_CART][$key] = min($qty, COMMERCE_CART_MAX_QTY);
 }
 
-/** Опустошить корзину: после оформления и по кнопке экрана.
+/** Опустошить корзину: после оформления и по кнопке экрана. Скидка купона
+ * живёт корзиной — пустую корзину код не отработает.
  *
  * @return array{ok: bool, error: string, notice: string}
  */
@@ -304,8 +305,63 @@ function commerceCartClear(): array
 {
     startSession();
     $_SESSION[COMMERCE_SESSION_CART] = [];
+    commerceSessionCouponDrop();
 
     return ['ok' => true, 'error' => '', 'notice' => 'cart_cleared'];
+}
+
+/**
+ * Сводка корзины со скидками (M4): подытог по позициям, автоскидка лучшего работающего
+ * промо-правила, скидка купона с сессии и итог к оплате. Купон проверяется на свежей
+ * строке базы — снятый, истёкший или исчерпанный код причину отказа отдаёт словами,
+ * и корзина печатает её рядом с формой. Скидки вместе не уводят корзину в минус.
+ *
+ * @return array{subtotal_cents: int, count: int, currency: string, coupon_code: string, coupon_error: string, coupon_discount_cents: int, promo_title: string, promo_discount_cents: int, total_cents: int}
+ */
+function commerceCartTotals(): array
+{
+    $lines = commerceCartLines();
+    $subtotal = 0;
+    $count = 0;
+    $currency = COMMERCE_CURRENCY_DEFAULT;
+
+    foreach ($lines as $line) {
+        $subtotal += $line['line_cents'];
+        $count += $line['qty'];
+        $currency = (string) $line['currency'];
+    }
+
+    $couponCode = commerceSessionCouponCode();
+    $couponDiscount = 0;
+    $couponError = '';
+
+    if ($couponCode !== '' && $subtotal > 0) {
+        $coupon = commerceCouponByCode($couponCode);
+        $usable = commerceCouponUsable($coupon, $subtotal, $currency);
+
+        if ($usable['ok']) {
+            $couponDiscount = (int) commerceCouponDiscountCents((array) $coupon, $subtotal);
+        } else {
+            $couponError = (string) $usable['error'];
+        }
+    }
+
+    $promo = commerceBestPromoDiscount(commerceActivePromos(), $subtotal);
+    $promoTitle = (string) ($promo['title'] ?? '');
+    $promoDiscount = (int) ($promo['discount_cents'] ?? 0);
+    $total = max(0, $subtotal - $couponDiscount - $promoDiscount);
+
+    return [
+        'subtotal_cents' => $subtotal,
+        'count' => $count,
+        'currency' => $currency,
+        'coupon_code' => $couponCode,
+        'coupon_error' => $couponError,
+        'coupon_discount_cents' => $couponDiscount,
+        'promo_title' => $promoTitle,
+        'promo_discount_cents' => $promoDiscount,
+        'total_cents' => $total,
+    ];
 }
 
 /** Деньги в копейки: единственная точка округления, чтобы float не гулял по разделу. */

@@ -11,6 +11,10 @@ declare(strict_types=1);
  * Строка с вариантом списывает остаток варианта и сохраняет ссылку на него в строке
  * заказа: отмена вернёт остаток варианту, а не родителю.
  *
+ * Скидки (M4) идут в сделку целиком: купон с сессии расходует визит одним UPDATE
+ * внутри транзакции — последний визит двоим не уведёшь; лучшее работающее промо-правило
+ * снимает автоскидку. Итог к оплате, код купона и название правила хранятся в заказе.
+ *
  * @param array<string, string> $checkout данные commerceValidateCheckout()
  * @param list<array{id: string, product_id: string, variant_id: string, slug: string, title: string, variant_title: string, sku: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}> $lines
  * @return array{ok: bool, error: string, id: string, number: int, total_cents: int}
@@ -44,9 +48,11 @@ function commerceOrderCreate(array $checkout, array $lines): array
 
     $id = newId();
     $moment = nowUtc();
+    /** @var array{coupon_code: string, coupon_discount_cents: int, promo_title: string, promo_discount_cents: int, total_cents: int}|null $pricing */
+    $pricing = null;
 
     try {
-        $number = tx(static function () use ($id, $checkout, $lines, $total, $currency, $moment) {
+        $number = tx(static function () use ($id, $checkout, $lines, $total, $currency, $moment, &$pricing) {
             foreach ($lines as $line) {
                 if ($line['variant_id'] === '') {
                     $inserted = run(
@@ -71,6 +77,35 @@ function commerceOrderCreate(array $checkout, array $lines): array
                 }
             }
 
+            // Скидки сделки (M4): купон расходует визит здесь же, в транзакции.
+            $couponActual = '';
+            $couponDiscount = 0;
+            $couponCode = commerceSessionCouponCode();
+
+            if ($couponCode !== '') {
+                $burn = commerceConsumeCoupon($couponCode, $currency, $total, $moment);
+
+                if (!$burn['ok']) {
+                    throw new RuntimeException('Купон «' . $couponCode . '» не применился: ' . $burn['error']);
+                }
+
+                $couponActual = $couponCode;
+                $couponDiscount = (int) commerceCouponDiscountCents((array) $burn['coupon'], $total);
+            }
+
+            $promo = commerceBestPromoDiscount(commerceActivePromos($moment), $total);
+            $promoTitle = (string) ($promo['title'] ?? '');
+            $promoDiscount = (int) ($promo['discount_cents'] ?? 0);
+            $totalDue = max(0, $total - $couponDiscount - $promoDiscount);
+
+            $pricing = [
+                'coupon_code' => $couponActual,
+                'coupon_discount_cents' => $couponDiscount,
+                'promo_title' => $promoTitle,
+                'promo_discount_cents' => $promoDiscount,
+                'total_cents' => $totalDue,
+            ];
+
             insert('commerce_order', [
                 'id' => $id,
                 'customer_name' => $checkout['customer_name'],
@@ -79,7 +114,11 @@ function commerceOrderCreate(array $checkout, array $lines): array
                 'address' => $checkout['address'] !== '' ? $checkout['address'] : null,
                 'comment' => $checkout['comment'] !== '' ? $checkout['comment'] : null,
                 'currency' => $currency,
-                'total' => $total / 100,
+                'total' => $totalDue / 100,
+                'coupon_code' => $couponActual !== '' ? $couponActual : null,
+                'coupon_discount' => $couponDiscount / 100,
+                'promo_title' => $promoTitle !== '' ? $promoTitle : null,
+                'promo_discount' => $promoDiscount / 100,
                 'status' => 'NEW',
                 'created_at' => utcStamp($moment),
                 'updated_at' => utcStamp($moment),
@@ -113,7 +152,7 @@ function commerceOrderCreate(array $checkout, array $lines): array
     }
 
     commerceCartClear();
-    logInfo('commerce.order_created', ['orderId' => $id, 'number' => $number, 'total_cents' => $total]);
+    logInfo('commerce.order_created', ['orderId' => $id, 'number' => $number, 'total_cents' => $pricing['total_cents']]);
 
     commerceMailSend(commerceOrderLetter(
         $number,
@@ -121,7 +160,7 @@ function commerceOrderCreate(array $checkout, array $lines): array
         $checkout['customer_name'],
         'Ваш заказ №' . $number . ' принят. Мы напишем, когда отправим.',
         $lines,
-        $total,
+        $pricing,
         $currency
     ));
 
@@ -130,7 +169,7 @@ function commerceOrderCreate(array $checkout, array $lines): array
         'error' => '',
         'id' => $id,
         'number' => $number,
-        'total_cents' => $total,
+        'total_cents' => $pricing['total_cents'],
     ];
 }
 
@@ -147,7 +186,8 @@ function commerceOrderByNumber(int $number): ?array
     }
 
     return one(
-        'SELECT id, number, customer_name, customer_email, currency, total, status, created_at'
+        'SELECT id, number, customer_name, customer_email, currency, total, coupon_code, coupon_discount,'
+        . ' promo_title, promo_discount, status, created_at'
         . ' FROM ' . t('commerce_order') . ' WHERE number = ?',
         [$number]
     );
@@ -199,7 +239,8 @@ function commerceOrdersList(string $status, int $page, int $perPage = 20): array
     /** @var list<array<string, mixed>> $rows */
     $rows = all(
         sprintf(
-            'SELECT id, number, customer_name, customer_email, currency, total, status, created_at'
+            'SELECT id, number, customer_name, customer_email, currency, total, coupon_code, coupon_discount,'
+            . ' promo_title, promo_discount, status, created_at'
             . ' FROM %s%s ORDER BY created_at DESC, number DESC LIMIT %d OFFSET %d',
             t('commerce_order'),
             $clause,
@@ -237,7 +278,7 @@ function commerceOrderItems(string $orderId): array
  */
 function commerceSetOrderStatus(string $orderId, string $status): array
 {
-    $order = one('SELECT id, status FROM ' . t('commerce_order') . ' WHERE id = ?', [$orderId]);
+    $order = one('SELECT id, status, coupon_code FROM ' . t('commerce_order') . ' WHERE id = ?', [$orderId]);
 
     if ($order === null) {
         return ['ok' => false, 'error' => 'Заказа уже нет — обновите список.', 'notice' => ''];
@@ -272,7 +313,10 @@ function commerceSetOrderStatus(string $orderId, string $status): array
         ];
     }
 
-    tx(static function () use ($orderId, $status): void {
+    // Купон держит код на руках: возврат визита и письмо живут своей сделкой.
+    $couponCode = (string) $order['coupon_code'];
+
+    tx(static function () use ($orderId, $status, $couponCode): void {
         run(
             'UPDATE ' . t('commerce_order') . ' SET status = ?, updated_at = ? WHERE id = ?',
             [$status, utcStamp(nowUtc()), $orderId]
@@ -294,6 +338,9 @@ function commerceSetOrderStatus(string $orderId, string $status): array
             . ' SET v.stock = v.stock + oi.qty WHERE oi.order_id = ?',
                 [$orderId]
             );
+
+            // Купона визит возвращается: сделка не состоялась, и скидка не сгорает зря.
+            commerceReturnCouponCount((string) $couponCode);
         }
     });
 
@@ -313,7 +360,8 @@ function commerceSetOrderStatus(string $orderId, string $status): array
 function commerceMailStatusChange(string $orderId): array
 {
     $order = one(
-        'SELECT number, customer_name, customer_email, currency, total, status'
+        'SELECT number, customer_name, customer_email, currency, total, coupon_code, coupon_discount,'
+        . ' promo_title, promo_discount, status'
         . ' FROM ' . t('commerce_order') . ' WHERE id = ?',
         [$orderId]
     );
@@ -339,6 +387,13 @@ function commerceMailStatusChange(string $orderId): array
         commerceOrderItems($orderId)
     );
     $totalCents = commerceCents((float) $order['total']);
+    $pricing = [
+        'coupon_code' => (string) ($order['coupon_code'] ?? ''),
+        'coupon_discount_cents' => commerceCents((float) ($order['coupon_discount'] ?? 0)),
+        'promo_title' => (string) ($order['promo_title'] ?? ''),
+        'promo_discount_cents' => commerceCents((float) ($order['promo_discount'] ?? 0)),
+        'total_cents' => $totalCents,
+    ];
 
     commerceMailSend(commerceOrderLetter(
         (int) $order['number'],
@@ -346,7 +401,7 @@ function commerceMailStatusChange(string $orderId): array
         (string) $order['customer_name'],
         'Статус вашего заказа №' . (string) $order['number'] . ' теперь «' . $label . '».',
         $lines,
-        $totalCents,
+        $pricing,
         (string) $order['currency']
     ));
 

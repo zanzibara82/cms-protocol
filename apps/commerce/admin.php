@@ -10,6 +10,8 @@ const COMMERCE_NAV_PATHS = [
     '/commerce/admin' => 'Обзор',
     '/commerce/admin/products' => 'Товары',
     '/commerce/admin/categories' => 'Рубрики',
+    '/commerce/admin/coupons' => 'Купоны',
+    '/commerce/admin/promos' => 'Промо-правила',
     '/commerce/admin/orders' => 'Заказы',
 ];
 
@@ -26,6 +28,10 @@ const COMMERCE_NOTICE_TEXT = [
     'variant_deleted' => 'Вариант удалён.',
     'attribute_saved' => 'Характеристика добавлена.',
     'attribute_deleted' => 'Характеристика удалена.',
+    'coupon_saved' => 'Купон сохранён.',
+    'coupon_deleted' => 'Купон удалён.',
+    'promo_saved' => 'Правило промо сохранено.',
+    'promo_deleted' => 'Правило промо удалено.',
 ];
 
 /**
@@ -728,6 +734,241 @@ function commerceAttributesRenderFailure(string $categoryId, array $category, ar
         'title' => 'Характеристики рубрики — магазин',
         'noindex' => true,
     ]);
+}
+
+// ---------------------------------------------------------------------------
+// Купоны
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function commerceAdminCoupons(array $params = []): void
+{
+    $id = routeId26($params);
+    $coupon = $id !== '' ? commerceCouponById($id) : null;
+
+    if ($id !== '' && $coupon === null) {
+        finishAppAction(['ok' => false, 'error' => 'Купона уже нет — обновите список.'], '/commerce/admin/coupons', '');
+
+        return;
+    }
+
+    render('commerce/admin/coupons', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => commerceAdminNotice(),
+        'coupons' => commerceCouponsAll(),
+        'mode' => $coupon !== null ? 'edit' : 'new',
+        'coupon' => $coupon,
+        'form' => [],
+        'errors' => [],
+    ], commerceAdminAlert()), ['title' => 'Купоны — магазин', 'noindex' => true]);
+}
+
+/**
+ * Действия с купонами: форма отказа переоткрывает экран с набранным, успех верит
+ * ключу уведомления из lib-функции.
+ *
+ * @param array<string, string> $params
+ */
+function commerceCouponAction(array $params = []): void
+{
+    csrfCheck();
+    $id = routeId26($params);
+    $op = postString('op');
+    $address = '/commerce/admin/coupons';
+
+    if ($op === 'create') {
+        $check = commerceValidateCoupon($_POST, static fn (string $candidate): bool => commerceCouponCodeTaken($candidate));
+
+        if ($check['errors'] !== []) {
+            commerceCouponsRenderFailure(null, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceCreateCoupon($check['values']), $address);
+
+        return;
+    }
+
+    $coupon = commerceCouponById($id);
+
+    if ($op === 'save') {
+        if ($coupon === null) {
+            finishAppAction(['ok' => false, 'error' => 'Купона уже нет — обновите список.'], $address, '');
+
+            return;
+        }
+
+        $check = commerceValidateCoupon(
+            $_POST,
+            static fn (string $candidate): bool => commerceCouponCodeTaken($candidate, $id)
+        );
+
+        if ($check['errors'] !== []) {
+            commerceCouponsRenderFailure($coupon, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceUpdateCoupon($id, $check['values']), $address);
+
+        return;
+    }
+
+    if ($op === 'delete') {
+        commerceFinish(
+            $coupon !== null ? commerceDeleteCoupon($id) : ['ok' => false, 'error' => 'Купона уже нет — обновите список.', 'notice' => ''],
+            $address
+        );
+
+        return;
+    }
+
+    finishAppAction(['ok' => false, 'error' => 'Неизвестное действие с купоном.'], $address, '');
+}
+
+/**
+ * Экран купонов с отказом формы: набранное возвращается строками (суммы — как в поле формы),
+ * причина видна.
+ *
+ * @param array{id: string, code: string, kind: string, value: float, min_total: ?float, expires_at: ?string, max_uses: ?int, used_count: int, active: bool}|null $coupon
+ * @param array{code: string, kind: string, value: float, min_total: ?float, expires: string, max_uses: ?int, active: int} $values
+ * @param array<string, string> $errors
+ */
+function commerceCouponsRenderFailure(?array $coupon, array $values, array $errors): void
+{
+    $form = [
+        'code' => (string) $values['code'],
+        'kind' => (string) $values['kind'],
+        'value' => $values['value'] > 0 ? number_format((float) $values['value'], 2, ',', ' ') : '',
+        'min_total' => $values['min_total'] !== null ? number_format((float) $values['min_total'], 2, ',', ' ') : '',
+        'expires' => (string) $values['expires'],
+        'max_uses' => $values['max_uses'] !== null ? (string) $values['max_uses'] : '',
+        'active' => (int) $values['active'],
+    ];
+
+    render('commerce/admin/coupons', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'coupons' => commerceCouponsAll(),
+        'mode' => $coupon !== null ? 'edit' : 'new',
+        'coupon' => $coupon,
+        'form' => $form,
+        'errors' => $errors,
+    ], commerceAdminAlert()), ['title' => 'Купоны — магазин', 'noindex' => true]);
+}
+
+// ---------------------------------------------------------------------------
+// Промо-правила (автоскидка корзины)
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function commerceAdminPromos(array $params = []): void
+{
+    $id = routeId26($params);
+    $promo = $id !== '' ? commercePromoById($id) : null;
+
+    if ($id !== '' && $promo === null) {
+        finishAppAction(['ok' => false, 'error' => 'Правила уже нет — обновите список.'], '/commerce/admin/promos', '');
+
+        return;
+    }
+
+    render('commerce/admin/promos', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => commerceAdminNotice(),
+        'promos' => commercePromosAll(),
+        'mode' => $promo !== null ? 'edit' : 'new',
+        'promo' => $promo,
+        'form' => [],
+        'errors' => [],
+    ], commerceAdminAlert()), ['title' => 'Промо-правила — магазин', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function commercePromoAction(array $params = []): void
+{
+    csrfCheck();
+    $id = routeId26($params);
+    $op = postString('op');
+    $address = '/commerce/admin/promos';
+
+    if ($op === 'create') {
+        $check = commerceValidatePromo($_POST);
+
+        if ($check['errors'] !== []) {
+            commercePromosRenderFailure(null, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceCreatePromo($check['values']), $address);
+
+        return;
+    }
+
+    $promo = commercePromoById($id);
+
+    if ($op === 'save') {
+        if ($promo === null) {
+            finishAppAction(['ok' => false, 'error' => 'Правила уже нет — обновите список.'], $address, '');
+
+            return;
+        }
+
+        $check = commerceValidatePromo($_POST);
+
+        if ($check['errors'] !== []) {
+            commercePromosRenderFailure($promo, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceUpdatePromo($id, $check['values']), $address);
+
+        return;
+    }
+
+    if ($op === 'delete') {
+        commerceFinish(
+            $promo !== null ? commerceDeletePromo($id) : ['ok' => false, 'error' => 'Правила уже нет — обновите список.', 'notice' => ''],
+            $address
+        );
+
+        return;
+    }
+
+    finishAppAction(['ok' => false, 'error' => 'Неизвестное действие с правилом промо.'], $address, '');
+}
+
+/**
+ * Экран промо-правил с отказом формы: набранное возвращается строками, причина видна.
+ *
+ * @param array{id: string, title: string, kind: string, value: float, min_total: ?float, starts_at: ?string, ends_at: ?string, active: bool}|null $promo
+ * @param array{title: string, kind: string, value: float, min_total: ?float, starts: string, ends: string, active: int} $values
+ * @param array<string, string> $errors
+ */
+function commercePromosRenderFailure(?array $promo, array $values, array $errors): void
+{
+    $form = [
+        'title' => (string) $values['title'],
+        'kind' => (string) $values['kind'],
+        'value' => $values['value'] > 0 ? number_format((float) $values['value'], 2, ',', ' ') : '',
+        'min_total' => $values['min_total'] !== null ? number_format((float) $values['min_total'], 2, ',', ' ') : '',
+        'starts' => (string) $values['starts'],
+        'ends' => (string) $values['ends'],
+        'active' => (int) $values['active'],
+    ];
+
+    render('commerce/admin/promos', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'promos' => commercePromosAll(),
+        'mode' => $promo !== null ? 'edit' : 'new',
+        'promo' => $promo,
+        'form' => $form,
+        'errors' => $errors,
+    ], commerceAdminAlert()), ['title' => 'Промо-правила — магазин', 'noindex' => true]);
 }
 
 // ---------------------------------------------------------------------------

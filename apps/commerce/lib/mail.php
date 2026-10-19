@@ -38,9 +38,11 @@ function commerceMailFrom(): string
 
 /**
  * Письмо заказа. Позиции приходят строками заказа: названия уже с привидением
- * варианта, а суммы формируются тем же форматировщиком, что печатает витрина.
+ * варианта, а скидки — снимок сделки: автоскидка правила и скидка купона печатаются
+ * отдельными строками, итог — к оплате.
  *
  * @param list<array{title: string, sku: string, qty: int, price_cents: int, currency: string}> $items
+ * @param array{coupon_code: string, coupon_discount_cents: int, promo_title: string, promo_discount_cents: int, total_cents: int} $pricing
  * @return array{to: string, subject: string, text: string}
  */
 function commerceOrderLetter(
@@ -49,7 +51,7 @@ function commerceOrderLetter(
     string $name,
     string $intro,
     array $items,
-    int $totalCents,
+    array $pricing,
     string $currency
 ): array {
     $site = (string) configValue('SITE_NAME', 'Школа');
@@ -68,7 +70,18 @@ function commerceOrderLetter(
     }
 
     $lines[] = '';
-    $lines[] = 'Итого: ' . commerceFormatMoney($totalCents, $currency);
+
+    if ((int) $pricing['promo_discount_cents'] > 0 && $pricing['promo_title'] !== '') {
+        $lines[] = 'Скидка по правилу «' . $pricing['promo_title'] . '»: −'
+            . commerceFormatMoney((int) $pricing['promo_discount_cents'], $currency);
+    }
+
+    if ((int) $pricing['coupon_discount_cents'] > 0 && $pricing['coupon_code'] !== '') {
+        $lines[] = 'Скидка по купону ' . $pricing['coupon_code'] . ': −'
+            . commerceFormatMoney((int) $pricing['coupon_discount_cents'], $currency);
+    }
+
+    $lines[] = 'Итого к оплате: ' . commerceFormatMoney((int) $pricing['total_cents'], $currency);
     $lines[] = 'Номер заказа: ' . $number . '. Состояние заказа: '
         . rtrim((string) configValue('SITE_URL', ''), '/') . '/shop/order (номер и e-mail).';
     $lines[] = '';
