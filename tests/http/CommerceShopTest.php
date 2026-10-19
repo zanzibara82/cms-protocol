@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cms\Tests\http;
 
 use Cms\Tests\TestDb;
+use CURLFile;
 use PHPUnit\Framework\TestCase;
 
 final class CommerceShopTest extends TestCase
@@ -579,6 +580,111 @@ final class CommerceShopTest extends TestCase
         self::assertSame(250.0, (float) $row['value']);
         self::assertSame(1000.0, (float) $row['min_total']);
         self::assertSame(5, (int) $row['max_uses']);
+    }
+
+    public function testПоставщикиИПрайслистРаботаютФайлом(): void
+    {
+        $this->ensureEditor();
+        $this->login();
+
+        // Справочник поставщиков: экран, создание, подтверждение уведомлением.
+        $page = Kernel::get('/commerce/admin/suppliers');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Поставщики', $page['body']);
+
+        $saved = Kernel::post('/commerce/admin/suppliers', [
+            '_token' => $this->token($page['body']),
+            'op' => 'create',
+            'title' => 'Восток',
+            'note' => 'Пн–Пт.',
+        ]);
+        self::assertSame(302, $saved['status']);
+
+        $page = Kernel::get((string) ($saved['headers']['location'] ?? '/commerce/admin/suppliers'));
+        self::assertStringContainsString('Поставщик сохранён.', $page['body']);
+
+        $supplierId = (string) value('SELECT id FROM ' . t('commerce_supplier') . " WHERE title = 'Восток'");
+        self::assertNotSame('', $supplierId);
+
+        // Вариант получает поставщика прямо с экрана вариаций.
+        $variantsPath = '/commerce/admin/products/' . CommerceHttpSetup::$productId . '/variants';
+        $screen = Kernel::get($variantsPath);
+        self::assertSame(200, $screen['status']);
+        self::assertStringContainsString('Поставщик', $screen['body']);
+
+        $created = Kernel::post($variantsPath, [
+            '_token' => $this->token($screen['body']),
+            'op' => 'create',
+            'title' => 'Сливочная',
+            'sku' => 'PRB-HTTP-1',
+            'price_retail' => '1290,50',
+            'price_promo' => '',
+            'stock' => '3',
+            'supplier' => $supplierId,
+        ]);
+        self::assertSame(302, $created['status']);
+
+        $page = Kernel::get((string) ($created['headers']['location'] ?? $variantsPath));
+        self::assertStringContainsString('Вариант сохранён.', $page['body']);
+
+        $variant = (array) one(
+            'SELECT supplier_id, price_retail, stock FROM ' . t('commerce_variant') . " WHERE sku = 'PRB-HTTP-1'"
+        );
+        self::assertSame($supplierId, (string) $variant['supplier_id']);
+        self::assertSame(1290.5, (float) $variant['price_retail']);
+        self::assertSame(3, (int) $variant['stock']);
+
+        // Экспорт: CSV с BOM скачиванием, помечен для роботов и без кэша.
+        $csv = Kernel::get('/commerce/admin/pricebook/export');
+        self::assertSame(200, $csv['status']);
+        self::assertStringContainsString('pricebook-', (string) ($csv['headers']['content-disposition'] ?? ''));
+        self::assertStringContainsString('.csv', (string) ($csv['headers']['content-disposition'] ?? ''));
+        self::assertSame('noindex', (string) ($csv['headers']['x-robots-tag'] ?? ''));
+        self::assertStringContainsString('no-store', (string) ($csv['headers']['cache-control'] ?? ''));
+        self::assertStringStartsWith("\xEF\xBB\xBF", $csv['body']);
+        self::assertStringContainsString('sku;товар;вариант;цена;промо;остаток', $csv['body']);
+        self::assertStringContainsString('PRB-HTTP-1', $csv['body']);
+
+        // Импорт файлом: экран остаётся открытым с отчётом, правка заходит в базу.
+        $page = Kernel::get('/commerce/admin/pricebook');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Применить прайс-лист', $page['body']);
+        self::assertStringContainsString('Восток', $page['body']);
+
+        $file = tempnam(sys_get_temp_dir(), 'pricebook-http-') ?: '';
+        self::assertNotSame('', $file);
+        file_put_contents(
+            $file,
+            "sku;товар;вариант;цена;промо;остаток\r\nPRB-HTTP-1;Кофемашина;Сливочная;1 350,50;;7\r\n"
+        );
+
+        try {
+            $applied = Kernel::post('/commerce/admin/pricebook', [
+                '_token' => $this->token($page['body']),
+                'supplier' => '',
+                'csvfile' => new CURLFile($file, 'text/csv', 'pricebook.csv'),
+            ]);
+        } finally {
+            @unlink($file);
+        }
+
+        self::assertSame(200, $applied['status']);
+        self::assertStringContainsString('Применено строк: <strong>1</strong>', $applied['body']);
+        self::assertStringContainsString('из 1.', $applied['body']);
+
+        $variant = (array) one(
+            'SELECT price_retail, stock FROM ' . t('commerce_variant') . " WHERE sku = 'PRB-HTTP-1'"
+        );
+        self::assertSame(1350.5, (float) $variant['price_retail']);
+        self::assertSame(7, (int) $variant['stock']);
+
+        // Неизвестный поставщик в форме — отказ на месте, без редиректа.
+        $bad = Kernel::post('/commerce/admin/pricebook', [
+            '_token' => $this->token($applied['body']),
+            'supplier' => 'ZZZZ',
+        ]);
+        self::assertSame(200, $bad['status']);
+        self::assertStringContainsString('Выберите поставщика из списка значений.', $bad['body']);
     }
 
     private function login(): void

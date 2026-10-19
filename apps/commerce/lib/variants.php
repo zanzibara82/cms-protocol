@@ -9,32 +9,32 @@ declare(strict_types=1);
 /**
  * Список вариантов товара: порядок задаёт человек, новые приходят в конец.
  *
- * @return list<array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}>
+ * @return list<array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int, supplier_id: ?string}>
  */
 function commerceVariants(string $productId): array
 {
     $rows = all(
-        'SELECT id, product_id, sku, title, price_retail, price_promo, stock, position'
+        'SELECT id, product_id, sku, title, price_retail, price_promo, stock, position, supplier_id'
         . ' FROM ' . t('commerce_variant')
         . ' WHERE product_id = ? ORDER BY position, sku',
         [$productId]
     );
 
-    /** @var list<array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}> */
+    /** @var list<array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int, supplier_id: ?string}> */
     return $rows;
 }
 
-/** @return array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}|null */
+/** @return array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int, supplier_id: ?string}|null */
 function commerceVariantById(string $id): ?array
 {
     $row = one(
-        'SELECT id, product_id, sku, title, price_retail, price_promo, stock, position'
+        'SELECT id, product_id, sku, title, price_retail, price_promo, stock, position, supplier_id'
         . ' FROM ' . t('commerce_variant')
         . ' WHERE id = ?',
         [$id]
     );
 
-    /** @var array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}|null */
+    /** @var array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int, supplier_id: ?string}|null */
     return $row;
 }
 
@@ -49,11 +49,11 @@ function commerceHasVariants(string $productId): bool
 
 /**
  * Разбор POST формы варианта. Вина пишется русским текстом по человеческим полям,
- * а не инженерными кодами.
+ * а не инженерными кодами. Поставщик необязателен: если выбран, он обязан существовать.
  *
  * @param string $productId
  * @param array<string, mixed> $post
- * @return array{errors: array<string, string>, values: array{title: string, sku: string, price_retail: string, price_promo: string, stock: string}}
+ * @return array{errors: array<string, string>, values: array{title: string, sku: string, price_retail: string, price_promo: string, stock: string, supplier?: string}}
  */
 function commerceValidateVariant(string $productId, array $post): array
 {
@@ -63,8 +63,13 @@ function commerceValidateVariant(string $productId, array $post): array
         'price_retail' => trim((string) ($post['price_retail'] ?? '')),
         'price_promo' => trim((string) ($post['price_promo'] ?? '')),
         'stock' => trim((string) ($post['stock'] ?? '0')),
+        'supplier' => trim((string) ($post['supplier'] ?? '')),
     ];
     $errors = [];
+
+    if ($values['supplier'] !== '' && commerceSupplierById($values['supplier']) === null) {
+        $errors['supplier'] = 'Поставщика с таким выбором нет — обновите список.';
+    }
 
     if ($values['title'] === '') {
         $errors['title'] = 'Опишите вариант — например цвет и размер.';
@@ -117,7 +122,7 @@ function commerceValidateVariant(string $productId, array $post): array
 /**
  * Создать вариант товара; позиция — в конец списка.
  *
- * @param array{title: string, sku: string, price_retail: string, price_promo: string, stock: string} $values
+ * @param array{title: string, sku: string, price_retail: string, price_promo: string, stock: string, supplier?: string} $values
  * @return array{ok: bool, error: string, notice: string}
  */
 function commerceCreateVariant(string $productId, array $values, ?DateTimeImmutable $now = null): array
@@ -144,6 +149,7 @@ function commerceCreateVariant(string $productId, array $values, ?DateTimeImmuta
         'price_promo' => $promoRaw !== '' ? (float) str_replace(',', '.', $promoRaw) : null,
         'stock' => $stock,
         'position' => $position,
+        'supplier_id' => ($values['supplier'] ?? '') !== '' ? $values['supplier'] : null,
         'created_at' => utcStamp($moment),
         'updated_at' => utcStamp($moment),
     ]);
@@ -157,7 +163,7 @@ function commerceCreateVariant(string $productId, array $values, ?DateTimeImmuta
  * Правка варианта. Причинам отказа — нет товара, нет варианта, занятый артикул —
  * свои русские причины.
  *
- * @param array{title: string, sku: string, price_retail: string, price_promo: string, stock: string} $values
+ * @param array{title: string, sku: string, price_retail: string, price_promo: string, stock: string, supplier?: string} $values
  * @return array{ok: bool, error: string, notice: string}
  */
 function commerceUpdateVariant(string $id, array $values, ?DateTimeImmutable $now = null): array
@@ -174,13 +180,14 @@ function commerceUpdateVariant(string $id, array $values, ?DateTimeImmutable $no
 
     run(
         'UPDATE ' . t('commerce_variant') . ' SET sku = ?, title = ?, price_retail = ?, price_promo = ?,'
-        . ' stock = ?, updated_at = ? WHERE id = ?',
+        . ' stock = ?, supplier_id = ?, updated_at = ? WHERE id = ?',
         [
             $values['sku'],
             $values['title'],
             $retail,
             $promoRaw !== '' ? (float) str_replace(',', '.', $promoRaw) : null,
             (int) $values['stock'],
+            ($values['supplier'] ?? '') !== '' ? $values['supplier'] : null,
             utcStamp($moment),
             $id,
         ]

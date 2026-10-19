@@ -12,6 +12,8 @@ const COMMERCE_NAV_PATHS = [
     '/commerce/admin/categories' => 'Рубрики',
     '/commerce/admin/coupons' => 'Купоны',
     '/commerce/admin/promos' => 'Промо-правила',
+    '/commerce/admin/suppliers' => 'Поставщики',
+    '/commerce/admin/pricebook' => 'Прайс-лист',
     '/commerce/admin/orders' => 'Заказы',
 ];
 
@@ -32,6 +34,8 @@ const COMMERCE_NOTICE_TEXT = [
     'coupon_deleted' => 'Купон удалён.',
     'promo_saved' => 'Правило промо сохранено.',
     'promo_deleted' => 'Правило промо удалено.',
+    'supplier_saved' => 'Поставщик сохранён.',
+    'supplier_deleted' => 'Поставщик удалён.',
 ];
 
 /**
@@ -483,9 +487,10 @@ function commerceVariantsScreen(array $params = []): void
 
     render('commerce/admin/variants', array_merge([
         'nav' => commerceAdminNav(requestPath()),
-        'notice' => '',
+        'notice' => commerceAdminNotice(),
         'product' => $product,
         'variants' => commerceVariants($id),
+        'suppliers' => commerceSuppliers(),
         'mode' => 'new',
         'variant' => null,
         'form' => [],
@@ -572,8 +577,8 @@ function commerceVariantAction(array $params = []): void
 /**
  * Форма варианта с отказом: набор печатается, причина — в статусе экрана.
  *
- * @param array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}|null $variant
- * @param array{title: string, sku: string, price_retail: string, price_promo: string, stock: string} $form
+ * @param array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int, supplier_id: ?string}|null $variant
+ * @param array{title: string, sku: string, price_retail: string, price_promo: string, stock: string, supplier: string} $form
  * @param array<string, string> $errors
  */
 function commerceVariantsRenderFailure(string $productId, string $mode, ?array $variant, array $form, array $errors): void
@@ -591,6 +596,7 @@ function commerceVariantsRenderFailure(string $productId, string $mode, ?array $
         'notice' => '',
         'product' => $product,
         'variants' => commerceVariants($productId),
+        'suppliers' => commerceSuppliers(),
         'mode' => $mode,
         'variant' => $variant,
         'form' => $form,
@@ -1026,6 +1032,214 @@ function commerceOrdersAction(array $params = []): void
 
     $notice = (string) ($result['notice'] ?? '');
     finishAppAction($result, '/commerce/admin/orders', $notice);
+}
+
+// ---------------------------------------------------------------------------
+// Поставщики (M5)
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function commerceAdminSuppliers(array $params = []): void
+{
+    $id = routeId26($params);
+    $supplier = $id !== '' ? commerceSupplierById($id) : null;
+
+    if ($id !== '' && $supplier === null) {
+        finishAppAction(['ok' => false, 'error' => 'Поставщика уже нет — обновите список.'], '/commerce/admin/suppliers', '');
+
+        return;
+    }
+
+    render('commerce/admin/suppliers', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => commerceAdminNotice(),
+        'suppliers' => commerceSuppliers(),
+        'mode' => $supplier !== null ? 'edit' : 'new',
+        'supplier' => $supplier,
+        'form' => [],
+        'errors' => [],
+    ], commerceAdminAlert()), ['title' => 'Поставщики — магазин', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function commerceSupplierAction(array $params = []): void
+{
+    csrfCheck();
+    $id = routeId26($params);
+    $op = postString('op');
+    $address = '/commerce/admin/suppliers';
+
+    if ($op === 'create') {
+        $check = commerceValidateSupplier($_POST);
+
+        if ($check['errors'] !== []) {
+            commerceSuppliersRenderFailure(null, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceCreateSupplier($check['values']), $address);
+
+        return;
+    }
+
+    $supplier = commerceSupplierById($id);
+
+    if ($op === 'save') {
+        if ($supplier === null) {
+            finishAppAction(['ok' => false, 'error' => 'Поставщика уже нет — обновите список.'], $address, '');
+
+            return;
+        }
+
+        $check = commerceValidateSupplier($_POST);
+
+        if ($check['errors'] !== []) {
+            commerceSuppliersRenderFailure($supplier, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceUpdateSupplier($id, $check['values']), $address);
+
+        return;
+    }
+
+    if ($op === 'delete') {
+        commerceFinish(
+            $supplier !== null ? commerceDeleteSupplier($id) : ['ok' => false, 'error' => 'Поставщика уже нет — обновите список.', 'notice' => ''],
+            $address
+        );
+
+        return;
+    }
+
+    finishAppAction(['ok' => false, 'error' => 'Неизвестное действие с поставщиком.'], $address, '');
+}
+
+/**
+ * Экран поставщиков с отказом формы: набранное возвращается текстом.
+ *
+ * @param array{id: string, title: string, note: ?string, created_at: string, updated_at: string}|null $supplier
+ * @param array{title: string, note: string} $values
+ * @param array<string, string> $errors
+ */
+function commerceSuppliersRenderFailure(?array $supplier, array $values, array $errors): void
+{
+    $form = [
+        'title' => (string) $values['title'],
+        'note' => (string) $values['note'],
+    ];
+
+    render('commerce/admin/suppliers', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'suppliers' => commerceSuppliers(),
+        'mode' => $supplier !== null ? 'edit' : 'new',
+        'supplier' => $supplier,
+        'form' => $form,
+        'errors' => $errors,
+    ], commerceAdminAlert()), ['title' => 'Поставщики — магазин', 'noindex' => true]);
+}
+
+// ---------------------------------------------------------------------------
+// Прайс-лист (M5): экспорт CSV и импорт файла
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function commerceAdminPricebook(array $params = []): void
+{
+    render('commerce/admin/pricebook', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => commerceAdminNotice(),
+        'suppliers' => commerceSuppliers(),
+        'report' => null,
+        'importError' => '',
+        'supplier' => '',
+        'rows' => commercePricebookRows(null),
+    ], commerceAdminAlert()), ['title' => 'Прайс-лист — магазин', 'noindex' => true]);
+}
+
+/**
+ * Скачивание прайс-листа: CSV с BOM, запрет индексации и кэша — коммерческие числа
+ * не стоят ни в поиске, ни в кеше прокси.
+ */
+function commercePricebookExport(): void
+{
+    respond(200, commercePricebookCsv(null), [
+        'Content-Type' => 'text/csv; charset=utf-8',
+        'Content-Disposition' => 'attachment; filename="' . commercePricebookFilename(nowUtc()) . '"',
+        'X-Robots-Tag' => 'noindex',
+        'Cache-Control' => 'no-store',
+    ]);
+}
+
+/**
+ * Импорт прайс-листа. Экран остаётся открытым с отчётом: список пропущенных строк
+ * прочтён на месте, а не «уехавший» с редиректом. Отказ до базы — тоже на месте.
+ *
+ * @param array<string, string> $params
+ */
+function commercePricebookAction(array $params = []): void
+{
+    csrfCheck();
+
+    $supplier = trim(postString('supplier'));
+    $supplierId = '';
+
+    if ($supplier !== '' && commerceSupplierById($supplier) === null) {
+        commercePricebookRenderImport('Выберите поставщика из списка значений.', null, $supplier);
+
+        return;
+    }
+
+    $supplierId = $supplier;
+
+    $file = uploadedFile('csvfile');
+
+    if ($file === null) {
+        commercePricebookRenderImport('Файл не выбран — выберите CSV и повторите.', null, $supplier);
+
+        return;
+    }
+
+    $checked = commercePricebookInspect($file);
+
+    if ($checked['error'] !== '') {
+        commercePricebookRenderImport($checked['error'], null, $supplier);
+
+        return;
+    }
+
+    $applied = commercePricebookApply($checked['path'], $supplierId !== '' ? $supplierId : null);
+
+    if (!$applied['ok']) {
+        finishAppAction(['ok' => false, 'error' => $applied['error']], '/commerce/admin/pricebook', '');
+
+        return;
+    }
+
+    commercePricebookRenderImport('', $applied['report'], $supplier);
+}
+
+/**
+ * Экран прайс-листа после импорта: перечень строк сохраняется набранным скоупом.
+ *
+ * @param string $importError причина отказа, которая важна без перезагрузки страницы
+ * @param array{lines: int, applied: int, skipped: int, quiet: int, skips: list<array{sku: string, reason: string}>}|null $report
+ * @param string $supplier
+ */
+function commercePricebookRenderImport(string $importError, ?array $report, string $supplier): void
+{
+    render('commerce/admin/pricebook', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'suppliers' => commerceSuppliers(),
+        'report' => $report,
+        'importError' => $importError,
+        'supplier' => $supplier,
+        'rows' => commercePricebookRows(null),
+    ], commerceAdminAlert()), ['title' => 'Прайс-лист — магазин', 'noindex' => true]);
 }
 
 

@@ -60,6 +60,16 @@ addRoute('GET', '/commerce/admin/promos/{id}', 'commerceAdminPromos', ['app' => 
 addRoute('POST', '/commerce/admin/promos', 'commercePromoAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/promos/{id}', 'commercePromoAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 
+// Поставщики и прайс-лист (M5): справочник по адресам вида /{id}, обмен ценами
+// скачиванием и формой импорта.
+addRoute('GET', '/commerce/admin/suppliers', 'commerceAdminSuppliers', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/commerce/admin/suppliers/{id}', 'commerceAdminSuppliers', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/suppliers', 'commerceSupplierAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/suppliers/{id}', 'commerceSupplierAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/commerce/admin/pricebook', 'commerceAdminPricebook', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/commerce/admin/pricebook/export', 'commercePricebookExport', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/pricebook', 'commercePricebookAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+
 addRoute('GET', '/commerce/admin/orders', 'commerceAdminOrders', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/orders', 'commerceOrdersAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 

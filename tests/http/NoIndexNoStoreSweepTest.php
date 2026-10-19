@@ -38,10 +38,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
     private const OPEN = 'открытый экран без метки';
     private const REDIRECT = 'перенаправление';
 
-    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 40 строк таблицы
-    // метода GET (ядро 6, новости 11, магазин 18, фикстуры 5) дают 49 вариантов (новости 18,
-    // магазин 20), ещё 4 адреса вне таблицы — всего 53 запроса, из них помеченных 40
-    // (ядро 2, новости 15, магазин 15, фикстуры 5, добавки 3).
+    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 44 строки таблицы
+    // метода GET (ядро 6, новости 11, магазин 22, фикстуры 5) дают 53 варианта (новости 18,
+    // магазин 24), ещё 4 адреса вне таблицы — всего 57 запросов, из них помеченных 44
+    // (ядро 2, новости 15, магазин 18, фикстуры 5, добавки 4).
     //
     // Адресов вне таблицы четыре: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -51,13 +51,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 53;
-    private const MARKED_TOTAL = 40;
+    private const VARIANTS_TOTAL = 57;
+    private const MARKED_TOTAL = 44;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (53 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 52;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (57 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 56;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -138,6 +138,15 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'starts_at' => null,
             'ends_at' => null,
             'active' => 1,
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+
+        // Поставщик М5 в обход: экран правки питается идентификатором фикстуры.
+        insert('commerce_supplier', [
+            'id' => newId(),
+            'title' => 'Поставщик для обхода',
+            'note' => null,
             'created_at' => utcStamp(nowUtc()),
             'updated_at' => utcStamp(nowUtc()),
         ]);
@@ -578,6 +587,22 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ['path' => '/commerce/admin/promos/{promo}', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
+            // Поставщики и прайс-лист М5: справочник с правкой по идентификатору, экран
+            // обмена ценами и сам файл скачиванием. CSV не ёт метки механики render(),
+            // но посылает запрет индексации заголовком — исход тот же.
+            'GET /commerce/admin/suppliers' => [
+                ['path' => '/commerce/admin/suppliers', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/suppliers/{id}' => [
+                ['path' => '/commerce/admin/suppliers/{supplier}', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/pricebook' => [
+                ['path' => '/commerce/admin/pricebook', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/pricebook/export' => [
+                ['path' => '/commerce/admin/pricebook/export', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
             // тот же помеченный экран, собранный ядром.
             'GET /broken' => [
@@ -786,7 +811,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
 
     /**
      * Токены скидок М4: купон и промо-правило фикстур сада строкой — экран правки
-     * использует их идентификаторы.
+     * использует их идентификаторы. Поставщик М5 идёт той же дорогой.
      *
      * @return array<string, string>
      */
@@ -798,9 +823,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $promo = one('SELECT id FROM ' . t('commerce_promo') . " WHERE title = 'Правило для обхода'");
         self::assertIsArray($promo, 'Фикстура: промо-правило обхода не найдено, экран правки недоступен');
 
+        $supplier = one('SELECT id FROM ' . t('commerce_supplier') . " WHERE title = 'Поставщик для обхода'");
+        self::assertIsArray($supplier, 'Фикстура: поставщик обхода не найден, экран правки недоступен');
+
         return [
             'coupon' => (string) $coupon['id'],
             'promo' => (string) $promo['id'],
+            'supplier' => (string) $supplier['id'],
         ];
     }
 

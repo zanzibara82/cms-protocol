@@ -5,17 +5,19 @@ declare(strict_types=1);
 /**
  * Экран вариантов товара (M2): список с кнопками и одна форма — создать или править
  * выбранный. Товарная форма уже набита полями, поэтому варианты живут на своей
- * странице и приходят туда со ссылками списка.
+ * странице и приходят туда со ссылками списка. Поставщик (M5) необязателен:
+ * выбор идёт по справочнику раздела.
  *
  * @var string $nav
  * @var string $notice
  * @var string $alertTitle
  * @var string $alertReason
  * @var array<string, mixed> $product
- * @var list<array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}> $variants
+ * @var list<array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int, supplier_id: ?string}> $variants
+ * @var list<array{id: string, title: string, note: ?string, created_at: string, updated_at: string}> $suppliers
  * @var string $mode
- * @var array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}|null $variant
- * @var array{title: string, sku: string, price_retail: string, price_promo: string, stock: string} $form
+ * @var array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int, supplier_id: ?string}|null $variant
+ * @var array{title: string, sku: string, price_retail: string, price_promo: string, stock: string, supplier: string} $form
  * @var array<string, string> $errors
  */
 $isEdit = $mode === 'edit' && $variant !== null;
@@ -26,6 +28,19 @@ $action = $isEdit
     : $variantsPath;
 $op = $isEdit ? 'save' : 'create';
 $currency = (string) $product['currency'];
+$supplierName = static function (?string $id) use ($suppliers): string {
+    if ($id === null || $id === '') {
+        return '';
+    }
+
+    foreach ($suppliers as $supplier) {
+        if ((string) $supplier['id'] === $id) {
+            return (string) $supplier['title'];
+        }
+    }
+
+    return '';
+};
 
 /**
  * Строковые значения формы: отказ печатает набранное, открытие — из строки варианта.
@@ -53,6 +68,18 @@ $value = static function (string $field) use ($form, $isEdit, $variant): string 
 
     return $field === 'stock' ? '0' : '';
 };
+
+/** Выбранный поставщик: из набранного при отказе, из строки варианта при открытии правки. */
+$supplierSelected = (string) ($form['supplier'] ?? '');
+if ($supplierSelected === '' && $isEdit && $variant !== null) {
+    $supplierSelected = $variant['supplier_id'] ?? '';
+}
+
+$options = '<option value="">— без поставщика —</option>';
+foreach ($suppliers as $supplier) {
+    $selected = ((string) $supplier['id'] === $supplierSelected) ? ' selected' : '';
+    $options .= '<option value="' . e((string) $supplier['id']) . '"' . $selected . '>' . e((string) $supplier['title']) . '</option>';
+}
 
 /** Класс поля: красная рамка на поле с причиной отказа. */
 $isError = static function (string $field) use ($errors): string {
@@ -101,6 +128,12 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . ' id="variant_stock" name="stock" type="number" min="0" max="' . e((string) COMMERCE_QTY_MAX) . '"'
     . ' value="' . e($value('stock')) . '">'
     . $fieldError('stock')
+    . '</label>'
+    . '<label class="block" for="variant_supplier">'
+    . '<span class="text-sm text-ink/60">Поставщик</span>'
+    . '<select class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('supplier') . ' px-3 py-2"'
+    . ' id="variant_supplier" name="supplier">' . $options . '</select>'
+    . $fieldError('supplier')
     . '</label></div>'
     . '<div class="mt-1 flex flex-wrap gap-2">'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-5 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">'
@@ -145,6 +178,9 @@ foreach ($variants as $row) {
         . e(commerceFormatMoney(commerceCents($price), $currency))
         . '</td>'
         . '<td class="border-b border-ink/10 px-2 py-3 tabular-nums">' . e((string) $row['stock']) . '</td>'
+        . '<td class="border-b border-ink/10 px-2 py-3 text-sm text-ink/70">'
+        . e($supplierName($row['supplier_id']) !== '' ? $supplierName($row['supplier_id']) : '—')
+        . '</td>'
         . '<td class="border-b border-ink/10 px-2 py-3">' . $rowButton((string) $row['id']) . '</td>'
         . '</tr>';
 }
@@ -157,6 +193,7 @@ $table = $rows === ''
         . '<th class="px-2 py-2 text-left font-semibold">Артикул</th>'
         . '<th class="px-2 py-2 text-left font-semibold">Цена</th>'
         . '<th class="px-2 py-2 text-left font-semibold">Остаток</th>'
+        . '<th class="px-2 py-2 text-left font-semibold">Поставщик</th>'
         . '<th class="px-2 py-2"></th>'
         . '</tr></thead>'
         . '<tbody>' . $rows . '</tbody></table>';

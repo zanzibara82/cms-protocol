@@ -11,6 +11,8 @@ require_once __DIR__ . '/catalog.php';
 require_once __DIR__ . '/attributes.php';
 require_once __DIR__ . '/variants.php';
 require_once __DIR__ . '/discounts.php';
+require_once __DIR__ . '/suppliers.php';
+require_once __DIR__ . '/pricebooks.php';
 require_once __DIR__ . '/cart.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/orders.php';

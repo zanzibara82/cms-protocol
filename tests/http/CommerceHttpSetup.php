@@ -68,7 +68,7 @@ final class CommerceHttpSetup
      */
     public static function prepare(): void
     {
-        foreach (['commerce_order_item', 'commerce_order', 'commerce_variant', 'commerce_product_attribute', 'commerce_coupon', 'commerce_promo'] as $table) {
+        foreach (['commerce_order_item', 'commerce_order', 'commerce_variant', 'commerce_product_attribute', 'commerce_coupon', 'commerce_promo', 'commerce_supplier'] as $table) {
             run('DELETE FROM ' . t($table));
         }
         run('DELETE FROM ' . t('commerce_attribute_choice'));
@@ -171,6 +171,23 @@ final class CommerceHttpSetup
         return $id;
     }
 
+    /** Поставщик фикстурой: название и примечание, без витринного смысла. */
+    public static function addSupplier(string $title, string $note = ''): string
+    {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('commerce_supplier', [
+            'id' => $id,
+            'title' => $title,
+            'note' => $note !== '' ? $note : null,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
     public static function cleanup(): void
     {
         self::dropTables();
@@ -192,6 +209,7 @@ final class CommerceHttpSetup
             'commerce_product_category',
             'commerce_coupon',
             'commerce_promo',
+            'commerce_supplier',
             'commerce_product',
             'commerce_category',
         ] as $table) {
