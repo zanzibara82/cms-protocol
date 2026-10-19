@@ -38,10 +38,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
     private const OPEN = 'открытый экран без метки';
     private const REDIRECT = 'перенаправление';
 
-    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 33 строки таблицы
-    // метода GET (ядро 6, новости 11, магазин 11, фикстуры 5) дают 42 варианта (новости 18,
-    // магазин 13), ещё 4 адреса вне таблицы — всего 46 запросов, из них помеченных 34
-    // (ядро 2, новости 15, магазин 9, фикстуры 5, добавки 3).
+    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 35 строк таблицы
+    // метода GET (ядро 6, новости 11, магазин 13, фикстуры 5) дают 44 варианта (новости 18,
+    // магазин 15), ещё 4 адреса вне таблицы — всего 48 запросов, из них помеченных 36
+    // (ядро 2, новости 15, магазин 11, фикстуры 5, добавки 3).
     //
     // Адресов вне таблицы стало четыре с пакетом M6: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -51,13 +51,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 46;
-    private const MARKED_TOTAL = 34;
+    private const VARIANTS_TOTAL = 48;
+    private const MARKED_TOTAL = 36;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (46 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 45;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (48 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 47;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -519,8 +519,14 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /commerce/admin/products/{id}' => [
                 ['path' => '/commerce/admin/products/{pid}', 'outcome' => self::MARKED, 'status' => 200],
             ],
+            'GET /commerce/admin/products/{id}/variants' => [
+                ['path' => '/commerce/admin/products/{pid}/variants', 'outcome' => self::MARKED, 'status' => 200],
+            ],
             'GET /commerce/admin/categories' => [
                 ['path' => '/commerce/admin/categories', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/categories/{id}' => [
+                ['path' => '/commerce/admin/categories/{cid}', 'outcome' => self::MARKED, 'status' => 200],
             ],
             'GET /commerce/admin/orders' => [
                 ['path' => '/commerce/admin/orders', 'outcome' => self::MARKED, 'status' => 200],
@@ -712,7 +718,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $product = one('SELECT id, slug FROM ' . t('commerce_product') . ' WHERE status = ?', ['PUBLISHED']);
         self::assertIsArray($product, 'Фикстура: опубликованный товар магазина не найден, витрина недоступна обходу');
 
-        $shopCategory = one('SELECT slug FROM ' . t('commerce_category') . ' WHERE visible = ?', [1]);
+        $shopCategory = one('SELECT id, slug FROM ' . t('commerce_category') . ' WHERE visible = ?', [1]);
         self::assertIsArray($shopCategory, 'Фикстура: видимой рубрики магазина нет — витрина рубрики недоступна обходу');
 
         self::assertNotSame('', CommerceHttpSetup::$productId, 'Фикстура: CommerceHttpSetup не запомнил номер товара');
@@ -727,6 +733,8 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'product' => (string) $product['slug'],
             'pid' => CommerceHttpSetup::$productId,
             'shopcategory' => (string) $shopCategory['slug'],
+            // Рубрика магазина: экран характеристик в админке.
+            'cid' => (string) $shopCategory['id'],
         ];
     }
 

@@ -8,5 +8,7 @@ require_once __DIR__ . '/constants.php';
 require_once __DIR__ . '/slug.php';
 require_once __DIR__ . '/validators.php';
 require_once __DIR__ . '/catalog.php';
+require_once __DIR__ . '/attributes.php';
+require_once __DIR__ . '/variants.php';
 require_once __DIR__ . '/cart.php';
 require_once __DIR__ . '/orders.php';

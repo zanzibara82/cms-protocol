@@ -3,14 +3,41 @@
 declare(strict_types=1);
 
 /**
- * Страница рубрики витрины: те же карточки с фильтром рубрики.
+ * Страница рубрики витрины: карточки с фильтром рубрики и характеристиками (M2).
+ * Форма фильтров печатается по набору атрибутов рубрики, чипы снимают выбранные
+ * значения, пагинатор читает их же из адреса, чтобы страница не сбрасывала выбор.
  *
  * @var array<string, mixed> $category
  * @var list<array{id: string, slug: string, title: string, order_index: int}> $categories
  * @var array{rows: list<array<string, mixed>>, total: int, pages: int, current: int} $list
+ * @var array{rows: list<array{id: string, key: string, label: string, type: string, unit: ?string, choices: list<string>, raw: string, from: string, to: string}>, conditions: list<array{attribute_id: string, value: string, from: ?float, to: ?float}>, chips: list<array{label: string, value: string, query: string}>, query: string} $filters
  * @var int $cartCount
  */
 $categoryHref = '/shop/c/' . rawurlencode((string) $category['slug']);
+$keptQuery = (string) ($filters['query'] ?? '');
+
+/**
+ * Адрес страницы списка с фильтрами: параметры характеристик сохраняются, страница
+ * переписывается.
+ *
+ * @param int $page
+ */
+$hrefAt = static function (int $page) use ($categoryHref, $keptQuery): string {
+    $parts = [];
+
+    if ($keptQuery !== '') {
+        $parts[] = $keptQuery;
+    }
+
+    if ($page > 1) {
+        $parts[] = 'page=' . $page;
+    }
+
+    return $categoryHref . ($parts === [] ? '' : '?' . implode('&', $parts));
+};
+
+$listingIntro = 'Товаров: ' . (int) $list['total']
+    . ($keptQuery !== '' ? ' по фильтрам' : '');
 ?>
 <section class="space-y-8">
     <header class="space-y-2">
@@ -20,6 +47,7 @@ $categoryHref = '/shop/c/' . rawurlencode((string) $category['slug']);
             <span class="inline-flex min-h-[44px] items-center"><?= e((string) $category['title']) ?></span>
         </nav>
         <h1 class="text-3xl font-bold"><?= e((string) $category['title']) ?></h1>
+        <p class="text-sm text-ink/60"><?= e($listingIntro) ?></p>
         <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" href="/shop/cart">
             Корзина<?= e($cartCount > 0 ? ' (' . $cartCount . ')' : '') ?>
         </a>
@@ -37,9 +65,11 @@ $categoryHref = '/shop/c/' . rawurlencode((string) $category['slug']);
         </nav>
     <?php endif; ?>
 
+    <?= partial('commerce/partials/filters', ['filters' => $filters, 'categoryHref' => $categoryHref]) /* @safe html */ ?>
+
     <?php if ((array) $list['rows'] === []): ?>
         <p class="rounded-lg border border-ink/10 bg-cream p-6 text-sm text-ink/70">
-            В этой рубрике товаров пока нет.
+            <?= e($keptQuery !== '' ? 'Под фильтры ничего не подошло — снимите часть условий.' : 'В этой рубрике товаров пока нет.') ?>
         </p>
     <?php else: ?>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -51,9 +81,8 @@ $categoryHref = '/shop/c/' . rawurlencode((string) $category['slug']);
         <?php if ((int) $list['pages'] > 1): ?>
             <nav aria-label="Страницы рубрики" class="flex flex-wrap items-center gap-2 text-sm">
                 <?php for ($page = 1; $page <= (int) $list['pages']; $page++): ?>
-                    <?php $href = $page === 1 ? $categoryHref : $categoryHref . '?page=' . $page; ?>
                     <a class="inline-flex min-h-[44px] items-center rounded-lg px-3 py-1.5 <?= e($page === (int) $list['current'] ? 'bg-ink text-cream' : 'border border-ink/10 bg-cream hover:bg-ink/5') ?>"
-                       href="<?= e($href) ?>" <?= e($page === (int) $list['current'] ? 'aria-current="true"' : '') ?>><?= e((string) $page) ?></a>
+                       href="<?= e($hrefAt($page)) ?>" <?= e($page === (int) $list['current'] ? 'aria-current="true"' : '') ?>><?= e((string) $page) ?></a>
                 <?php endfor; ?>
             </nav>
         <?php endif; ?>

@@ -63,13 +63,17 @@ final class CommerceHttpSetup
     }
 
     /**
-     * Состояние между тестами: остаток, видимость рубрик, строки заказов.
+     * Состояние между тестами: остаток, видимость рубрик, строки заказов, наборы M2.
+     * Варианты и характеристики чистятся: каждая сделка ставит своё состояние.
      */
     public static function prepare(): void
     {
-        foreach (['commerce_order_item', 'commerce_order'] as $table) {
+        foreach (['commerce_order_item', 'commerce_order', 'commerce_variant', 'commerce_product_attribute'] as $table) {
             run('DELETE FROM ' . t($table));
         }
+        run('DELETE FROM ' . t('commerce_attribute_choice'));
+        run('DELETE FROM ' . t('commerce_attribute'));
+
         run('UPDATE ' . t('commerce_product') . ' SET stock = 35 WHERE id = ?', [self::$productId]);
         run('UPDATE ' . t('commerce_category') . ' SET visible = 1');
     }
@@ -93,15 +97,95 @@ final class CommerceHttpSetup
 
     private static function dropTables(): void
     {
+        // Дочерние таблицы снимаются раньше родителей: MySQL не даст уронить таблицу,
+        // на которую ссылается Constraint другой таблицы.
         foreach ([
             'commerce_order_item',
             'commerce_order',
+            'commerce_variant',
+            'commerce_product_attribute',
+            'commerce_attribute_choice',
+            'commerce_attribute',
             'commerce_product_category',
             'commerce_product',
             'commerce_category',
         ] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
+    }
+
+    /** Строка варианта для фикстур карточки: своя цена, SKU и остаток. */
+    public static function addVariant(string $productId, string $sku, string $title, float $priceRetail, int $stock, ?float $pricePromo = null, int $position = 0): string
+    {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('commerce_variant', [
+            'id' => $id,
+            'product_id' => $productId,
+            'sku' => $sku,
+            'title' => $title,
+            'price_retail' => $priceRetail,
+            'price_promo' => $pricePromo,
+            'stock' => $stock,
+            'position' => $position,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
+    /** Характеристика рубрики: слаг — ключ фильтра витрины (?attr_{slug}=…). */
+    public static function addAttribute(string $categoryId, string $slug, string $label, string $type, ?string $unit = null): string
+    {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('commerce_attribute', [
+            'id' => $id,
+            'category_id' => $categoryId,
+            'slug' => $slug,
+            'label' => $label,
+            'type' => $type,
+            'unit' => $unit,
+            'order_index' => 0,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
+    /** Значение CHOICE в справочнике характеристики. */
+    public static function addChoice(string $attributeId, string $value): void
+    {
+        insert('commerce_attribute_choice', [
+            'id' => newId(),
+            'attribute_id' => $attributeId,
+            'value' => $value,
+            'order_index' => 0,
+        ]);
+    }
+
+    /** Значение характеристики на товаре: строка идёт на экран, число — в фильтр. */
+    public static function addProductValue(string $productId, string $attributeId, string $value, ?float $numeric = null): void
+    {
+        insert('commerce_product_attribute', [
+            'product_id' => $productId,
+            'attribute_id' => $attributeId,
+            'value' => $value,
+            'value_num' => $numeric,
+        ]);
+    }
+
+    /** @return string id рубрики магазина по слагу */
+    public static function categoryId(string $slug): string
+    {
+        /** @var array<string, mixed>|null */
+        $row = one('SELECT id FROM ' . t('commerce_category') . ' WHERE slug = ?', [$slug]);
+
+        return $row === null ? '' : (string) $row['id'];
     }
 
     /**

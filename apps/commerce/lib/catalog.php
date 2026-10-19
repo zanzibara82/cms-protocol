@@ -266,13 +266,16 @@ function commerceProductCategories(string $productId): array
 /**
  * Список товаров для админ-экрана и витрины. Фильтры приходят уже чистыми; поиск по
  * названию и артикулу идёт через escapeLike() — знак % в слове «скидка%» не открывает
- * веер незапланированных совпадений.
+ * веер незапланированных совпадений. Фильтры характеристик приходят списком условий
+ * «атрибут -> значение или диапазон»: на рубрику он либо сужает, либо ничего не
+ * находит — сводка чисел не врёт.
  *
- * @param array{q?: string, category?: string, status?: string, page?: int, per_page?: int, published_only?: bool} $filter
- * @return array{rows: list<array<string, mixed>>, total: int}
+ * @param array{q?: string, category?: string, status?: string, page?: int, per_page?: int, published_only?: bool, attributes?: list<array{attribute_id: string, value: string, from: ?float, to: ?float}>} $filter
+ * @return array{rows: list<array<string, mixed>>, total: int, applied: list<string>}
  */
 function commerceProductList(array $filter): array
 {
+    $applied = [];
     $where = [];
     $args = [];
 
@@ -301,6 +304,35 @@ function commerceProductList(array $filter): array
         $args[] = $needle;
     }
 
+    /** @var list<array{attribute_id: string, value: string, from: ?float, to: ?float}> $attributeFilters */
+    $attributeFilters = (array) ($filter['attributes'] ?? []);
+
+    foreach ($attributeFilters as $condition) {
+        $clause = 'p.id IN (SELECT pa.product_id FROM ' . t('commerce_product_attribute')
+            . ' pa WHERE pa.attribute_id = ?';
+        $attributeArgs = [$condition['attribute_id']];
+
+        if ($condition['value'] !== '') {
+            $clause .= ' AND pa.value = ?';
+            $attributeArgs[] = $condition['value'];
+        }
+
+        if ($condition['from'] !== null) {
+            $clause .= ' AND pa.value_num >= ?';
+            $attributeArgs[] = $condition['from'];
+        }
+
+        if ($condition['to'] !== null) {
+            $clause .= ' AND pa.value_num <= ?';
+            $attributeArgs[] = $condition['to'];
+        }
+
+        $clause .= ')';
+        $where[] = $clause;
+        $args = array_merge($args, $attributeArgs);
+        $applied[] = $condition['attribute_id'];
+    }
+
     $clause = $where === [] ? ' WHERE 1=1' : ' WHERE ' . implode(' AND ', $where);
     $perPage = max(1, min((int) ($filter['per_page'] ?? 12), 60));
     $page = max(1, (int) ($filter['page'] ?? 1));
@@ -325,7 +357,7 @@ function commerceProductList(array $filter): array
     );
 
     // Since per_page is a parameter here, the caller recomputes the pager itself.
-    return ['rows' => $rows, 'total' => $total, 'per_page' => $perPage];
+    return ['rows' => $rows, 'total' => $total, 'per_page' => $perPage, 'applied' => $applied];
 }
 
 /**

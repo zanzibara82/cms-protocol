@@ -29,6 +29,20 @@ addRoute('POST', '/commerce/admin/products/new', 'commerceProductSaveAction', ['
 addRoute('GET', '/commerce/admin/products/{id}', 'commerceProductEdit', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/products/{id}', 'commerceProductSaveAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/products/{id}/delete', 'commerceProductAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+
+// Варианты товара (M2): отдельный экран карточки — пять форм товара и списки
+// вариантов не помещались на одной странице.
+addRoute('GET', '/commerce/admin/products/{id}/variants', 'commerceVariantsScreen', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/products/{id}/variants', 'commerceVariantAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/products/{id}/variants/{variantId}', 'commerceVariantAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/products/{id}/variants/{variantId}/delete', 'commerceVariantAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+
+// Характеристики рубрики (M2): отдельный экран справочника под каждой рубрикой.
+addRoute('GET', '/commerce/admin/categories/{id}', 'commerceCategoryAttributes', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/categories/{id}/attribute', 'commerceAttributeAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/categories/{id}/attribute/{attributeId}', 'commerceAttributeAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/categories/{id}/attribute/{attributeId}/delete', 'commerceAttributeAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+
 addRoute('GET', '/commerce/admin/categories', 'commerceAdminCategories', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/categories', 'commerceCategoriesAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/commerce/admin/orders', 'commerceAdminOrders', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);

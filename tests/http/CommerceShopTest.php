@@ -9,6 +9,8 @@ use PHPUnit\Framework\TestCase;
 
 final class CommerceShopTest extends TestCase
 {
+    private const EDITOR_EMAIL = 'magazin@school.dev';
+    private const EDITOR_PASSWORD = 'верный-пароль';
     public static function setUpBeforeClass(): void
     {
         TestDb::reset();
@@ -136,11 +138,101 @@ final class CommerceShopTest extends TestCase
         self::assertSame(403, $response['status']);
     }
 
+    public function testКарточкаСВариантамиПоказываетВариации(): void
+    {
+        CommerceHttpSetup::addVariant(CommerceHttpSetup::$productId, 'COFFEE-20', '20 Вт, чёрная', 2500.0, 4, 1990.0);
+        CommerceHttpSetup::addVariant(CommerceHttpSetup::$productId, 'COFFEE-30', '30 Вт, белая', 3000.0, 0, null, 1);
+
+        $page = Kernel::get('/shop/kofemashina');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('20 Вт, чёрная', $page['body']);
+        self::assertStringContainsString('30 Вт, белая', $page['body']);
+        // Минимальная цена вариантов сменила Offer на AggregateOffer с границами.
+        self::assertStringContainsString('"@type":"AggregateOffer"', $page['body']);
+        self::assertStringNotContainsString('"@type":"Offer"', $page['body']);
+        self::assertStringContainsString('от 1 990,00 ₽', $page['body']);
+        self::assertStringContainsString('Нет в наличии', $page['body']);
+    }
+
+    public function testВариантУходитВКорзинуСоСвоейЦеной(): void
+    {
+        $variantId = CommerceHttpSetup::addVariant(CommerceHttpSetup::$productId, 'COFFEE-20', '20 Вт, чёрная', 2400.0, 2);
+
+        $page = Kernel::get('/shop/kofemashina');
+        $added = Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'variant' => $variantId,
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+        self::assertSame(302, $added['status']);
+
+        $cart = Kernel::get('/shop/cart');
+        self::assertSame(200, $cart['status']);
+        self::assertStringContainsString('20 Вт, чёрная', $cart['body']);
+        self::assertStringContainsString('2 400,00 ₽', $cart['body']);
+    }
+
+    public function testФильтрРубрикиРежетСПискойПоХарактеристикам(): void
+    {
+        $categoryId = CommerceHttpSetup::categoryId('tehnika');
+        $attributeId = CommerceHttpSetup::addAttribute($categoryId, 'moschnost', 'Мощность', 'NUMBER', 'Вт');
+        CommerceHttpSetup::addProductValue(CommerceHttpSetup::$productId, $attributeId, '25', 25.0);
+
+        $plain = Kernel::get('/shop/c/tehnika');
+
+        self::assertSame(200, $plain['status']);
+        self::assertStringContainsString('Мощность', $plain['body']);
+        self::assertStringContainsString('Кофемашина', $plain['body']);
+
+        $searched = Kernel::get('/shop/c/tehnika?attr_moschnost_from=24&attr_moschnost_to=26');
+
+        self::assertSame(200, $searched['status']);
+        self::assertStringContainsString('Кофемашина', $searched['body']);
+        self::assertStringContainsString('по фильтрам', $searched['body']);
+
+        $missed = Kernel::get('/shop/c/tehnika?attr_moschnost_from=100');
+
+        self::assertSame(200, $missed['status']);
+        self::assertStringNotContainsString('Кофемашина', $missed['body']);
+        self::assertStringContainsString('Под фильтры ничего не подошло', $missed['body']);
+    }
+
+    public function testЭкраныВариантовИХарактеристикОткрываютсяРедактором(): void
+    {
+        TestDb::seedUser(self::EDITOR_EMAIL, self::EDITOR_PASSWORD, 'editor');
+        $this->login();
+
+        $variants = Kernel::get('/commerce/admin/products/' . CommerceHttpSetup::$productId . '/variants');
+        self::assertSame(200, $variants['status']);
+        self::assertStringContainsString('Варианты', $variants['body']);
+
+        $categoryId = CommerceHttpSetup::categoryId('tehnika');
+        $attributes = Kernel::get('/commerce/admin/categories/' . $categoryId);
+        self::assertSame(200, $attributes['status']);
+        self::assertStringContainsString('Характеристики рубрики', $attributes['body']);
+        self::assertStringContainsString('Добавить характеристику', $attributes['body']);
+    }
+
     public function testЧастныйПутьМагазинаЗакрытRobots(): void
     {
         $robots = Kernel::get('/robots.txt');
 
         self::assertSame(200, $robots['status']);
         self::assertStringContainsString('Disallow: /commerce/admin', $robots['body']);
+    }
+
+    private function login(): void
+    {
+        $page = Kernel::get('/login');
+        preg_match('/name="_token" value="([^"]+)"/', $page['body'], $token);
+
+        Kernel::post('/login', [
+            '_token' => $token[1] ?? '',
+            'email' => self::EDITOR_EMAIL,
+            'password' => self::EDITOR_PASSWORD,
+        ]);
     }
 }

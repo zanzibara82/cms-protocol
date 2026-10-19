@@ -2,15 +2,38 @@
 
 declare(strict_types=1);
 
-// Корзина живёт в сессии: «id товара → количество». Таблицы корзины нет — гостевой заказ
-// рождается целиком при оформлении, а до этого цена и остаток читаются заново из базы,
-// чтобы витрина не обещала проданное или снятое с продажи.
+// Корзина живёт в сессии: «идентификатор позиции → количество». Позиция — товар без
+// вариантов или строка «товар:вариант»; таблицы корзины нет — гостевой заказ рождается
+// целиком при оформлении, а до этого цена и остаток читаются заново из базы, чтобы
+// витрина не обещала проданное или снятое с продажи.
 //
 // Денежные суммы считаются в копейках (int): сложение float частей копеек ловит многократно
 // описанную ошибку 0.1+0.2, и копейки копятся и печатаются один раз.
 //
 // Функции корзины сами вызывают startSession(): публичный обработчик не обязан помнить,
 // что сессия может ещё не начаться.
+
+/** Ключ позиции корзины: товар или строка «товар:вариант». */
+function commerceCartKey(string $productId, string $variantId = ''): string
+{
+    return $variantId === '' ? $productId : $productId . ':' . $variantId;
+}
+
+/**
+ * Разбор ключа позиции: [товар, вариант]. Ключ без разделителя — позиция товара.
+ *
+ * @return array{id: string, variant_id: string}
+ */
+function commerceCartKeyParts(string $key): array
+{
+    if (!str_contains($key, ':')) {
+        return ['id' => $key, 'variant_id' => ''];
+    }
+
+    [$productId, $variantId] = explode(':', $key, 2);
+
+    return ['id' => $productId, 'variant_id' => $variantId];
+}
 
 /** @return array<string, int> */
 function commerceCartItemsMap(): array
@@ -32,11 +55,11 @@ function commerceCartItemsMap(): array
 }
 
 /**
- * Позиции корзины со свежими данными товара. Неопубликованные и раскупленные позиции
- * молча не съедаются: их нет в списке, но оформление при нехватке остатка умрёт с
- * человеческой причиной отказа, а не с дежурным «заказ не принят».
+ * Позиции корзины со свежими данными товара и варианта. Неопубликованные и раскупленные
+ * позиции молча исчезают из списка: оформление при нехватке остатка даст человеческую
+ * причину отказа, а не дежурное «заказ не принят».
  *
- * @return list<array{id: string, slug: string, title: string, sku: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}>
+ * @return list<array{id: string, product_id: string, variant_id: string, slug: string, title: string, variant_title: string, sku: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}>
  */
 function commerceCartLines(): array
 {
@@ -45,7 +68,19 @@ function commerceCartLines(): array
         return [];
     }
 
-    $ids = array_keys($cart);
+    $products = [];
+    $variants = [];
+
+    foreach ($cart as $key => $qty) {
+        $parts = commerceCartKeyParts($key);
+        $products[$parts['id']] = true;
+
+        if ($parts['variant_id'] !== '') {
+            $variants[$parts['variant_id']] = true;
+        }
+    }
+
+    $ids = array_keys($products);
     $placeholders = inPlaceholders(count($ids));
     $rows = all(
         'SELECT id, slug, title, sku, price_retail, price_promo, currency, stock'
@@ -54,30 +89,84 @@ function commerceCartLines(): array
         $ids
     );
 
-    $lines = [];
-    $byId = [];
+    $byProduct = [];
     foreach ($rows as $row) {
-        $byId[(string) $row['id']] = $row;
+        $byProduct[(string) $row['id']] = $row;
     }
 
-    foreach ($cart as $id => $qty) {
-        $row = $byId[$id] ?? null;
-        if ($row === null) {
+    $byVariant = [];
+
+    if ($variants !== []) {
+        $variantsIds = array_keys($variants);
+        $variantPlaceholders = inPlaceholders(count($variantsIds));
+        $variantRows = all(
+            sprintf(
+                'SELECT id, product_id, title, sku, price_retail, price_promo, stock'
+                . ' FROM %s WHERE id IN (%s)',
+                t('commerce_variant'),
+                $variantPlaceholders
+            ),
+            $variantsIds
+        );
+
+        foreach ($variantRows as $row) {
+            $byVariant[(string) $row['id']] = $row;
+        }
+    }
+
+    $lines = [];
+
+    foreach ($cart as $key => $qty) {
+        $parts = commerceCartKeyParts($key);
+        $product = $byProduct[$parts['id']] ?? null;
+
+        if ($product === null) {
             continue;
         }
 
-        $qty = min($qty, (int) $row['stock']);
-        $price = $row['price_promo'] !== null ? (float) $row['price_promo'] : (float) $row['price_retail'];
+        if ($parts['variant_id'] === '') {
+            $qty = min($qty, (int) $product['stock']);
+            $price = $product['price_promo'] !== null ? (float) $product['price_promo'] : (float) $product['price_retail'];
+
+            $lines[] = [
+                'id' => $key,
+                'product_id' => $parts['id'],
+                'variant_id' => '',
+                'slug' => (string) $product['slug'],
+                'title' => (string) $product['title'],
+                'variant_title' => '',
+                'sku' => (string) $product['sku'],
+                'price_cents' => commerceCents($price),
+                'currency' => (string) $product['currency'],
+                'qty' => $qty,
+                'stock' => (int) $product['stock'],
+                'line_cents' => commerceCents($price) * $qty,
+            ];
+
+            continue;
+        }
+
+        $variant = $byVariant[$parts['variant_id']] ?? null;
+
+        if ($variant === null || (string) $variant['product_id'] !== $parts['id']) {
+            continue;
+        }
+
+        $qty = min($qty, (int) $variant['stock']);
+        $price = $variant['price_promo'] !== null ? (float) $variant['price_promo'] : (float) $variant['price_retail'];
 
         $lines[] = [
-            'id' => $id,
-            'slug' => (string) $row['slug'],
-            'title' => (string) $row['title'],
-            'sku' => (string) $row['sku'],
+            'id' => $key,
+            'product_id' => $parts['id'],
+            'variant_id' => $parts['variant_id'],
+            'slug' => (string) $product['slug'],
+            'title' => (string) $product['title'],
+            'variant_title' => (string) $variant['title'],
+            'sku' => (string) $variant['sku'],
             'price_cents' => commerceCents($price),
-            'currency' => (string) $row['currency'],
+            'currency' => (string) $product['currency'],
             'qty' => $qty,
-            'stock' => (int) $row['stock'],
+            'stock' => (int) $variant['stock'],
             'line_cents' => commerceCents($price) * $qty,
         ];
     }
@@ -86,8 +175,8 @@ function commerceCartLines(): array
 }
 
 /**
- * Сумма корзины копейками. Одна валюта в M1: разнородные валюты ловит оформление и
- * просит разделить заказ, а не считает «₽ + $».
+ * Сумма корзины копейками. Одна валюта на корзину: разнородные валюты ловит оформление
+ * и просит разделить заказ, а не считает «₽ + $».
  *
  * @return array{total_cents: int, count: int}
  */
@@ -105,17 +194,19 @@ function commerceCartTotal(): array
 }
 
 /**
- * Положить товар в корзину. Причина отказа печатается на карточке: недоступный товар
- * человек видит, а не догадывается, почему кнопка «молчит».
+ * Положить позицию в корзину: товар без вариантов или строку «товар:вариант».
+ * Причина отказа печатается на карточке — недоступное позицию человек видит, а не
+ * догадывается, почему кнопка «молчит».
  *
  * @return array{ok: bool, error: string, count: int}
  */
-function commerceCartAdd(string $productId, int $qty): array
+function commerceCartAdd(string $productId, int $qty, string $variantId = ''): array
 {
     $cart = commerceCartItemsMap();
     $count = array_sum($cart);
+    $key = commerceCartKey($productId, $variantId);
 
-    if (count($cart) >= COMMERCE_CART_MAX_LINES && !isset($cart[$productId])) {
+    if (count($cart) >= COMMERCE_CART_MAX_LINES && !isset($cart[$key])) {
         return [
             'ok' => false,
             'error' => 'В корзине уже максимум позиций (' . COMMERCE_CART_MAX_LINES . ').',
@@ -123,24 +214,41 @@ function commerceCartAdd(string $productId, int $qty): array
         ];
     }
 
-    $row = one(
-        'SELECT stock FROM ' . t('commerce_product') . " WHERE id = ? AND status = 'PUBLISHED'",
-        [$productId]
-    );
+    $stock = 0;
 
-    if ($row === null) {
-        return ['ok' => false, 'error' => 'Товар недоступен для покупки.', 'count' => $count];
+    if ($variantId === '') {
+        $product = one(
+            'SELECT stock FROM ' . t('commerce_product') . " WHERE id = ? AND status = 'PUBLISHED'",
+            [$productId]
+        );
+
+        if ($product === null) {
+            return ['ok' => false, 'error' => 'Товар недоступен для покупки.', 'count' => $count];
+        }
+
+        $stock = (int) $product['stock'];
+    } else {
+        $variant = one(
+            'SELECT stock FROM ' . t('commerce_variant') . ' WHERE id = ? AND product_id = ?',
+            [$variantId, $productId]
+        );
+
+        if ($variant === null) {
+            return ['ok' => false, 'error' => 'Такого варианта уже нет.', 'count' => $count];
+        }
+
+        $stock = (int) $variant['stock'];
     }
 
     $qty = max(1, min($qty, COMMERCE_CART_MAX_QTY));
-    $wish = ($cart[$productId] ?? 0) + $qty;
+    $wish = ($cart[$key] ?? 0) + $qty;
 
     if ($wish > COMMERCE_CART_MAX_QTY) {
         $wish = COMMERCE_CART_MAX_QTY;
     }
 
-    if ($wish > (int) $row['stock']) {
-        $wish = (int) $row['stock'];
+    if ($wish > $stock) {
+        $wish = $stock;
     }
 
     if ($wish <= 0) {
@@ -149,7 +257,7 @@ function commerceCartAdd(string $productId, int $qty): array
 
     startSession();
 
-    if ($wish === ($cart[$productId] ?? 0)) {
+    if ($wish === ($cart[$key] ?? 0)) {
         return [
             'ok' => false,
             'error' => 'Больше столько не продаётся — в корзине уже весь остаток.',
@@ -157,7 +265,7 @@ function commerceCartAdd(string $productId, int $qty): array
         ];
     }
 
-    $_SESSION[COMMERCE_SESSION_CART][$productId] = $wish;
+    $_SESSION[COMMERCE_SESSION_CART][$key] = $wish;
 
     return [
         'ok' => true,
@@ -169,23 +277,23 @@ function commerceCartAdd(string $productId, int $qty): array
 /** Задать количество позиции; ноль удаляет позицию. Остатка здесь не читают: экран
  * корзины печатает позиции вместе с остатком, а недоступное количество оформление
  * ловит по свежему остатку. */
-function commerceCartSet(string $productId, int $qty): void
+function commerceCartSet(string $key, int $qty): void
 {
     $cart = commerceCartItemsMap();
 
-    if (!isset($cart[$productId])) {
+    if (!isset($cart[$key])) {
         return;
     }
 
     startSession();
 
     if ($qty <= 0) {
-        unset($_SESSION[COMMERCE_SESSION_CART][$productId]);
+        unset($_SESSION[COMMERCE_SESSION_CART][$key]);
 
         return;
     }
 
-    $_SESSION[COMMERCE_SESSION_CART][$productId] = min($qty, COMMERCE_CART_MAX_QTY);
+    $_SESSION[COMMERCE_SESSION_CART][$key] = min($qty, COMMERCE_CART_MAX_QTY);
 }
 
 /** Опустошить корзину: после оформления и по кнопке экрана.

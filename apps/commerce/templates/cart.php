@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Корзина и оформление: один экран, без JavaScript.
  *
- * @var list<array{id: string, slug: string, title: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}> $lines
+ * @var list<array{id: string, slug: string, title: string, variant_title: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}> $lines
  * @var int $totalCents
  * @var int $cartCount
  * @var array<string, string> $values
@@ -39,6 +39,9 @@ $formError = (string) ($errors['form'] ?? '');
                 <li class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ink/10 bg-white p-4">
                     <div class="min-w-0">
                         <a class="inline-flex min-h-[44px] items-center font-semibold hover:underline" href="<?= e('/shop/' . rawurlencode((string) $line['slug'])) ?>"><?= e((string) $line['title']) ?></a>
+                        <?php if ((string) $line['variant_title'] !== ''): ?>
+                            <p class="text-sm font-medium"><?= e((string) $line['variant_title']) ?></p>
+                        <?php endif; ?>
                         <p class="text-sm text-ink/60">
                             <?= e(commerceFormatMoney((int) $line['price_cents'], (string) $line['currency'])) ?> × <?= e((string) $line['qty']) ?>
                             <?php if ($line['qty'] >= $line['stock']): ?>

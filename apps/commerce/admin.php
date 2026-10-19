@@ -22,6 +22,10 @@ const COMMERCE_NOTICE_TEXT = [
     'category_deleted' => 'Рубрика удалена.',
     'order_updated' => 'Заказ обработан.',
     'cart_cleared' => 'Корзина опустошена.',
+    'variant_saved' => 'Вариант сохранён.',
+    'variant_deleted' => 'Вариант удалён.',
+    'attribute_saved' => 'Характеристика добавлена.',
+    'attribute_deleted' => 'Характеристика удалена.',
 ];
 
 /**
@@ -63,6 +67,54 @@ function commerceAdminAlert(): array
         'alertTitle' => adminFailureTitle($reason),
         'alertReason' => $reason,
     ];
+}
+
+/**
+ * Блок характеристик для формы товара: набор по выбранным рубрикам, значения при
+ * открытии — из базы, при отказе — набранное из POST.
+ *
+ * @param string $productId пусто для нового товара
+ * @param list<string> $categoryIds
+ * @param array<string, mixed> $post
+ * @return list<array{id: string, slug: string, label: string, type: string, unit: ?string, choices: list<string>, value: string}>
+ */
+function commerceAttributeFields(string $productId, array $categoryIds, array $post): array
+{
+    $stored = [];
+    if ($productId !== '') {
+        foreach (commerceProductAttributes($productId) as $row) {
+            $stored[(string) $row['id']] = (string) $row['value'];
+        }
+    }
+
+    $out = [];
+
+    foreach (commerceAttributesForCategories($categoryIds) as $attribute) {
+        $value = trim((string) ($post['attr_' . $attribute['id']] ?? ''));
+        if ($value === '' && isset($stored[(string) $attribute['id']])) {
+            $value = $stored[(string) $attribute['id']];
+        }
+
+        $choices = [];
+        if ((string) $attribute['type'] === 'CHOICE') {
+            $choices = array_map(
+                static fn (array $row): string => (string) $row['value'],
+                commerceAttributeChoices((string) $attribute['id'])
+            );
+        }
+
+        $out[] = [
+            'id' => (string) $attribute['id'],
+            'slug' => (string) $attribute['slug'],
+            'label' => (string) $attribute['label'],
+            'type' => (string) $attribute['type'],
+            'unit' => $attribute['unit'],
+            'choices' => $choices,
+            'value' => $value,
+        ];
+    }
+
+    return $out;
 }
 
 /** @param array<string, string> $params */
@@ -144,6 +196,7 @@ function commerceProductNew(array $params = []): void
         'values' => [],
         'categories' => commerceCategories(),
         'chosen' => [],
+        'attributes' => [],
         'heading' => 'Новый товар',
         'notice' => '',
     ], commerceAdminAlert()), [
@@ -164,6 +217,8 @@ function commerceProductEdit(array $params = []): void
         return;
     }
 
+    $chosenCategories = array_map('strval', array_column(commerceProductCategories($id), 'id'));
+
     render('commerce/admin/product-form', array_merge([
         'nav' => commerceAdminNav(requestPath()),
         'mode' => 'edit',
@@ -172,7 +227,8 @@ function commerceProductEdit(array $params = []): void
         'errors' => [],
         'values' => [],
         'categories' => commerceCategories(),
-        'chosen' => array_map('strval', array_column(commerceProductCategories($id), 'id')),
+        'chosen' => $chosenCategories,
+        'attributes' => commerceAttributeFields($id, $chosenCategories, []),
         'heading' => 'Правка товара',
         'notice' => '',
     ], commerceAdminAlert()), [
@@ -222,6 +278,11 @@ function commerceProductSaveAction(array $params = []): void
             'values' => $check['values'],
             'categories' => commerceCategories(),
             'chosen' => $check['values']['categories'],
+            'attributes' => commerceAttributeFields(
+                (string) ($product['id'] ?? ''),
+                $check['values']['categories'],
+                $_POST
+            ),
             'heading' => $product === null ? 'Новый товар' : 'Правка товара',
         ], commerceAdminAlert()), [
             'title' => 'Форма товара — магазин',
@@ -235,6 +296,16 @@ function commerceProductSaveAction(array $params = []): void
         $saved = commerceCreateProduct($check['values']);
     } else {
         $saved = commerceUpdateProduct($id, $check['values'], $previousSlug);
+    }
+
+    if ((bool) ($saved['ok'] ?? false)) {
+        // Характеристики пишутся товаром отдельно от товарной транзакции: значение,
+        // не разобравшееся числом, отбрасывается с журналом, а не роняет правку товара.
+        commerceSaveProductAttributes(
+            (string) ($saved['id'] ?? $id),
+            $check['values']['categories'],
+            $_POST
+        );
     }
 
     $notice = (string) ($saved['notice'] ?? '');
@@ -386,6 +457,277 @@ function commerceCategoriesAction(array $params = []): void
 
     $notice = (string) ($result['notice'] ?? '');
     finishAppAction($result, '/commerce/admin/categories', $notice);
+}
+
+// ---------------------------------------------------------------------------
+// Варианты товара
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function commerceVariantsScreen(array $params = []): void
+{
+    $id = routeId26($params);
+    $product = commerceProductById($id);
+
+    if ($product === null) {
+        finishAppAction(['ok' => false, 'error' => 'Товара уже нет — обновите список.'], '/commerce/admin/products', '');
+
+        return;
+    }
+
+    render('commerce/admin/variants', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'product' => $product,
+        'variants' => commerceVariants($id),
+        'mode' => 'new',
+        'variant' => null,
+        'form' => [],
+        'errors' => [],
+    ], commerceAdminAlert()), [
+        'title' => 'Варианты товара — магазин',
+        'noindex' => true,
+    ]);
+}
+
+/**
+ * Общий обработчик действий с вариантами: форма отказа переоткрывает экран с
+ * набранным, успех верит ключу уведомления из lib-функции.
+ *
+ * @param array<string, string> $params
+ */
+function commerceVariantAction(array $params = []): void
+{
+    csrfCheck();
+    $productId = routeId26($params);
+    $variantId = mb_substr(trim((string) ($params['variantId'] ?? '')), 0, 26);
+    $op = postString('op');
+    $address = '/commerce/admin/products/' . rawurlencode($productId) . '/variants';
+
+    $product = commerceProductById($productId);
+    if ($product === null) {
+        finishAppAction(['ok' => false, 'error' => 'Товара уже нет — обновите список.'], '/commerce/admin/products', '');
+
+        return;
+    }
+
+    if ($op === 'create') {
+        $check = commerceValidateVariant($productId, $_POST);
+        if ($check['errors'] !== []) {
+            commerceVariantsRenderFailure($productId, 'new', null, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        $result = commerceCreateVariant($productId, $check['values']);
+
+        commerceFinish($result, $address);
+
+        return;
+    }
+
+    $variant = commerceVariantById($variantId);
+    $mine = $variant !== null && (string) $variant['product_id'] === $productId;
+
+    if ($op === 'save') {
+        if (!$mine) {
+            finishAppAction(['ok' => false, 'error' => 'Варианта уже нет — обновите список.'], $address, '');
+
+            return;
+        }
+
+        $check = commerceValidateVariant($productId, $_POST);
+        if ($check['errors'] !== []) {
+            commerceVariantsRenderFailure($productId, 'edit', $variant, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        $result = commerceUpdateVariant($variantId, $check['values']);
+
+        commerceFinish($result, $address);
+
+        return;
+    }
+
+    if ($op === 'delete') {
+        $result = $mine
+            ? commerceDeleteVariant($variantId)
+            : ['ok' => false, 'error' => 'Варианта уже нет — обновите список.', 'notice' => ''];
+
+        commerceFinish($result, $address);
+
+        return;
+    }
+
+    finishAppAction(['ok' => false, 'error' => 'Неизвестное действие с вариантом.'], $address, '');
+}
+
+/**
+ * Форма варианта с отказом: набор печатается, причина — в статусе экрана.
+ *
+ * @param array{id: string, product_id: string, sku: string, title: string, price_retail: float, price_promo: ?float, stock: int, position: int}|null $variant
+ * @param array{title: string, sku: string, price_retail: string, price_promo: string, stock: string} $form
+ * @param array<string, string> $errors
+ */
+function commerceVariantsRenderFailure(string $productId, string $mode, ?array $variant, array $form, array $errors): void
+{
+    $product = commerceProductById($productId);
+
+    if ($product === null) {
+        finishAppAction(['ok' => false, 'error' => 'Товара уже нет — обновите список.'], '/commerce/admin/products', '');
+
+        return;
+    }
+
+    render('commerce/admin/variants', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'product' => $product,
+        'variants' => commerceVariants($productId),
+        'mode' => $mode,
+        'variant' => $variant,
+        'form' => $form,
+        'errors' => $errors,
+    ], commerceAdminAlert()), [
+        'title' => 'Варианты товара — магазин',
+        'noindex' => true,
+    ]);
+}
+
+/**
+ * Завершение действий variants/attributes: успех и отказ расходятся по flash ядра.
+ *
+ * @param array{ok: bool, error: string, notice: string} $result
+ */
+function commerceFinish(array $result, string $address): void
+{
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, $address, $notice);
+}
+
+/** @param array<string, string> $params */
+function routeId26(array $params): string
+{
+    return mb_substr(trim((string) ($params['id'] ?? '')), 0, 26);
+}
+
+// ---------------------------------------------------------------------------
+// Характеристики рубрик
+// ---------------------------------------------------------------------------
+
+/**
+ * Строки атрибутов с их справочник значений — экран рубрики печатает набор целиком.
+ *
+ * @return list<array{id: string, slug: string, label: string, type: string, unit: ?string, order_index: int, choices: list<string>}>
+ */
+function commerceAttributeRows(string $categoryId): array
+{
+    $out = [];
+
+    foreach (commerceAttributes($categoryId) as $attribute) {
+        $attribute['choices'] = array_map(
+            static fn (array $row): string => (string) $row['value'],
+            commerceAttributeChoices((string) $attribute['id'])
+        );
+        $out[] = $attribute;
+    }
+
+    return $out;
+}
+
+/** @param array<string, string> $params */
+function commerceCategoryAttributes(array $params = []): void
+{
+    $id = routeId26($params);
+    $category = commerceCategoryById($id);
+
+    if ($category === null) {
+        finishAppAction(['ok' => false, 'error' => 'Рубрики уже нет — обновите список.'], '/commerce/admin/categories', '');
+
+        return;
+    }
+
+    render('commerce/admin/category-attributes', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'category' => $category,
+        'attributes' => commerceAttributeRows($id),
+        'form' => [],
+        'errors' => [],
+    ], commerceAdminAlert()), [
+        'title' => 'Характеристики рубрики — магазин',
+        'noindex' => true,
+    ]);
+}
+
+/** @param array<string, string> $params */
+function commerceAttributeAction(array $params = []): void
+{
+    csrfCheck();
+    $categoryId = routeId26($params);
+    $attributeId = mb_substr(trim((string) ($params['attributeId'] ?? '')), 0, 26);
+    $op = postString('op');
+    $address = '/commerce/admin/categories/' . rawurlencode($categoryId);
+
+    $category = commerceCategoryById($categoryId);
+    if ($category === null) {
+        finishAppAction(['ok' => false, 'error' => 'Рубрики уже нет — обновите список.'], '/commerce/admin/categories', '');
+
+        return;
+    }
+
+    if ($op === 'create') {
+        $check = commerceValidateAttribute($_POST, '');
+        if ($check['errors'] !== []) {
+            commerceAttributesRenderFailure($categoryId, $category, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        $result = commerceCreateAttribute($categoryId, $check['values']);
+
+        commerceFinish($result, $address);
+
+        return;
+    }
+
+    if ($op === 'delete') {
+        $attribute = commerceAttributeById($attributeId);
+        $mine = $attribute !== null && (string) $attribute['category_id'] === $categoryId;
+
+        $result = $mine
+            ? commerceDeleteAttribute($attributeId)
+            : ['ok' => false, 'error' => 'Характеристики уже нет — обновите список.', 'notice' => ''];
+
+        commerceFinish($result, $address);
+
+        return;
+    }
+
+    finishAppAction(['ok' => false, 'error' => 'Неизвестное действие с характеристикой.'], $address, '');
+}
+
+/**
+ * Экран характеристик с отказом формы: набранное возвращается, причина видна.
+ *
+ * @param array{id: string, slug: string, title: string, order_index: int} $category
+ * @param array{label: string, slug: string, type: string, unit: string} $form
+ * @param array<string, string> $errors
+ */
+function commerceAttributesRenderFailure(string $categoryId, array $category, array $form, array $errors): void
+{
+    render('commerce/admin/category-attributes', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'category' => $category,
+        'attributes' => commerceAttributeRows($categoryId),
+        'form' => $form,
+        'errors' => $errors,
+    ], commerceAdminAlert()), [
+        'title' => 'Характеристики рубрики — магазин',
+        'noindex' => true,
+    ]);
 }
 
 // ---------------------------------------------------------------------------

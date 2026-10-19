@@ -39,9 +39,15 @@ abstract class CommerceDbTestCase extends TestCase
 
     protected static function dropCommerceTables(): void
     {
+        // Порядок важен: дочерние таблицы снимаются раньше родителей, иначе MySQL
+        // не даст уронить таблицу, на которую кто-то ссылается.
         foreach ([
             'commerce_order_item',
             'commerce_order',
+            'commerce_variant',
+            'commerce_product_attribute',
+            'commerce_attribute_choice',
+            'commerce_attribute',
             'commerce_product_category',
             'commerce_product',
             'commerce_category',
@@ -55,6 +61,10 @@ abstract class CommerceDbTestCase extends TestCase
         foreach ([
             'commerce_order_item',
             'commerce_order',
+            'commerce_variant',
+            'commerce_product_attribute',
+            'commerce_attribute_choice',
+            'commerce_attribute',
             'commerce_product_category',
             'commerce_product',
             'commerce_category',

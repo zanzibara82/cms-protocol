@@ -8,9 +8,11 @@ declare(strict_types=1);
 
 /**
  * Заказ из корзины. Строки приходят из commerceCartLines() — свежие цена и остаток.
+ * Строка с вариантом списывает остаток варианта и сохраняет ссылку на него в строке
+ * заказа: отмена вернёт остаток варианту, а не родителю.
  *
  * @param array<string, string> $checkout данные commerceValidateCheckout()
- * @param list<array{id: string, slug: string, title: string, sku: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}> $lines
+ * @param list<array{id: string, product_id: string, variant_id: string, slug: string, title: string, variant_title: string, sku: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}> $lines
  * @return array{ok: bool, error: string, id: string, number: int, total_cents: int}
  */
 function commerceOrderCreate(array $checkout, array $lines): array
@@ -46,14 +48,26 @@ function commerceOrderCreate(array $checkout, array $lines): array
     try {
         $number = tx(static function () use ($id, $checkout, $lines, $total, $currency, $moment) {
             foreach ($lines as $line) {
-                $inserted = run(
-                    'UPDATE ' . t('commerce_product') . ' SET stock = stock - ?'
-                . ' WHERE id = ? AND status = ? AND stock >= ?',
-                    [$line['qty'], $line['id'], 'PUBLISHED', $line['qty']]
-                );
+                if ($line['variant_id'] === '') {
+                    $inserted = run(
+                        'UPDATE ' . t('commerce_product') . ' SET stock = stock - ?'
+                    . ' WHERE id = ? AND status = ? AND stock >= ?',
+                        [$line['qty'], $line['product_id'], 'PUBLISHED', $line['qty']]
+                    );
+                } else {
+                    // Позиция варианта: товар обязан остаться в продаже до момента
+                    // списания, иначе строка корзины прошла мимо видимости карточки.
+                    $inserted = run(
+                        'UPDATE ' . t('commerce_variant') . ' SET stock = stock - ?'
+                    . ' WHERE id = ? AND stock >= ?',
+                        [$line['qty'], $line['variant_id'], $line['qty']]
+                    );
+                }
 
                 if ($inserted !== 1) {
-                    throw new RuntimeException('«' . $line['title'] . '» уже распродано — уменьшите количество.');
+                    throw new RuntimeException('«' . $line['title']
+                        . ($line['variant_title'] !== '' ? ' — ' . $line['variant_title'] : '')
+                        . '» уже распродано — уменьшите количество.');
                 }
             }
 
@@ -75,9 +89,11 @@ function commerceOrderCreate(array $checkout, array $lines): array
                 insert('commerce_order_item', [
                     'id' => newId(),
                     'order_id' => $id,
-                    'product_id' => $line['id'],
+                    'product_id' => $line['product_id'],
+                    'variant_id' => $line['variant_id'] !== '' ? $line['variant_id'] : null,
                     'sku' => (string) $line['sku'],
-                    'title' => (string) $line['title'],
+                    'title' => $line['variant_title'] !== ''
+                        ? $line['title'] . ' — ' . $line['variant_title'] : $line['title'],
                     'currency' => $line['currency'],
                     'unit_price' => $line['price_cents'] / 100,
                     'qty' => $line['qty'],
@@ -237,10 +253,19 @@ function commerceSetOrderStatus(string $orderId, string $status): array
         );
 
         if ($status === 'CANCELLED') {
+            // Товарные позиции возвращают остаток товару, вариантные — варианту.
             run(
                 'UPDATE ' . t('commerce_product') . ' p'
             . ' JOIN ' . t('commerce_order_item') . ' oi ON oi.product_id = p.id'
-            . ' SET p.stock = p.stock + oi.qty WHERE oi.order_id = ?',
+            . ' SET p.stock = p.stock + oi.qty'
+            . ' WHERE oi.order_id = ? AND oi.variant_id IS NULL',
+                [$orderId]
+            );
+
+            run(
+                'UPDATE ' . t('commerce_variant') . ' v'
+            . ' JOIN ' . t('commerce_order_item') . ' oi ON oi.variant_id = v.id'
+            . ' SET v.stock = v.stock + oi.qty WHERE oi.order_id = ?',
                 [$orderId]
             );
         }

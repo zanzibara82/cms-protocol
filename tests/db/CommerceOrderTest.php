@@ -67,6 +67,9 @@ final class CommerceOrderTest extends CommerceDbTestCase
         $lines = [
             [
                 'id' => $product,
+                'product_id' => $product,
+                'variant_id' => '',
+                'variant_title' => '',
                 'slug' => 'limonad',
                 'title' => 'Лимонад',
                 'sku' => 'LIMO-1',
@@ -121,6 +124,42 @@ final class CommerceOrderTest extends CommerceDbTestCase
         self::assertSame('CANCELLED', (string) value('SELECT status FROM ' . t('commerce_order') . ' WHERE id = ?', [$order['id']]));
     }
 
+    public function testВариантСписываетОстатокИВозвращаетПриОтмене(): void
+    {
+        $product = self::makeProduct(['slug' => 'kolonka', 'sku' => 'SPK-1', 'stock' => 5]);
+        $created = commerceCreateVariant($product, [
+            'title' => '20 Вт',
+            'sku' => 'SPK-20',
+            'price_retail' => '100',
+            'price_promo' => '',
+            'stock' => '3',
+        ]);
+        self::assertTrue($created['ok'], $created['error']);
+        $variant = commerceVariants($product)[0];
+
+        $line = self::line($product, 'RUB', 2, 10000);
+        $line['variant_id'] = (string) $variant['id'];
+        $line['variant_title'] = '20 Вт';
+        $line['sku'] = 'SPK-20';
+
+        $order = commerceOrderCreate(self::checkout(), [$line]);
+
+        self::assertTrue($order['ok'], $order['error']);
+        // Остаток уходит варианту: родительский товар своих штук не теряет.
+        self::assertSame(5, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
+        self::assertSame(1, (int) value('SELECT stock FROM ' . t('commerce_variant') . ' WHERE id = ?', [$variant['id']]));
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('commerce_order_item') . ' WHERE order_id = ? AND variant_id = ?',
+            [$order['id'], $variant['id']]
+        ));
+
+        $result = commerceSetOrderStatus((string) $order['id'], 'CANCELLED');
+
+        self::assertTrue($result['ok'], $result['error']);
+        self::assertSame(3, (int) value('SELECT stock FROM ' . t('commerce_variant') . ' WHERE id = ?', [$variant['id']]));
+        self::assertSame(5, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
+    }
+
     public function testВыполненныйЗаказНеменяется(): void
     {
         $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
@@ -152,12 +191,15 @@ final class CommerceOrderTest extends CommerceDbTestCase
     }
 
     /**
-     * @return array{id: string, slug: string, title: string, sku: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}
+     * @return array{id: string, product_id: string, variant_id: string, variant_title: string, slug: string, title: string, sku: string, price_cents: int, currency: string, qty: int, stock: int, line_cents: int}
      */
     private static function line(string $productId, string $currency, int $qty, int $priceCents): array
     {
         return [
             'id' => $productId,
+            'product_id' => $productId,
+            'variant_id' => '',
+            'variant_title' => '',
             'slug' => (string) value('SELECT slug FROM ' . t('commerce_product') . ' WHERE id = ?', [$productId]),
             'title' => (string) value('SELECT title FROM ' . t('commerce_product') . ' WHERE id = ?', [$productId]),
             'sku' => (string) value('SELECT sku FROM ' . t('commerce_product') . ' WHERE id = ?', [$productId]),

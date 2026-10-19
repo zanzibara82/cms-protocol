@@ -16,6 +16,7 @@ declare(strict_types=1);
  * @var array<string, mixed> $values
  * @var list<array{id: string, slug: string, title: string, order_index: int}> $categories
  * @var list<string> $chosen
+ * @var list<array{id: string, slug: string, label: string, type: string, unit: ?string, choices: list<string>, value: string}> $attributes
  * @var list<array{title: string, text: string}> $formBody
  * @var string $heading
  */
@@ -183,8 +184,9 @@ foreach ($categories as $row) {
         . '</label>';
 }
 
-$fieldset .= '</fieldset>'
-    . '<fieldset class="space-y-2 mt-6">'
+$fieldset .= '</fieldset>';
+
+$indexBlock = '<fieldset class="space-y-2 mt-6">'
     . '<legend class="text-sm text-ink/60">Индексация</legend>'
     . '<label class="inline-flex min-h-[44px] items-center gap-2 text-sm">'
     . '<input class="size-11 min-h-[44px] rounded border border-ink/20 bg-white" type="checkbox" name="noindex"'
@@ -192,6 +194,55 @@ $fieldset .= '</fieldset>'
     . 'Не индексировать в поисковиках'
     . '</label>'
     . '</fieldset>';
+
+// Характеристики рубрик: набор приходит из выбранных рубрик; значение CHOICE выбирается
+// из справочника рубрики, NUMBER печатается числом без единицы (единица — подпись).
+$attributesBlock = '';
+if ($attributes !== []) {
+    $attributesBlock .= '<fieldset class="space-y-3 mt-6">'
+        . '<legend class="text-sm text-ink/60">Характеристики рубрик</legend>';
+
+    foreach ($attributes as $attribute) {
+        $attrId = (string) $attribute['id'];
+        $name = 'attr_' . $attrId;
+        $current = (string) $attribute['value'];
+
+        if ((string) $attribute['type'] === 'CHOICE') {
+            $choices = $attribute['choices'];
+
+            if ($current !== '' && !in_array($current, $choices, true)) {
+                // Значение из базы, которого ещё нет в справочнике: пользователь должен
+                // увидеть то, что уже записано, а не «пусто».
+                $choices[] = $current;
+            }
+
+            $options = '<option value="">— не указано</option>';
+            foreach ($choices as $choice) {
+                $options .= '<option value="' . e($choice) . '"' . ($current === $choice ? ' selected' : '')
+                    . '>' . e($choice) . '</option>';
+            }
+
+            $attributesBlock .= '<label class="block" for="attr_' . $attrId . '">'
+                . '<span class="text-sm text-ink/60">' . e((string) $attribute['label']) . '</span>'
+                . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2"'
+                . ' id="attr_' . $attrId . '" name="' . e($name) . '">'
+                . $options
+                . '</select></label>';
+        } else {
+            $unitSuffix = $attribute['unit'] !== null && (string) $attribute['unit'] !== ''
+                ? ' (' . e((string) $attribute['unit']) . ')' : '';
+
+            $attributesBlock .= '<label class="block" for="attr_' . $attrId . '">'
+                . '<span class="text-sm text-ink/60">' . e((string) $attribute['label']) . $unitSuffix . '</span>'
+                . '<input class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2"'
+                . ' id="attr_' . $attrId . '" name="' . e($name) . '" inputmode="decimal"'
+                . ' value="' . e($current) . '">'
+                . '</label>';
+        }
+    }
+
+    $attributesBlock .= '</fieldset>';
+}
 
 $seoBlock = '<fieldset class="space-y-2 mt-6">'
     . '<legend class="text-sm text-ink/60">SEO (необязательно)</legend>'
@@ -223,9 +274,15 @@ $bodyBlock .= '</fieldset>';
 
 $content = $nav
     . '<h1 class="text-2xl font-bold">' . e($heading) . '</h1>'
+    . ($isEdit
+        ? '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5" href="'
+        . e($action . '/variants') . '">Варианты товара</a>'
+        : '')
     . $formHead
     . $formPrices
     . $fieldset
+    . $attributesBlock
+    . $indexBlock
     . $seoBlock
     . $bodyBlock
     . '<div class="mt-6 flex flex-wrap gap-3">'

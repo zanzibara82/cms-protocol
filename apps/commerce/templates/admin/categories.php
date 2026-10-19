@@ -55,7 +55,10 @@ $rowHtml = static function (array $row): string {
 
     return '<li class="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-ink/10 bg-white p-4">'
         . '<div class="min-w-0"><p class="font-medium">' . e((string) $row['title']) . '</p>'
-        . '<p class="text-xs text-ink/50">' . e((string) $row['slug']) . ' · товаров: ' . e((string) $row['count']) . '</p></div>'
+        . '<p class="text-xs text-ink/50">' . e((string) $row['slug']) . ' · товаров: ' . e((string) $row['count']) . '</p>'
+        . '<a class="inline-flex min-h-[44px] items-center text-sm underline underline-offset-4 hover:text-accent"'
+        . ' href="' . e('/commerce/admin/categories/' . rawurlencode($id)) . '">Характеристики</a>'
+        . '</div>'
         . '<div class="flex flex-wrap items-end gap-2">' . $orderNav . $rename . $delete . '</div></li>';
 };
 

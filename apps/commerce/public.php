@@ -50,11 +50,13 @@ function commerceCategoryPage(array $params = []): void
     }
 
     $page = pageOf((string) queryString('page', '1'));
+    $filters = commerceCategoryFilters((string) $category['id']);
     $list = commerceProductList([
         'category' => (string) $category['id'],
         'published_only' => true,
         'page' => $page,
         'per_page' => COMMERCE_SHOP_PER_PAGE,
+        'attributes' => $filters['conditions'],
     ]);
     $pages = max(1, (int) ceil($list['total'] / COMMERCE_SHOP_PER_PAGE));
 
@@ -67,11 +69,135 @@ function commerceCategoryPage(array $params = []): void
             'pages' => $pages,
             'current' => min($page, $pages),
         ],
+        'filters' => $filters,
         'cartCount' => commerceCartTotal()['count'],
     ], [
         'title' => (string) $category['title'] . ' — магазин',
         'noindex' => false,
     ]);
+}
+
+/**
+ * Фильтры витрины рубрики: по характеристикам этой рубрики читаются параметры адреса.
+ * Значение CHOICE идёт строкой, NUMBER — границами от/до; всё, что не разобралось
+ * числом, фильтром не считается — список просто показывает без этой границы.
+ *
+ * @return array{rows: list<array{id: string, key: string, label: string, type: string, unit: ?string, choices: list<string>, raw: string, from: string, to: string}>, conditions: list<array{attribute_id: string, value: string, from: ?float, to: ?float}>, chips: list<array{label: string, value: string, query: string}>, query: string}
+ */
+function commerceCategoryFilters(string $categoryId): array
+{
+    $rows = [];
+    $conditions = [];
+    $kept = [];
+
+    foreach (commerceAttributes($categoryId) as $attribute) {
+        $type = (string) $attribute['type'];
+        $key = 'attr_' . (string) $attribute['slug'];
+        $label = (string) $attribute['label'];
+        $raw = '';
+        $from = '';
+        $to = '';
+
+        if ($type === 'CHOICE') {
+            $raw = trim((string) queryString($key, ''));
+            $raw = mb_substr($raw, 0, 300);
+
+            if ($raw !== '') {
+                $conditions[] = [
+                    'attribute_id' => (string) $attribute['id'],
+                    'value' => $raw,
+                    'from' => null,
+                    'to' => null,
+                ];
+                $kept[$key] = ['label' => $label, 'value' => $raw];
+            }
+        } else {
+            $from = trim((string) queryString($key . '_from', ''));
+            $to = trim((string) queryString($key . '_to', ''));
+            $fromValue = commerceFilterNumber($from);
+            $toValue = commerceFilterNumber($to);
+
+            if ($fromValue !== null) {
+                $kept[$key . '_from'] = ['label' => $label . ' (от)', 'value' => $from];
+            }
+
+            if ($toValue !== null) {
+                $kept[$key . '_to'] = ['label' => $label . ' (до)', 'value' => $to];
+            }
+
+            if ($fromValue !== null || $toValue !== null) {
+                $conditions[] = [
+                    'attribute_id' => (string) $attribute['id'],
+                    'value' => '',
+                    'from' => $fromValue,
+                    'to' => $toValue,
+                ];
+            }
+        }
+
+        $choices = [];
+
+        if ($type === 'CHOICE') {
+            $choices = array_map(
+                static fn (array $row): string => (string) $row['value'],
+                commerceAttributeChoices((string) $attribute['id'])
+            );
+        }
+
+        $rows[] = [
+            'id' => (string) $attribute['id'],
+            'key' => $key,
+            'label' => $label,
+            'type' => $type,
+            'unit' => $attribute['unit'],
+            'choices' => $choices,
+            'raw' => $raw,
+            'from' => $from,
+            'to' => $to,
+        ];
+    }
+
+    // Ссылка снятия фильтра: все остальные выбранные значения остаются в адресе.
+    $chips = [];
+    foreach ($kept as $key => $entry) {
+        $others = $kept;
+        unset($others[$key]);
+
+        $otherParams = [];
+        foreach ($others as $otherKey => $otherEntry) {
+            $otherParams[$otherKey] = (string) $otherEntry['value'];
+        }
+
+        $chips[] = [
+            'label' => (string) $entry['label'],
+            'value' => (string) $entry['value'],
+            'query' => http_build_query($otherParams),
+        ];
+    }
+
+    $keptParams = [];
+    foreach ($kept as $key => $entry) {
+        $keptParams[$key] = (string) $entry['value'];
+    }
+
+    return [
+        'rows' => $rows,
+        'conditions' => $conditions,
+        'chips' => $chips,
+        'query' => http_build_query($keptParams),
+    ];
+}
+
+/** Разбор границы числа для фильтра: «1 250» и «1 250,5» понимаются, мусор — нет. */
+function commerceFilterNumber(string $raw): ?float
+{
+    $cleaned = str_replace(' ', '', $raw);
+
+    if ($cleaned === '' || preg_match('/^\d+([.,]\d+)?$/', $cleaned) !== 1) {
+        return null;
+    }
+
+    return (float) str_replace(',', '.', $cleaned);
 }
 
 /** @param array<string, string> $params */
@@ -84,18 +210,30 @@ function commerceProductPage(array $params = []): void
         notFound();
     }
 
-    $cents = $product['price_promo'] !== null
-        ? commerceCents((float) $product['price_promo'])
-        : commerceCents((float) $product['price_retail']);
     $currency = (string) $product['currency'];
+    $variants = commerceVariantOptions((string) $product['id']);
 
-    commerceProductHead($product, $cents);
+    if ($variants === []) {
+        $cents = $product['price_promo'] !== null
+            ? commerceCents((float) $product['price_promo'])
+            : commerceCents((float) $product['price_retail']);
+    } else {
+        // Товар с вариантами продаётся по ценам вариантов: «от — до» честнее, чем
+        // устаревшая цена родителя.
+        $prices = array_map(static fn (array $row): int => (int) $row['price_cents'], $variants);
+        $cents = min($prices);
+    }
+
+    commerceProductHead($product, $cents, $variants);
 
     render('commerce/product', [
         'product' => $product,
         'categories' => commerceProductCategories((string) $product['id']),
         'priceHtml' => commerceFormatMoney($cents, $currency),
+        'priceFrom' => $variants !== [],
         'inStock' => (int) $product['stock'] > 0,
+        'variants' => $variants,
+        'specs' => commerceProductAttributes((string) $product['id']),
         'cartCount' => commerceCartTotal()['count'],
     ], [
         'title' => (string) ($product['seo_title'] !== null ? $product['seo_title'] : $product['title']) . ' — магазин',
@@ -105,22 +243,35 @@ function commerceProductPage(array $params = []): void
 
 /**
  * JSON-LD карточки товара из фактических данных базы: без выдуманных рейтингов, отзывов
- * и доставки — ТЗ магазина требует честной разметки. Цена — на момент запроса.
+ * и доставки — ТЗ магазина требует честной разметки. Товар с вариантами получает
+ * AggregateOffer (границы цен variants видны роботу), товар без вариантов — обычный Offer.
  *
  * @param array<string, mixed> $product
+ * @param list<array{id: string, sku: string, title: string, price_cents: int, price_retail_cents: int, currency: string, stock: int, in_stock: bool}> $variantOptions
  * @return array<string, mixed>
  */
-function commerceProductJsonLd(array $product, int $priceCents): array
+function commerceProductJsonLd(array $product, int $priceCents, array $variantOptions = []): array
 {
-    $offered = [
-        '@type' => 'Offer',
-        'priceCurrency' => (string) $product['currency'],
-        'price' => number_format($priceCents / 100, 2, '.', ''),
-    ];
+    if ($variantOptions === []) {
+        $offered = [
+            '@type' => 'Offer',
+            'priceCurrency' => (string) $product['currency'],
+            'price' => number_format($priceCents / 100, 2, '.', ''),
+        ];
 
-    if (array_key_exists('stock', $product)) {
-        $offered['availability'] = ((int) $product['stock'] > 0
-            ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock');
+        if (array_key_exists('stock', $product)) {
+            $offered['availability'] = ((int) $product['stock'] > 0
+                ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock');
+        }
+    } else {
+        $prices = array_map(static fn (array $row): int => (int) $row['price_cents'], $variantOptions);
+        $offered = [
+            '@type' => 'AggregateOffer',
+            'priceCurrency' => (string) $product['currency'],
+            'lowPrice' => number_format(min($prices) / 100, 2, '.', ''),
+            'highPrice' => number_format(max($prices) / 100, 2, '.', ''),
+            'offerCount' => count($variantOptions),
+        ];
     }
 
     $out = [
@@ -172,11 +323,12 @@ function commerceJsonLdTag(array $ld): string
 
 /** JSON-LD товара печатается в head через хук page_head: серверная разметка живёт в head, а шаблон не склеивает script-блок руками.
  * @param array<string, mixed> $product
+ * @param list<array{id: string, sku: string, title: string, price_cents: int, price_retail_cents: int, currency: string, stock: int, in_stock: bool}> $variantOptions
  */
-function commerceProductHead(array $product, int $priceCents): void
+function commerceProductHead(array $product, int $priceCents, array $variantOptions = []): void
 {
-    addAction('page_head', static function () use ($product, $priceCents): void {
-        $head = commerceJsonLdTag(commerceProductJsonLd($product, $priceCents));
+    addAction('page_head', static function () use ($product, $priceCents, $variantOptions): void {
+        $head = commerceJsonLdTag(commerceProductJsonLd($product, $priceCents, $variantOptions));
 
         echo $head; /* @safe html */
     });
@@ -207,13 +359,14 @@ function commerceCartAddAction(array $params = []): void
 {
     csrfCheck();
     $id = mb_substr(trim((string) ($_POST['id'] ?? '')), 0, 26);
+    $variantId = mb_substr(trim((string) ($_POST['variant'] ?? '')), 0, 26);
     $qty = (int) ($_POST['qty'] ?? 1);
     $qty = max(1, min($qty, COMMERCE_CART_MAX_QTY));
     $back = isInternalNextPath((string) ($_POST['back'] ?? '')) ? (string) $_POST['back'] : '/shop';
 
     // Куда вернуться: если товар был передан с карточки — назад к нему; причина отказа
     // печатается зелёной/красной плашкой текущего раздела.
-    $saved = commerceCartAdd($id, $qty);
+    $saved = commerceCartAdd($id, $qty, $variantId);
 
     if (!$saved['ok']) {
         startSession();
@@ -239,7 +392,14 @@ function commerceCartUpdateAction(array $params = []): void
 {
     csrfCheck();
     $op = (string) ($_POST['op'] ?? '');
-    $id = mb_substr(trim((string) ($_POST['id'] ?? '')), 0, 26);
+
+    // Ключ позиции вида «товар» или «товар:вариант»: длина правится символами
+    // и форматом, а не обрезанием — собранный вручную ключ вслепую не принимается.
+    $id = trim((string) ($_POST['id'] ?? ''));
+
+    if (!preg_match('/^[A-Za-z0-9]{1,26}(:[A-Za-z0-9]{1,26})?$/', $id)) {
+        redirect('/shop/cart');
+    }
 
     if ($op === 'set') {
         $qty = (int) ($_POST['qty'] ?? 0);
