@@ -14,6 +14,7 @@ const COMMERCE_NAV_PATHS = [
     '/commerce/admin/promos' => 'Промо-правила',
     '/commerce/admin/suppliers' => 'Поставщики',
     '/commerce/admin/pricebook' => 'Прайс-лист',
+    '/commerce/admin/webhooks' => 'Webhooks',
     '/commerce/admin/orders' => 'Заказы',
 ];
 
@@ -36,6 +37,8 @@ const COMMERCE_NOTICE_TEXT = [
     'promo_deleted' => 'Правило промо удалено.',
     'supplier_saved' => 'Поставщик сохранён.',
     'supplier_deleted' => 'Поставщик удалён.',
+    'webhook_saved' => 'Webhook сохранён.',
+    'webhook_deleted' => 'Webhook удалён.',
 ];
 
 /**
@@ -149,12 +152,39 @@ function commerceAdminSummary(array $params = []): void
         . ' FROM ' . t('commerce_order') . ' ORDER BY created_at DESC, number DESC LIMIT 5'
     );
 
+    // Сводка 30 дней: честные числа по разделам. Валюты не смешиваются — раскладка
+    // по валюте держит шаблон от ложных сумм рублей и долларов в одной строке.
+    $since = utcStamp(nowUtc()->modify('-30 days'));
+    $analyticsOrders = (int) value(
+        'SELECT COUNT(*) FROM ' . t('commerce_order') . ' WHERE created_at >= ?',
+        [$since]
+    );
+    $analyticsByCurrency = all(
+        'SELECT currency, COUNT(*) AS paid, COALESCE(SUM(total), 0) AS revenue'
+        . ' FROM ' . t('commerce_order')
+        . " WHERE created_at >= ? AND status IN ('PAID', 'SHIPPED', 'DONE')"
+        . ' GROUP BY currency ORDER BY currency',
+        [$since]
+    );
+    $analytics = [
+        'orders' => $analyticsOrders,
+        'paid' => array_map(
+            static fn (array $row): array => [
+                'currency' => (string) $row['currency'],
+                'paid' => (int) $row['paid'],
+                'revenue' => (float) $row['revenue'],
+            ],
+            $analyticsByCurrency
+        ),
+    ];
+
     render('commerce/admin/summary', array_merge([
         'nav' => commerceAdminNav(requestPath()),
         'notice' => commerceAdminNotice(),
         'counts' => $counts,
         'lowStock' => $lowRows,
         'recentOrders' => $recentOrders,
+        'analytics' => $analytics,
     ], commerceAdminAlert()), ['title' => 'Магазин — обзор', 'noindex' => true]);
 }
 
@@ -1240,6 +1270,123 @@ function commercePricebookRenderImport(string $importError, ?array $report, stri
         'supplier' => $supplier,
         'rows' => commercePricebookRows(null),
     ], commerceAdminAlert()), ['title' => 'Прайс-лист — магазин', 'noindex' => true]);
+}
+
+
+// ---------------------------------------------------------------------------
+// Webhooks (M6): приёмники событий заказов
+// ---------------------------------------------------------------------------
+
+/**
+ * Экран вебхуков: список и одна форма. Новый вебхук предлагается со свежим секретом —
+ * секрет обязателен не ради формы, а для подписи событий.
+ *
+ * @param array<string, string> $params
+ */
+function commerceAdminWebhooks(array $params = []): void
+{
+    $id = routeId26($params);
+    $webhook = $id !== '' ? commerceWebhook($id) : null;
+
+    if ($id !== '' && $webhook === null) {
+        finishAppAction(['ok' => false, 'error' => 'Вебхука уже нет — обновите список.'], '/commerce/admin/webhooks', '');
+
+        return;
+    }
+
+    render('commerce/admin/webhooks', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => commerceAdminNotice(),
+        'webhooks' => commerceWebhooksList(),
+        'mode' => $webhook !== null ? 'edit' : 'new',
+        'webhook' => $webhook,
+        'form' => [
+            'url' => '',
+            'secret' => $webhook !== null ? '' : commerceWebhookSecretSuggest(),
+            'active' => $webhook !== null ? (int) $webhook['active'] : 1,
+        ],
+        'errors' => [],
+    ], commerceAdminAlert()), ['title' => 'Webhooks — магазин', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function commerceWebhookAction(array $params = []): void
+{
+    csrfCheck();
+    $id = routeId26($params);
+    $op = postString('op');
+    $address = '/commerce/admin/webhooks';
+
+    if ($op === 'create') {
+        $check = commerceValidateWebhook($_POST);
+
+        if ($check['errors'] !== []) {
+            commerceWebhooksRenderFailure(null, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceCreateWebhook($check['values']), $address);
+
+        return;
+    }
+
+    $webhook = commerceWebhook($id);
+
+    if ($op === 'save') {
+        if ($webhook === null) {
+            finishAppAction(['ok' => false, 'error' => 'Вебхука уже нет — обновите список.'], $address, '');
+
+            return;
+        }
+
+        $check = commerceValidateWebhook($_POST);
+
+        if ($check['errors'] !== []) {
+            commerceWebhooksRenderFailure($webhook, $check['values'], $check['errors']);
+
+            return;
+        }
+
+        commerceFinish(commerceUpdateWebhook($id, $check['values']), $address);
+
+        return;
+    }
+
+    if ($op === 'delete') {
+        commerceFinish(
+            $webhook !== null ? commerceDeleteWebhook($id) : ['ok' => false, 'error' => 'Вебхука уже нет — обновите список.', 'notice' => ''],
+            $address
+        );
+
+        return;
+    }
+
+    finishAppAction(['ok' => false, 'error' => 'Неизвестное действие с вебхуком.'], $address, '');
+}
+
+/**
+ * Экран вебхуков с отказом формы: набранное возвращается текстом, иначе место зря потеряли.
+ *
+ * @param array{id: string, url: string, secret: string, active: int}|null $webhook
+ * @param array{url: string, secret: string, active: int} $values
+ * @param array<string, string> $errors
+ */
+function commerceWebhooksRenderFailure(?array $webhook, array $values, array $errors): void
+{
+    render('commerce/admin/webhooks', array_merge([
+        'nav' => commerceAdminNav(requestPath()),
+        'notice' => '',
+        'webhooks' => commerceWebhooksList(),
+        'mode' => $webhook !== null ? 'edit' : 'new',
+        'webhook' => $webhook,
+        'form' => [
+            'url' => (string) $values['url'],
+            'secret' => (string) $values['secret'],
+            'active' => (int) $values['active'],
+        ],
+        'errors' => $errors,
+    ], commerceAdminAlert()), ['title' => 'Webhooks — магазин', 'noindex' => true]);
 }
 
 

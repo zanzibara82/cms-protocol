@@ -164,6 +164,10 @@ function commerceOrderCreate(array $checkout, array $lines): array
         $currency
     ));
 
+    // Webhooks заказов (M6): событие создания уходит после письма покупателю,
+    // до возврата в контроллер. Сбой доставки ронять оформление не умеет.
+    commerceWebhookEvent('order.created', $id);
+
     return [
         'ok' => true,
         'error' => '',
@@ -347,6 +351,10 @@ function commerceSetOrderStatus(string $orderId, string $status): array
     logInfo('commerce.order_status', ['orderId' => $orderId, 'status' => $status, 'previous' => $previous]);
 
     commerceMailStatusChange($orderId);
+
+    // Webhooks заказов (M6): смена статуса уходит письмом и приёмникам; сбой
+    // доставки не имеет права изменить исход правки статуса.
+    commerceWebhookEvent('order.status_changed', $orderId);
 
     return ['ok' => true, 'error' => '', 'notice' => 'order_updated'];
 }

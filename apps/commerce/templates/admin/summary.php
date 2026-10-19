@@ -12,6 +12,7 @@ declare(strict_types=1);
  * @var array<string, int> $counts
  * @var list<array<string, mixed>> $lowStock
  * @var list<array<string, mixed>> $recentOrders
+ * @var array{orders: int, paid: list<array{currency: string, paid: int, revenue: float}>} $analytics
  */
 $productForms = ['товар', 'товара', 'товаров'];
 $categoryForms = ['рубрика', 'рубрики', 'рубрик'];
@@ -73,11 +74,34 @@ $recentPanel = $orderRows === ''
         . '<tr><th class="px-2 py-2 text-left font-semibold">Номер</th><th class="px-2 py-2 text-left font-semibold">Покупатель</th><th class="px-2 py-2 text-left font-semibold">Сумма</th><th class="px-2 py-2 text-left font-semibold">Статус</th></tr>'
         . '</thead><tbody>' . $orderRows . '</tbody></table>';
 
+$analyticsRows = '';
+foreach ((array) $analytics['paid'] as $row) {
+    $analyticsRows .= '<div class="flex items-baseline justify-between gap-2 border-b border-ink/10 py-1">'
+        . '<dt class="text-sm text-ink/60">оплаченных, ' . e((string) $row['currency']) . '</dt>'
+        . '<dd class="font-medium tabular-nums">' . e((string) $row['paid']) . '</dd>'
+        . '<dd class="font-medium tabular-nums">'
+        . e(commerceFormatMoney(commerceCents((float) $row['revenue']), (string) $row['currency']))
+        . '</dd></div>';
+}
+
+$analyticsPanel = ((int) $analytics['orders'] === 0)
+    ? '<p class="text-sm text-ink/60">За 30 дней заказов не было — данных нет.</p>'
+        : ((array) $analytics['paid'] === []
+            ? '<p class="text-sm text-ink/60">Оплаченных за 30 дней нет.</p>'
+        : '<dl class="mt-2">'
+            . '<div class="flex items-baseline justify-between gap-2 border-b border-ink/10 py-1">'
+            . '<dt class="text-sm text-ink/60">заказов за 30 дней</dt><dd class="font-medium tabular-nums">'
+            . e((string) $analytics['orders']) . '</dd></div>'
+            . $analyticsRows
+            . '</dl>');
+
 $content = $nav
     . '<div class="grid gap-3 sm:grid-cols-2">'
     . $panel
     . $ordersPanel
     . '</div>'
+    . '<h2 class="mt-6 font-semibold">За 30 дней</h2>'
+    . $analyticsPanel
     . '<h2 class="mt-6 font-semibold">Малый остаток</h2>'
     . $lowPanel
     . '<h2 class="mt-6 font-semibold">Свежие заказы</h2>'

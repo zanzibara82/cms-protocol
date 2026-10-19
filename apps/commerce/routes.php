@@ -21,6 +21,12 @@ addRoute('POST', '/shop/order', 'commerceOrderAction', ['app' => 'commerce']);
 addRoute('GET', '/shop/order/{number}', 'commerceOrderConfirmPage', ['app' => 'commerce']);
 addRoute('GET', '/shop/order', 'commerceOrderLookupPage', ['app' => 'commerce']);
 addRoute('POST', '/shop/order/lookup', 'commerceOrderLookupAction', ['app' => 'commerce']);
+
+// Commerce API (M6): JSON-vitrina только на чтение. Адреса до товара «{slug}», чтобы
+// читатель товара не съел вложенные адреса.
+addRoute('GET', '/shop/api/products', 'commerceApiProductsPage', ['app' => 'commerce']);
+addRoute('GET', '/shop/api/products/{slug}', 'commerceApiProductPage', ['app' => 'commerce']);
+
 addRoute('GET', '/shop/{slug}', 'commerceProductPage', ['app' => 'commerce']);
 
 // Экраны админки — литералами: страж CsrfCoverageTest::postHandlers() ищет путь
@@ -69,6 +75,13 @@ addRoute('POST', '/commerce/admin/suppliers/{id}', 'commerceSupplierAction', ['a
 addRoute('GET', '/commerce/admin/pricebook', 'commerceAdminPricebook', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/commerce/admin/pricebook/export', 'commercePricebookExport', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/pricebook', 'commercePricebookAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+
+// Webhooks заказов (M6): приёмники событий правки статуса и создания заказа,
+// редактирование по адресам вида /{id}.
+addRoute('GET', '/commerce/admin/webhooks', 'commerceAdminWebhooks', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/commerce/admin/webhooks/{id}', 'commerceAdminWebhooks', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/webhooks', 'commerceWebhookAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/commerce/admin/webhooks/{id}', 'commerceWebhookAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 
 addRoute('GET', '/commerce/admin/orders', 'commerceAdminOrders', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/commerce/admin/orders', 'commerceOrdersAction', ['app' => 'commerce', 'private' => true, 'permission' => 'login']);

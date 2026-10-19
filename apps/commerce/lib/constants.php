@@ -102,3 +102,14 @@ const COMMERCE_SESSION_COUPON = 'commerce_coupon';
 const COMMERCE_PRICEBOOK_FILE_MAX_BYTES = 5 * 1024 * 1024;
 const COMMERCE_PRICEBOOK_MAX_ROWS = 10000;
 const COMMERCE_SUPPLIER_NOTE_MAX = 300;
+
+// Webhooks и API (M6): вебхук — адрес с секретом, подпись события идёт в заголовке;
+// API витрины отвечает JSON-ом только опубликованными товарами.
+const COMMERCE_WEBHOOK_URL_MAX = 500;
+const COMMERCE_WEBHOOK_SECRET_MIN = 20;
+const COMMERCE_WEBHOOK_SECRET_MAX = 200;
+const COMMERCE_WEBHOOK_TIMEOUT = 5;
+const COMMERCE_API_PAGE_SIZE = 20;
+// События заказов: создание гостем и правка статуса в админке (включая отмену).
+/** @var list<string> */
+const COMMERCE_WEBHOOK_EVENTS = ['order.created', 'order.status_changed'];

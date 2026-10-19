@@ -21,12 +21,37 @@ function commerceStoreNotice(): string
 function commerceShopPage(array $params = []): void
 {
     $page = pageOf((string) queryString('page', '1'));
-    $list = commerceProductList(['published_only' => true, 'page' => $page, 'per_page' => COMMERCE_SHOP_PER_PAGE]);
+
+    // Поиск по витрине: слово до 80 знаков, варианты товара участвуют в поиске наравне
+    // с товарами. Сортировка выбирается из списка; остальное — «новое сверху».
+    $query = mb_substr(trim((string) queryString('q', '')), 0, 80);
+    $sortRaw = (string) queryString('sort', '');
+    $sort = in_array($sortRaw, ['new', 'price-asc', 'price-desc'], true) ? $sortRaw : '';
+
+    $list = commerceProductList([
+        'published_only' => true,
+        'page' => $page,
+        'per_page' => COMMERCE_SHOP_PER_PAGE,
+        'q' => $query,
+        'sort' => $sort,
+        'variants_search' => true,
+    ]);
     $pages = max(1, (int) ceil($list['total'] / COMMERCE_SHOP_PER_PAGE));
 
+    $heading = 'Каталог';
+    $intro = 'Товары магазина к самовывозу и заказам.';
+
+    if ($query !== '') {
+        $heading = 'Поиск: «' . $query . '»';
+        $intro = (string) $list['total'] . ' ' . commerceSearchNoun((int) $list['total'])
+            . ' по названию, артикулу товара и варианту.';
+    }
+
     render('commerce/shop', [
-        'heading' => 'Каталог',
-        'intro' => 'Товары магазина к самовывозу и заказам.',
+        'heading' => $heading,
+        'intro' => $intro,
+        'query' => $query,
+        'sort' => $sort,
         'categories' => commerceCategories(true),
         'list' => [
             'rows' => $list['rows'],
@@ -36,7 +61,23 @@ function commerceShopPage(array $params = []): void
         ],
         'cartCount' => commerceCartTotal()['count'],
         'notice' => commerceStoreNotice(),
-    ], ['title' => 'Каталог — магазин']);
+    ], ['title' => ($query !== '' ? 'Поиск — ' . $query . ' ' : '') . 'Каталог — магазин']);
+}
+
+/** Слово для чисел поиска: один товар, два товара, пять товаров. */
+function commerceSearchNoun(int $count): string
+{
+    $form11 = $count % 100;
+
+    if ($form11 >= 11 && $form11 <= 14) {
+        return 'товаров';
+    }
+
+    return match ($count % 10) {
+        1 => 'товар',
+        2, 3, 4 => 'товара',
+        default => 'товаров',
+    };
 }
 
 /** @param array<string, string> $params */

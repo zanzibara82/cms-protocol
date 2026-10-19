@@ -268,9 +268,12 @@ function commerceProductCategories(string $productId): array
  * названию и артикулу идёт через escapeLike() — знак % в слове «скидка%» не открывает
  * веер незапланированных совпадений. Фильтры характеристик приходят списком условий
  * «атрибут -> значение или диапазон»: на рубрику он либо сужает, либо ничего не
- * находит — сводка чисел не врёт.
+ * находит — сводка чисел не врёт. Витрина с variants_search захватывает в поиск ещё
+ * варианты товара: покупатель набирает SKU варианта и приходит на товар. Сортировка
+ * price-asc/price-desc идёт по «витринной» цене: наличие вариантов честно ведёт
+ * к минимуму цен вариантов, без вариантов — к цене самого товара.
  *
- * @param array{q?: string, category?: string, status?: string, page?: int, per_page?: int, published_only?: bool, attributes?: list<array{attribute_id: string, value: string, from: ?float, to: ?float}>} $filter
+ * @param array{q?: string, category?: string, status?: string, page?: int, per_page?: int, published_only?: bool, sort?: string, variants_search?: bool, attributes?: list<array{attribute_id: string, value: string, from: ?float, to: ?float}>} $filter
  * @return array{rows: list<array<string, mixed>>, total: int, applied: list<string>}
  */
 function commerceProductList(array $filter): array
@@ -298,10 +301,21 @@ function commerceProductList(array $filter): array
 
     $query = (string) ($filter['q'] ?? '');
     if ($query !== '') {
-        $where[] = '(p.title LIKE ? OR p.sku LIKE ?)';
         $needle = '%' . escapeLike($query) . '%';
-        $args[] = $needle;
-        $args[] = $needle;
+        $clauses = ['p.title LIKE ?', 'p.sku LIKE ?'];
+        $queryArgs = [$needle, $needle];
+
+        // Варианты товара участвуют в поиске витрины: SKU и название варианта ведут
+        // к товару. Админ-список ищет только по товару — тонкая настройка хранится здесь.
+        if ((bool) ($filter['variants_search'] ?? false)) {
+            $clauses[] = 'p.id IN (SELECT v.product_id FROM ' . t('commerce_variant')
+                . ' v WHERE v.sku LIKE ? OR v.title LIKE ?)';
+            $queryArgs[] = $needle;
+            $queryArgs[] = $needle;
+        }
+
+        $where[] = '(' . implode(' OR ', $clauses) . ')';
+        $args = array_merge($args, $queryArgs);
     }
 
     /** @var list<array{attribute_id: string, value: string, from: ?float, to: ?float}> $attributeFilters */
@@ -337,6 +351,17 @@ function commerceProductList(array $filter): array
     $perPage = max(1, min((int) ($filter['per_page'] ?? 12), 60));
     $page = max(1, (int) ($filter['page'] ?? 1));
 
+    // Сортировка витрины: новизна по умолчанию; цена идёт по витринной цене — «от»:
+    // товар с вариантами сортируется минимумом цен вариантов, без вариантов — ценой.
+    $sort = (string) ($filter['sort'] ?? '');
+    $order = 'p.created_at DESC, p.id';
+
+    if ($sort === 'price-asc' || $sort === 'price-desc') {
+        $order = 'COALESCE((SELECT MIN(COALESCE(v.price_promo, v.price_retail)) FROM '
+            . t('commerce_variant') . ' v WHERE v.product_id = p.id), COALESCE(p.price_promo, p.price_retail))'
+            . ($sort === 'price-asc' ? ' ASC' : ' DESC') . ', p.created_at DESC, p.id';
+    }
+
     $total = (int) value(
         sprintf('SELECT COUNT(*) FROM %s p%s', t('commerce_product'), $clause),
         $args
@@ -346,10 +371,11 @@ function commerceProductList(array $filter): array
     /** @var list<array<string, mixed>> $rows */
     $rows = all(
         sprintf(
-            'SELECT %s FROM %s p%s ORDER BY p.created_at DESC, p.id LIMIT %d OFFSET %d',
+            'SELECT %s FROM %s p%s ORDER BY %s LIMIT %d OFFSET %d',
             COMMERCE_CARD_COLUMNS,
             t('commerce_product'),
             $clause,
+            $order,
             $perPage,
             $offset
         ),

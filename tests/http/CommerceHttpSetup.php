@@ -68,7 +68,7 @@ final class CommerceHttpSetup
      */
     public static function prepare(): void
     {
-        foreach (['commerce_order_item', 'commerce_order', 'commerce_variant', 'commerce_product_attribute', 'commerce_coupon', 'commerce_promo', 'commerce_supplier'] as $table) {
+        foreach (['commerce_order_item', 'commerce_order', 'commerce_variant', 'commerce_product_attribute', 'commerce_coupon', 'commerce_promo', 'commerce_supplier', 'commerce_webhook'] as $table) {
             run('DELETE FROM ' . t($table));
         }
         run('DELETE FROM ' . t('commerce_attribute_choice'));
@@ -188,6 +188,48 @@ final class CommerceHttpSetup
         return $id;
     }
 
+    /** Вебхук фикстурой: адрес, секрет, флажок активности. */
+    public static function addWebhook(string $url, string $secret, bool $active = true): string
+    {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('commerce_webhook', [
+            'id' => $id,
+            'url' => $url,
+            'secret' => $secret,
+            'active' => $active ? 1 : 0,
+            'last_state' => null,
+            'last_at' => null,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
+    /**
+     * Публикуемый товар фикстурой: строка для поиска, сортировки и Commerce API.
+     * Цены и остаток подставляются честными значениями, без скрытых правок.
+     */
+    public static function addProduct(string $slug, string $sku, string $title, float $priceRetail, ?float $pricePromo = null, int $stock = 5): string
+    {
+        $id = newId();
+
+        insert('commerce_product', self::productRow($id, [
+            'slug' => $slug,
+            'sku' => $sku,
+            'title' => $title,
+            'lead' => 'Фикстура M6: прибор для проверки.',
+        ], utcStamp(nowUtc()), [
+            'price_retail' => $priceRetail,
+            'price_promo' => $pricePromo,
+            'stock' => $stock,
+        ]));
+
+        return $id;
+    }
+
     public static function cleanup(): void
     {
         self::dropTables();
@@ -210,6 +252,7 @@ final class CommerceHttpSetup
             'commerce_coupon',
             'commerce_promo',
             'commerce_supplier',
+            'commerce_webhook',
             'commerce_product',
             'commerce_category',
         ] as $table) {

@@ -38,10 +38,11 @@ final class NoIndexNoStoreSweepTest extends TestCase
     private const OPEN = 'открытый экран без метки';
     private const REDIRECT = 'перенаправление';
 
-    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: 44 строки таблицы
-    // метода GET (ядро 6, новости 11, магазин 22, фикстуры 5) дают 53 варианта (новости 18,
-    // магазин 24), ещё 4 адреса вне таблицы — всего 57 запросов, из них помеченных 44
-    // (ядро 2, новости 15, магазин 18, фикстуры 5, добавки 4).
+    // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: ко времени M5
+    // было 57 вариантов из 44 строк таблицы метода GET, помеченных 44 из них. M6 добавляет
+    // 4 маршрута (список и карточка Commerce API, список и правка webhooks) и 5 вариантов:
+    // всего 62 запроса, из них помеченных 49. Числа не подгоняются под прогон: любое
+    // расхождение плана с деревом краснит именем адреса, а не молчит.
     //
     // Адресов вне таблицы четыре: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -51,13 +52,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 57;
-    private const MARKED_TOTAL = 44;
+    private const VARIANTS_TOTAL = 62;
+    private const MARKED_TOTAL = 49;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (57 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 56;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (62 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 61;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -147,6 +148,20 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'id' => newId(),
             'title' => 'Поставщик для обхода',
             'note' => null,
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+
+        // Вебхук М6 в обход: экран правки питается идентификатором фикстуры. Приёмник
+        // активен, но события в этом наборе не рождаются: заказы здесь не оформляются
+        // и статусы не правятся — наружный curl не звенит.
+        insert('commerce_webhook', [
+            'id' => newId(),
+            'url' => 'https://obhod.school.dev/webhooks/nova-orders',
+            'secret' => 'obhod-secret-2026-long-enough-minus-need-40',
+            'active' => 1,
+            'last_state' => null,
+            'last_at' => null,
             'created_at' => utcStamp(nowUtc()),
             'updated_at' => utcStamp(nowUtc()),
         ]);
@@ -548,6 +563,16 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 // Черновик «draft-tovar» из CommerceHttpSetup не в поиске витрины: адрес 404.
                 ['path' => '/shop/net-takogo-tovara', 'outcome' => self::MARKED, 'status' => 404],
             ],
+            // Commerce API М6: JSON-ответы идут без механики render(), но посылают пару
+            // заголовков сами (X-Robots-Tag: noindex + Cache-Control: no-store), исход тот
+            // же. Отсутствующий товар красит 404 этими же заголовками.
+            'GET /shop/api/products' => [
+                ['path' => '/shop/api/products', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /shop/api/products/{slug}' => [
+                ['path' => '/shop/api/products/{product}', 'outcome' => self::MARKED, 'status' => 200],
+                ['path' => '/shop/api/products/net-takogo-tovara', 'outcome' => self::MARKED, 'status' => 404],
+            ],
             'GET /commerce/admin' => [
                 ['path' => '/commerce/admin', 'outcome' => self::MARKED, 'status' => 200],
             ],
@@ -601,6 +626,14 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /commerce/admin/pricebook/export' => [
                 ['path' => '/commerce/admin/pricebook/export', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+
+            // Webhooks М6: список приёмников и экран правки выбранного по идентификатору.
+            'GET /commerce/admin/webhooks' => [
+                ['path' => '/commerce/admin/webhooks', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /commerce/admin/webhooks/{id}' => [
+                ['path' => '/commerce/admin/webhooks/{webhook}', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
@@ -811,7 +844,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
 
     /**
      * Токены скидок М4: купон и промо-правило фикстур сада строкой — экран правки
-     * использует их идентификаторы. Поставщик М5 идёт той же дорогой.
+     * использует их идентификаторы. Поставщик М5 и вебхук М6 идут той же дорогой.
      *
      * @return array<string, string>
      */
@@ -826,10 +859,16 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $supplier = one('SELECT id FROM ' . t('commerce_supplier') . " WHERE title = 'Поставщик для обхода'");
         self::assertIsArray($supplier, 'Фикстура: поставщик обхода не найден, экран правки недоступен');
 
+        $webhook = one(
+            'SELECT id FROM ' . t('commerce_webhook') . " WHERE url = 'https://obhod.school.dev/webhooks/nova-orders'"
+        );
+        self::assertIsArray($webhook, 'Фикстура: вебхук обхода не найден, экран правки недоступен');
+
         return [
             'coupon' => (string) $coupon['id'],
             'promo' => (string) $promo['id'],
             'supplier' => (string) $supplier['id'],
+            'webhook' => (string) $webhook['id'],
         ];
     }
 

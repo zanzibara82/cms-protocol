@@ -52,6 +52,7 @@ abstract class CommerceDbTestCase extends TestCase
             'commerce_coupon',
             'commerce_promo',
             'commerce_supplier',
+            'commerce_webhook',
             'commerce_product',
             'commerce_category',
         ] as $table) {
@@ -72,6 +73,7 @@ abstract class CommerceDbTestCase extends TestCase
             'commerce_coupon',
             'commerce_promo',
             'commerce_supplier',
+            'commerce_webhook',
             'commerce_product',
             'commerce_category',
         ] as $table) {

@@ -707,4 +707,208 @@ final class CommerceShopTest extends TestCase
             TestDb::seedUser(self::EDITOR_EMAIL, self::EDITOR_PASSWORD, 'editor');
         }
     }
+
+    // ------------------------------------------------------------------
+    // M6: поиск, сортировка, Commerce API, webhooks, сводка за 30 дней
+    // ------------------------------------------------------------------
+
+    public function testПоискВитриныИщетПоВариантуИСловам(): void
+    {
+        CommerceHttpSetup::addVariant(CommerceHttpSetup::$productId, 'COFFEE-24', 'Дработная', 1990.0, 2, null, 2);
+
+        $found = Kernel::get('/shop?q=COFFEE-24');
+        self::assertSame(200, $found['status']);
+        self::assertStringContainsString('Кофемашина', $found['body']);
+        self::assertStringContainsString('Поиск: «COFFEE-24»', $found['body']);
+
+        // Кириллица в query едет percent-кодировкой, как её посылает браузер.
+        $none = Kernel::get('/shop?q=' . rawurlencode('чепуха-purple'));
+        self::assertSame(200, $none['status']);
+        self::assertStringNotContainsString('Кофемашина', $none['body']);
+        self::assertStringContainsString('Ничего не нашлось', $none['body']);
+        self::assertStringContainsString('Поиск: «чепуха-purple»', $none['body']);
+    }
+
+    public function testСортировкаВитриныРазворачиваетЦены(): void
+    {
+        // Второй товар и вариант: у Кофемашины минимальная цена идёт с варианта,
+        // у Тостера — из своей строки. Такой порядок не смешивает рубрики.
+        CommerceHttpSetup::addVariant(CommerceHttpSetup::$productId, 'COFFEE-21', 'Дешёвая сетка', 1990.0, 3, null, 3);
+        CommerceHttpSetup::addProduct('toaster-slot', 'TOAST-11', 'Тостер', 5000.0, 4800.0, 6);
+
+        $asc = Kernel::get('/shop?sort=price-asc');
+        self::assertSame(200, $asc['status']);
+        self::assertStringContainsString('Кофемашина', $asc['body']);
+        self::assertStringContainsString('Тостер', $asc['body']);
+        self::assertGreaterThan(0, (int) ($asc['status'] ?? -1));
+        self::assertNotSame('', $asc['body']);
+
+        $ascPos = mb_strpos($asc['body'], 'Кофемашина');
+        $pos = mb_strpos($asc['body'], 'Тостер');
+        self::assertNotFalse($ascPos);
+        self::assertNotFalse($pos);
+        self::assertLessThan($pos, $ascPos, 'При сортировке по росту прежде дешевле');
+
+        $desc = Kernel::get('/shop?sort=price-desc');
+        $descPos = mb_strpos($desc['body'], 'Кофемашина');
+        $toastPos = mb_strpos($desc['body'], 'Тостер');
+        self::assertNotFalse($toastPos);
+        self::assertGreaterThan($toastPos, $descPos, 'При сортировке по падению прежде дороже');
+    }
+
+    public function testСортировкаЗадумчивогоСпискаВитриныНеискривляетНастройку(): void
+    {
+        // Чужой sort — отбрасывается: отвечает обычная лента, без ярости и без первых цен.
+        $odd = Kernel::get('/shop?sort=' . rawurlencode('сумбур'));
+        self::assertSame(200, $odd['status']);
+        self::assertStringContainsString('Кофемашина', $odd['body']);
+    }
+
+    public function testCommerceApiСписокДержитПубличностьИХвост(): void
+    {
+        $list = Kernel::get('/shop/api/products');
+        self::assertSame(200, $list['status']);
+        self::assertSame('application/json; charset=utf-8', (string) ($list['headers']['content-type'] ?? ''));
+        self::assertSame('noindex', (string) ($list['headers']['x-robots-tag'] ?? ''));
+        self::assertSame('no-store', (string) ($list['headers']['cache-control'] ?? ''));
+
+        $body = (array) json_decode($list['body'], true);
+        $items = (array) ($body['items'] ?? []);
+        self::assertGreaterThan(0, count($items), 'Публикованный товар появляется в открытой ленте');
+
+        $first = array_values(array_filter($items, static fn (array $row): bool => (string) ($row['slug'] ?? '') === 'kofemashina'))[0] ?? null;
+        self::assertIsArray($first, 'Кофемашина обязана быть в ленте');
+        self::assertSame(2240.0, (float) ($first['price_promo'] ?? 0));
+        self::assertSame(2800.0, (float) ($first['price_retail'] ?? 0));
+        self::assertSame('RUB', (string) ($first['currency'] ?? ''));
+        self::assertSame('COFFEE-1', (string) ($first['sku'] ?? ''));
+        self::assertStringStartsWith('http', (string) ($first['url'] ?? ''));
+
+        // Черновик в открытой ленте не появляется совсем.
+        self::assertStringNotContainsString('draft-tovar', $list['body']);
+
+        // Агрузка меньше страницы: хвоста потока нет.
+        self::assertArrayHasKey('next_after', $body);
+        self::assertNull($body['next_after']);
+    }
+
+    public function testCommerceApiКарточка404ИЗаголовки(): void
+    {
+        CommerceHttpSetup::addVariant(CommerceHttpSetup::$productId, 'COFFEE-DARK', 'Тёмная', 1990.0, 3, 1770.0, 4);
+
+        $card = Kernel::get('/shop/api/products/kofemashina');
+        self::assertSame(200, $card['status']);
+        self::assertSame('application/json; charset=utf-8', (string) ($card['headers']['content-type'] ?? ''));
+        self::assertSame('noindex', (string) ($card['headers']['x-robots-tag'] ?? ''));
+        self::assertSame('no-store', (string) ($card['headers']['cache-control'] ?? ''));
+
+        $body = (array) json_decode($card['body'], true);
+        self::assertSame('Кофемашина', (string) ($body['title'] ?? ''));
+        $variants = (array) ($body['variants'] ?? []);
+        self::assertGreaterThan(0, count($variants), 'Вариант дошёл до открытой карточки');
+        $dark = $variants[0] ?? [];
+        self::assertSame('COFFEE-DARK', (string) ($dark['sku'] ?? ''));
+        self::assertSame(1990.0, (float) ($dark['price_retail'] ?? 0));
+        self::assertSame(1770.0, (float) ($dark['price_promo'] ?? 0));
+        self::assertTrue((bool) ($dark['available'] ?? false));
+
+        $missed = Kernel::get('/shop/api/products/net-takogo-tovara');
+        self::assertSame(404, $missed['status']);
+        self::assertSame('application/json; charset=utf-8', (string) ($missed['headers']['content-type'] ?? ''));
+        self::assertSame('noindex', (string) ($missed['headers']['x-robots-tag'] ?? ''));
+        self::assertSame('no-store', (string) ($missed['headers']['cache-control'] ?? ''));
+        self::assertSame('Такого товара нет', (string) ((array) json_decode($missed['body'], true))['error']);
+    }
+
+    public function testWebhooksЭкранДержитЦиклПриёмников(): void
+    {
+        $this->ensureEditor();
+        $this->login();
+
+        $page = Kernel::get('/commerce/admin/webhooks');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Приёмников пока нет', $page['body']);
+        self::assertStringContainsString('name="url"', $page['body']);
+        self::assertStringContainsString('name="secret"', $page['body']);
+
+        $created = Kernel::post('/commerce/admin/webhooks', [
+            '_token' => $this->token($page['body']),
+            'op' => 'create',
+            'url' => 'https://send.example.dev/hook',
+            'secret' => 'send-secret-20-symbols-x',
+            'active' => '1',
+        ]);
+        self::assertSame(302, $created['status']);
+        self::assertStringContainsString('webhook_saved', (string) ($created['headers']['location'] ?? ''));
+
+        $list = Kernel::get('/commerce/admin/webhooks');
+        self::assertStringContainsString('https://send.example.dev/hook', $list['body']);
+        self::assertStringContainsString('Активен', $list['body']);
+
+        // Отказ формы с коротким секретом возвращается набранным текстом.
+        $broken = Kernel::post('/commerce/admin/webhooks', [
+            '_token' => $this->token($list['body']),
+            'op' => 'create',
+            'url' => 'https://short.example.dev/hook',
+            'secret' => 'короткий',
+        ]);
+        self::assertSame(200, $broken['status']);
+        self::assertStringContainsString('Секрет не короче 20 символов.', $broken['body']);
+        self::assertStringContainsString('https://short.example.dev/hook', $broken['body']);
+
+        $row = (array) one('SELECT id FROM ' . t('commerce_webhook') . " WHERE url = 'https://send.example.dev/hook'");
+        self::assertArrayHasKey('id', $row);
+
+        $edit = Kernel::get('/commerce/admin/webhooks/' . rawurlencode((string) $row['id']));
+        self::assertSame(200, $edit['status']);
+        self::assertStringContainsString('https://send.example.dev/hook', $edit['body']);
+        self::assertStringContainsString('Сохранить вебхук', $edit['body']);
+
+        $saved = Kernel::post('/commerce/admin/webhooks/' . rawurlencode((string) $row['id']), [
+            '_token' => $this->token($edit['body']),
+            'op' => 'save',
+            'url' => 'https://второй.example.dev/hook',
+            'secret' => 'second-secret-20-symbols',
+        ]);
+        self::assertSame(302, $saved['status']);
+
+        $list = Kernel::get('/commerce/admin/webhooks');
+        self::assertStringContainsString('https://второй.example.dev/hook', $list['body']);
+        self::assertStringContainsString('Выключен', $list['body']);
+
+        $deleted = Kernel::post('/commerce/admin/webhooks/' . rawurlencode((string) $row['id']), [
+            '_token' => $this->token($list['body']),
+            'op' => 'delete',
+        ]);
+        self::assertSame(302, $deleted['status']);
+        self::assertStringContainsString('webhook_deleted', (string) ($deleted['headers']['location'] ?? ''));
+
+        $list = Kernel::get('/commerce/admin/webhooks');
+        self::assertStringNotContainsString('второй.example.dev', $list['body']);
+    }
+
+    public function testСводка30ДнейКраситЧестнымиЧислами(): void
+    {
+        $this->ensureEditor();
+        $this->login();
+
+        // Пустой день: оба сообщения честны.
+        $empty = Kernel::get('/commerce/admin');
+        self::assertStringContainsString('За 30 дней заказов не было — данных нет.', $empty['body']);
+
+        // Есть заказ, но все новые: оплаченных за 30 дней нет.
+        CommerceHttpSetup::addOrder('boris@example.dev', 'NEW');
+        $freshOnly = Kernel::get('/commerce/admin');
+        self::assertStringContainsString('Оплаченных за 30 дней нет.', $freshOnly['body']);
+
+        // Оплат приходит две: суммарная валюта не сворачивается в одну строку.
+        CommerceHttpSetup::addOrder('boris@example.dev', 'PAID');
+        CommerceHttpSetup::addOrder('boris@example.dev', 'DONE');
+        $paid = Kernel::get('/commerce/admin');
+        self::assertStringContainsString('заказов за 30 дней', $paid['body']);
+        self::assertStringContainsString('3</dd>', $paid['body']);
+        self::assertStringContainsString('оплаченных, RUB', $paid['body']);
+        self::assertStringContainsString('2</dd>', $paid['body']);
+        self::assertStringContainsString('44,80 ₽', $paid['body']);
+    }
 }
