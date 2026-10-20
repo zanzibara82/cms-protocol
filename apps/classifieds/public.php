@@ -167,6 +167,12 @@ function classifiedsListingPage(array $params = []): void
     $listing = classifiedsListingShape($row);
     $categorySlug = (string) ($row['category_slug'] ?? '');
     $categoryTitle = (string) ($row['category_title'] ?? '');
+    $user = classifiedsAccount();
+    $seller = classifiedsSellerPublic((string) $listing['owner_id']);
+    $listingHref = classifiedsListingHref((string) $listing['slug']);
+    $isFavorite = $user !== null && classifiedsIsFavorite((string) $user['id'], (string) $listing['id']);
+    $favoriteAction = $listingHref . '/favorite';
+    $favoriteLogin = $user === null ? '/login?next=' . rawurlencode($listingHref) : '';
 
     render('classifieds/listing', [
         'listing' => $listing,
@@ -178,11 +184,79 @@ function classifiedsListingPage(array $params = []): void
         'categories' => classifiedsCategoryVisible(),
         'gallery' => classifiedsListingGalleryHrefs($listing['id']),
         'attributes' => classifiedsListingAttributeValues($listing['id']),
+        'seller' => $seller,
+        'sellerHref' => $seller === null ? '' : classifiedsSellerHref((string) $seller['id']),
+        'canFavorite' => !$preview && $listing['status'] === 'PUBLISHED',
+        'isFavorite' => $isFavorite,
+        'favoriteAction' => $favoriteAction,
+        'favoriteLogin' => $favoriteLogin,
     ], [
         'title' => (string) ($listing['seo_title'] ?? $listing['title']),
         'description' => (string) ($listing['seo_description'] ?? excerpt($listing['body'], 160)),
         'noindex' => $preview || $listing['noindex'] || $listing['status'] !== 'PUBLISHED',
     ]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsSellerPage(array $params = []): void
+{
+    $id = mb_substr(trim((string) ($params['id'] ?? '')), 0, 26);
+    $seller = classifiedsSellerPublic($id);
+
+    if ($seller === null) {
+        notFound();
+    }
+
+    $page = pageOf((string) queryString('page', '1'));
+    $feed = classifiedsListingFeed([
+        'owner_id' => (string) $seller['id'],
+        'sort' => 'date',
+        'view' => 'grid',
+    ], $page);
+    $base = classifiedsSellerHref((string) $seller['id']);
+    $state = ['q' => '', 'sort' => 'date', 'view' => 'grid', 'filters' => []];
+
+    render('classifieds/seller', [
+        'seller' => $seller,
+        'list' => $feed,
+        'state' => $state,
+        'base' => $base,
+        'categories' => classifiedsCategoryVisible(),
+    ], [
+        'title' => (string) $seller['name'] . ' — продавец — Доска',
+        'description' => $seller['city'] !== ''
+            ? 'Объявления продавца ' . (string) $seller['name'] . ' в городе ' . (string) $seller['city'] . '.'
+            : 'Объявления продавца ' . (string) $seller['name'] . '.',
+        'noindex' => $feed['current'] > 1,
+    ]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsFavoriteAction(array $params = []): void
+{
+    csrfCheck();
+    $slug = trim((string) ($params['slug'] ?? ''));
+    $listing = classifiedsListingAnyStatus($slug);
+
+    if ($listing === null) {
+        notFound();
+    }
+
+    $href = classifiedsListingHref((string) $listing['slug']);
+    $user = classifiedsAccount();
+
+    if ($user === null) {
+        redirect('/login?next=' . rawurlencode($href));
+    }
+
+    $remove = postString('op') === 'remove';
+    $result = $remove
+        ? classifiedsFavoriteRemove((string) $user['id'], (string) $listing['id'])
+        : classifiedsFavoriteAdd((string) $user['id'], (string) $listing['id']);
+    $back = postString('back') === 'favorites' ? '/classifieds/cabinet/favorites' : $href;
+    $notice = (string) ($result['notice'] ?? '');
+
+    finishAppAction($result, $back, $notice);
 }
 
 /**
@@ -201,6 +275,7 @@ function classifiedsSitemapUrls(): array
     $rows = all(
         'SELECT slug, updated_at FROM ' . t('classifieds_listing')
         . " WHERE status = 'PUBLISHED' AND noindex = 0"
+        . ' AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())'
         . ' ORDER BY updated_at DESC LIMIT 5000'
     );
 

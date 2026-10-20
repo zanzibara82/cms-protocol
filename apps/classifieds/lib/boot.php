@@ -13,3 +13,5 @@ require_once __DIR__ . '/attributes.php';
 require_once __DIR__ . '/gallery.php';
 require_once __DIR__ . '/listings.php';
 require_once __DIR__ . '/feed.php';
+require_once __DIR__ . '/sellers.php';
+require_once __DIR__ . '/favorites.php';

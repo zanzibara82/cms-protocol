@@ -8,13 +8,16 @@ declare(strict_types=1);
 
 /** Колонки карточки: без описания и служебных колонок — список и витрина ими не сыт. */
 const CLASSIFIEDS_CARD_COLUMNS = 'l.id, l.slug, l.title, l.category_id, l.price, l.currency, l.negotiable,'
-    . ' l.location, l.image, l.status, l.created_at';
+    . ' l.location, l.image, l.status, l.expires_at, l.created_at';
 
 /** Полный набор: страница объявления и кабинет переживают описание и SEO. */
 const CLASSIFIEDS_FULL_COLUMNS = CLASSIFIEDS_CARD_COLUMNS . ', l.owner_id, l.body, l.seo_title,'
     . ' l.seo_description, l.noindex, l.updated_at';
 
 /** Страница каталога: строк на лист. */
+/** Публичная запись видна, пока срок не истёк; NULL оставлен для старых строк. */
+const CLASSIFIEDS_ACTIVE_SQL = '(l.expires_at IS NULL OR l.expires_at > UTC_TIMESTAMP())';
+
 const CLASSIFIEDS_PER_PAGE = 20;
 
 /** На главной доске свежих объявлений в один экран. */
@@ -24,7 +27,7 @@ const CLASSIFIEDS_HOME_LIMIT = 12;
  * Приводит строку базы к договору шаблонов: NULL там, где пусто, и строгие типы.
  *
  * @param array<string, mixed> $row
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}
  */
 function classifiedsListingShape(array $row): array
 {
@@ -41,6 +44,7 @@ function classifiedsListingShape(array $row): array
         'location' => $row['location'] !== null && (string) $row['location'] !== '' ? (string) $row['location'] : null,
         'image' => $row['image'] !== null && (string) $row['image'] !== '' ? (string) $row['image'] : null,
         'status' => (string) $row['status'],
+        'expires_at' => $row['expires_at'] !== null && (string) $row['expires_at'] !== '' ? (string) $row['expires_at'] : null,
         'seo_title' => $row['seo_title'] !== null && (string) $row['seo_title'] !== '' ? (string) $row['seo_title'] : null,
         'seo_description' => $row['seo_description'] !== null && (string) $row['seo_description'] !== '' ? (string) $row['seo_description'] : null,
         'noindex' => (int) $row['noindex'] === 1,
@@ -50,7 +54,33 @@ function classifiedsListingShape(array $row): array
 }
 
 /** Объявление по id целиком: кабинет и страница работают по одной форме договора. */
-/** @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null */
+/**
+ * Истёк ли срок публикации. NULL — бессрочная запись (старые объявления и черновики),
+ * поэтому такие карточки не прячем. Сравнение идёт в UTC, как и хранение дат.
+ *
+ * @param array<string, mixed> $listing
+ */
+function classifiedsListingIsExpired(array $listing, ?DateTimeImmutable $now = null): bool
+{
+    $expires = fromDb(isset($listing['expires_at']) ? (string) $listing['expires_at'] : null);
+
+    return $expires !== null && $expires <= ($now ?? nowUtc());
+}
+
+/** Новая дата окончания публикации: срок отсчитывается от момента действия. */
+function classifiedsListingNewExpiry(?DateTimeImmutable $now = null): string
+{
+    return utcStamp(($now ?? nowUtc())->modify('+' . CLASSIFIEDS_LISTING_DAYS . ' days'));
+}
+
+/** Момент окончания публикации для подписи в кабинете; NULL означает бессрочно. */
+/** @param array<string, mixed> $listing */
+function classifiedsListingExpiresAt(array $listing): ?DateTimeImmutable
+{
+    return fromDb(isset($listing['expires_at']) ? (string) $listing['expires_at'] : null);
+}
+
+/** @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null */
 function classifiedsListingById(string $id): ?array
 {
     $row = one('SELECT ' . CLASSIFIEDS_FULL_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l WHERE l.id = ?', [$id]);
@@ -70,7 +100,7 @@ function classifiedsPublishedListingWithCategory(string $slug): ?array
         'SELECT ' . CLASSIFIEDS_FULL_COLUMNS . ', c.slug AS category_slug, c.title AS category_title'
         . ' FROM ' . t('classifieds_listing') . ' l'
         . ' LEFT JOIN ' . t('classifieds_category') . ' c ON c.id = l.category_id'
-        . " WHERE l.slug = ? AND l.status = 'PUBLISHED'",
+        . " WHERE l.slug = ? AND l.status = 'PUBLISHED' AND " . CLASSIFIEDS_ACTIVE_SQL,
         [$slug]
     );
 
@@ -81,7 +111,7 @@ function classifiedsPublishedListingWithCategory(string $slug): ?array
  * Объявление любого статуса по адресу — для предпросмотра и кабинета: владельцу
  * черновик виден по прямой ссылке, гостю адрес отвечает как несуществующий.
  *
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
  */
 function classifiedsListingAnyStatus(string $slug): ?array
 {
@@ -104,7 +134,7 @@ function classifiedsCategoryFeed(array $category, int $page): array
 
     $total = (int) value(
         'SELECT COUNT(*) FROM ' . t('classifieds_listing') . ' l'
-        . " WHERE l.category_id IN ({$marks}) AND l.status = 'PUBLISHED'",
+        . " WHERE l.category_id IN ({$marks}) AND l.status = 'PUBLISHED' AND " . CLASSIFIEDS_ACTIVE_SQL,
         $ids
     );
 
@@ -118,7 +148,7 @@ function classifiedsCategoryFeed(array $category, int $page): array
 
     $rows = all(
         'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l'
-        . " WHERE l.category_id IN ({$marks}) AND l.status = 'PUBLISHED'"
+        . " WHERE l.category_id IN ({$marks}) AND l.status = 'PUBLISHED' AND " . CLASSIFIEDS_ACTIVE_SQL
         . ' ORDER BY l.created_at DESC, l.id DESC'
         . ' LIMIT ' . (string) CLASSIFIEDS_PER_PAGE . ' OFFSET ' . (string) $offset,
         $ids
@@ -136,7 +166,7 @@ function classifiedsHomeFeed(): array
 {
     return all(
         'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l'
-        . " WHERE l.status = 'PUBLISHED'"
+        . " WHERE l.status = 'PUBLISHED' AND " . CLASSIFIEDS_ACTIVE_SQL
         . ' ORDER BY l.created_at DESC, l.id DESC'
         . ' LIMIT ' . (string) CLASSIFIEDS_HOME_LIMIT
     );
@@ -305,6 +335,7 @@ function classifiedsCreateListing(string $ownerId, array $values, ?DateTimeImmut
             'location' => (string) $values['location'] !== '' ? (string) $values['location'] : null,
             'image' => isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
             'status' => (string) $values['status'],
+            'expires_at' => (string) $values['status'] === 'PUBLISHED' ? classifiedsListingNewExpiry($moment) : null,
             'seo_title' => (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
             'seo_description' => (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
             'noindex' => (int) $values['noindex'],
@@ -344,13 +375,25 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
     $slug = (string) $values['slug'];
 
     if ($slug === '') {
-        return ['ok' => false, 'error' => 'Адрес не собрался из названия.', 'notice' => ''];
+        return ['ok' => false, 'error' => 'Не задан адрес объявления.', 'notice' => ''];
+    }
+
+    $moment = $now ?? nowUtc();
+    $status = (string) $values['status'];
+    // Первая публикация, повторная после черновика и продление истёкшей записи получают
+    // новый срок. Обычное редактирование опубликованного срок не сдвигает.
+    $expiresAt = $listing['expires_at'];
+
+    if ($status !== 'PUBLISHED') {
+        $expiresAt = null;
+    } elseif ($expiresAt === null || (string) $listing['status'] !== 'PUBLISHED' || classifiedsListingIsExpired($listing, $moment)) {
+        $expiresAt = classifiedsListingNewExpiry($moment);
     }
 
     run(
         'UPDATE ' . t('classifieds_listing')
         . ' SET category_id = ?, slug = ?, title = ?, body = ?, price = ?, negotiable = ?, location = ?,' .
-        ' image = ?, status = ?, seo_title = ?, seo_description = ?, noindex = ?, updated_at = ? WHERE id = ?',
+        ' image = ?, status = ?, expires_at = ?, seo_title = ?, seo_description = ?, noindex = ?, updated_at = ? WHERE id = ?',
         [
             (string) $values['category'],
             $slug,
@@ -360,11 +403,12 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
             (int) $values['negotiable'],
             (string) $values['location'] !== '' ? (string) $values['location'] : null,
             isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
-            (string) $values['status'],
+            $status,
+            $expiresAt,
             (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
             (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
             (int) $values['noindex'],
-            utcStamp($now ?? nowUtc()),
+            utcStamp($moment),
             $id,
         ]
     );
@@ -386,7 +430,7 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
  *
  * @return array{ok: bool, error: string, notice: string}
  */
-function classifiedsListingSetStatus(string $id, string $ownerId, string $status): array
+function classifiedsListingSetStatus(string $id, string $ownerId, string $status, ?DateTimeImmutable $now = null): array
 {
     if (!in_array($status, CLASSIFIEDS_STATUS, true)) {
         return ['ok' => false, 'error' => 'Неизвестный статус объявления.', 'notice' => ''];
@@ -398,10 +442,121 @@ function classifiedsListingSetStatus(string $id, string $ownerId, string $status
         return ['ok' => false, 'error' => 'Объявления уже нет — обновите список.', 'notice' => ''];
     }
 
-    run('UPDATE ' . t('classifieds_listing') . ' SET status = ?, updated_at = ? WHERE id = ?', [$status, utcStamp(nowUtc()), $id]);
+    $moment = $now ?? nowUtc();
+    $expiresAt = $status === 'PUBLISHED' ? classifiedsListingNewExpiry($moment) : null;
+
+    run(
+        'UPDATE ' . t('classifieds_listing') . ' SET status = ?, expires_at = ?, updated_at = ? WHERE id = ?',
+        [$status, $expiresAt, utcStamp($moment), $id]
+    );
     logInfo('classifieds.listing_status', ['listingId' => $id, 'status' => $status]);
 
     return ['ok' => true, 'error' => '', 'notice' => $status === 'PUBLISHED' ? 'listing_published' : 'listing_hidden'];
+}
+
+/**
+ * Продление публикации на новый срок. Продлевать можно только опубликованное объявление,
+ * в том числе уже истёкшее: черновику сначала нужна публикация.
+ *
+ * @return array{ok: bool, error: string, notice: string}
+ */
+function classifiedsListingExtend(string $id, string $ownerId, ?DateTimeImmutable $now = null): array
+{
+    $listing = classifiedsListingById($id);
+
+    if ($listing === null || (string) $listing['owner_id'] !== $ownerId) {
+        return ['ok' => false, 'error' => 'Объявление не найдено — возможно, оно уже удалено.', 'notice' => ''];
+    }
+
+    if ((string) $listing['status'] !== 'PUBLISHED') {
+        return ['ok' => false, 'error' => 'Продлить можно только опубликованное объявление.', 'notice' => ''];
+    }
+
+    $moment = $now ?? nowUtc();
+
+    run(
+        'UPDATE ' . t('classifieds_listing') . ' SET expires_at = ?, updated_at = ? WHERE id = ?',
+        [classifiedsListingNewExpiry($moment), utcStamp($moment), $id]
+    );
+    logInfo('classifieds.listing_extended', ['listingId' => $id]);
+
+    return ['ok' => true, 'error' => '', 'notice' => 'listing_extended'];
+}
+
+/**
+ * Клонирование объявления в черновик владельца. Копируются текст, цена, категория и атрибуты,
+ * но НЕ изображения: файлы общие, и удаление копии стёрло бы их у оригинала.
+ *
+ * @return array{ok: bool, error: string, id: string, notice: string}
+ */
+function classifiedsListingClone(string $id, string $ownerId, ?DateTimeImmutable $now = null): array
+{
+    $listing = classifiedsListingById($id);
+
+    if ($listing === null || (string) $listing['owner_id'] !== $ownerId) {
+        return ['ok' => false, 'error' => 'Объявление не найдено — возможно, оно уже удалено.', 'id' => '', 'notice' => ''];
+    }
+
+    $suffix = ' (копия)';
+    $title = (string) $listing['title'];
+
+    if (mb_strlen($title . $suffix) > CLASSIFIEDS_TITLE_MAX) {
+        $title = rtrim(mb_substr($title, 0, CLASSIFIEDS_TITLE_MAX - mb_strlen($suffix))) . $suffix;
+    } else {
+        $title .= $suffix;
+    }
+
+    $slugPlan = classifiedsSlugPlan('', $title, static fn (string $candidate): bool => classifiedsListingSlugTaken($candidate), 'listing');
+
+    if ($slugPlan['slug'] === '' || $slugPlan['error'] !== '') {
+        return ['ok' => false, 'error' => 'Не удалось подобрать адрес для копии.', 'id' => '', 'notice' => ''];
+    }
+
+    $moment = $now ?? nowUtc();
+    $newId = newId();
+    $slug = $slugPlan['slug'];
+    $attributes = [];
+
+    foreach (all(
+        'SELECT attribute_id, value_text, value_number FROM ' . t('classifieds_listing_attribute') . ' WHERE listing_id = ?',
+        [$id]
+    ) as $row) {
+        $attributes[(string) $row['attribute_id']] = [
+            'value_text' => $row['value_text'] === null ? null : (string) $row['value_text'],
+            'value_number' => $row['value_number'] === null ? null : (float) $row['value_number'],
+        ];
+    }
+
+    tx(static function () use ($newId, $ownerId, $listing, $slug, $title, $moment, $attributes): void {
+        insert('classifieds_listing', [
+            'id' => $newId,
+            'owner_id' => $ownerId,
+            'category_id' => (string) $listing['category_id'],
+            'slug' => $slug,
+            'title' => $title,
+            'body' => (string) $listing['body'],
+            'price' => $listing['price'],
+            'currency' => (string) $listing['currency'],
+            'negotiable' => $listing['negotiable'] ? 1 : 0,
+            'location' => $listing['location'],
+            'image' => null,
+            'status' => 'DRAFT',
+            'expires_at' => null,
+            'seo_title' => $listing['seo_title'],
+            'seo_description' => $listing['seo_description'],
+            'noindex' => $listing['noindex'] ? 1 : 0,
+            'created_at' => utcStamp($moment),
+            'updated_at' => utcStamp($moment),
+        ]);
+
+        if ($attributes !== []) {
+            classifiedsReplaceListingAttributes($newId, $attributes);
+        }
+    });
+
+    logInfo('classifieds.listing_cloned', ['listingId' => $id, 'copyId' => $newId]);
+
+    return ['ok' => true, 'error' => '', 'id' => $newId, 'notice' => 'listing_cloned'];
 }
 
 /**

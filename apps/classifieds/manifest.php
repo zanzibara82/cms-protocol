@@ -9,7 +9,7 @@ declare(strict_types=1);
 return [
     'id' => 'classifieds',
     'title' => 'Доска объявлений',
-    'version' => '1.1.0',
+    'version' => '1.2.0',
     'requiresCore' => '1.1.0',
     'privatePaths' => ['/classifieds/admin'],
     'sql' => __DIR__ . '/sql',

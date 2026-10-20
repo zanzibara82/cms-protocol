@@ -45,6 +45,7 @@ function classifiedsFeedState(array $query): array
  *
  * @param array{
  *     category_ids?: list<string>,
+ *     owner_id?: string,
  *     q?: string,
  *     filters?: array<string, array{kind: string, value?: string, min?: string, max?: string}>,
  *     sort?: string,
@@ -61,6 +62,7 @@ function classifiedsListingFeed(array $options, int $page): array
     $categoryIds = $options['category_ids'] ?? [];
     $q = classifiedsSearchQuery($options['q'] ?? '');
     $filters = $options['filters'] ?? [];
+    $ownerId = trim((string) ($options['owner_id'] ?? ''));
     $sort = (string) ($options['sort'] ?? CLASSIFIEDS_SORT_DEFAULT);
     $view = (string) ($options['view'] ?? CLASSIFIEDS_VIEW_DEFAULT);
 
@@ -72,8 +74,13 @@ function classifiedsListingFeed(array $options, int $page): array
         $view = CLASSIFIEDS_VIEW_DEFAULT;
     }
 
-    $parts = ["l.status = 'PUBLISHED'"];
+    $parts = ["l.status = 'PUBLISHED'", CLASSIFIEDS_ACTIVE_SQL];
     $args = [];
+
+    if ($ownerId !== '') {
+        $parts[] = 'l.owner_id = ?';
+        $args[] = $ownerId;
+    }
 
     if ($categoryIds !== []) {
         $parts[] = 'l.category_id IN (' . inPlaceholders(count($categoryIds)) . ')';

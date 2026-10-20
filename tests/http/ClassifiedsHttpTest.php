@@ -60,7 +60,7 @@ final class ClassifiedsHttpTest extends TestCase
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
-        foreach (['classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
         run('DELETE FROM ' . t('app_installation') . " WHERE id = 'classifieds'");
@@ -71,14 +71,17 @@ final class ClassifiedsHttpTest extends TestCase
     {
         Kernel::freshCookies();
         run('DELETE FROM ' . t('classifieds_registration_attempt'));
+        run('DELETE FROM ' . t('classifieds_favorite'));
+        run('DELETE FROM ' . t('classifieds_seller_profile'));
         run('DELETE FROM ' . t('classifieds_listing_attribute'));
         run('DELETE FROM ' . t('classifieds_listing_image'));
         run('DELETE FROM ' . t('classifieds_attribute'));
         run('DELETE FROM ' . t('login_attempt'));
         // Объявления, созданные прошлым тестом, не должны влиять на выдачу следующего.
         run('DELETE FROM ' . t('classifieds_listing') . ' WHERE id NOT IN (?, ?, ?)', [self::$publishedId, self::$draftId, self::$foreignId]);
-        run('UPDATE ' . t('classifieds_listing') . " SET status = 'PUBLISHED', title = 'Кофемашина' WHERE id = ?", [self::$publishedId]);
-        run('UPDATE ' . t('classifieds_listing') . " SET status = 'DRAFT', title = 'Черновик продавца' WHERE id IN (?, ?)", [self::$draftId, self::$foreignId]);
+        run('UPDATE ' . t('classifieds_listing') . " SET status = 'PUBLISHED', title = 'Кофемашина', expires_at = NULL, slug = 'kofemashina' WHERE id = ?", [self::$publishedId]);
+        run('UPDATE ' . t('classifieds_listing') . " SET status = 'DRAFT', title = 'Черновик продавца', expires_at = NULL, slug = 'chernovik' WHERE id = ?", [self::$draftId]);
+        run('UPDATE ' . t('classifieds_listing') . " SET status = 'DRAFT', title = 'Чужое объявление', expires_at = NULL, slug = 'chuzhoe' WHERE id = ?", [self::$foreignId]);
         run('DELETE FROM ' . t('user') . " WHERE role = 'seller' AND email NOT IN (?, ?)", [self::SELLER_EMAIL, self::OTHER_EMAIL]);
     }
 
@@ -535,5 +538,228 @@ final class ClassifiedsHttpTest extends TestCase
         ]);
         self::assertSame(302, $deleted['status']);
         self::assertNull(one('SELECT id FROM ' . t('classifieds_attribute') . ' WHERE id = ?', [$id]));
+    }
+
+    public function testПрофильПродавцаСохраняетсяИПубликуется(): void
+    {
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+
+        $form = Kernel::get('/classifieds/cabinet/profile');
+        self::assertSame(200, $form['status']);
+        self::assertStringContainsString('Профиль продавца', $form['body']);
+
+        $saved = Kernel::post('/classifieds/cabinet/profile', [
+            '_token' => $this->token($form['body']),
+            'name' => 'Анна Продавец',
+            'phone' => '+7 999 123-45-67',
+            'city' => 'Казань',
+            'about' => 'Продаю проверенную технику с гарантией.',
+            'show_phone' => '1',
+        ]);
+
+        self::assertSame(302, $saved['status']);
+        self::assertStringStartsWith('/classifieds/cabinet/profile?notice=profile_saved', (string) ($saved['headers']['location'] ?? ''));
+        self::assertSame('Анна Продавец', value('SELECT name FROM ' . t('user') . ' WHERE id = ?', [self::$sellerId]));
+        self::assertSame('+7 999 123-45-67', value(
+            'SELECT phone FROM ' . t('classifieds_seller_profile') . ' WHERE user_id = ?',
+            [self::$sellerId]
+        ));
+
+        $public = Kernel::get('/classifieds/seller/' . self::$sellerId);
+        self::assertSame(200, $public['status']);
+        self::assertStringContainsString('Анна Продавец', $public['body']);
+        self::assertStringContainsString('Казань', $public['body']);
+        self::assertStringContainsString('+7 999 123-45-67', $public['body']);
+        self::assertStringContainsString('проверенную технику', $public['body']);
+        self::assertStringContainsString('Кофемашина', $public['body']);
+        self::assertStringNotContainsString(self::SELLER_EMAIL, $public['body']);
+
+        Kernel::freshCookies();
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $hidden = Kernel::post('/classifieds/cabinet/profile', [
+            '_token' => $this->token(Kernel::get('/classifieds/cabinet/profile')['body']),
+            'name' => 'Анна Продавец',
+            'phone' => '+7 999 123-45-67',
+            'city' => 'Казань',
+            'about' => 'Продаю проверенную технику с гарантией.',
+        ]);
+
+        self::assertSame(302, $hidden['status']);
+        self::assertSame(0, (int) value(
+            'SELECT show_phone FROM ' . t('classifieds_seller_profile') . ' WHERE user_id = ?',
+            [self::$sellerId]
+        ));
+
+        Kernel::freshCookies();
+        $withoutPhone = Kernel::get('/classifieds/seller/' . self::$sellerId);
+        self::assertSame(200, $withoutPhone['status']);
+        self::assertStringNotContainsString('+7 999 123-45-67', $withoutPhone['body']);
+        self::assertSame(404, Kernel::get('/classifieds/seller/' . str_repeat('x', 26))['status']);
+    }
+
+    public function testПрофильПродавцаТребуетИмя(): void
+    {
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $form = Kernel::get('/classifieds/cabinet/profile');
+
+        $invalid = Kernel::post('/classifieds/cabinet/profile', [
+            '_token' => $this->token($form['body']),
+            'name' => '   ',
+            'phone' => '',
+            'city' => '',
+            'about' => '',
+        ]);
+
+        self::assertSame(200, $invalid['status']);
+        self::assertStringContainsString('Напишите имя', $invalid['body']);
+        self::assertNull(one(
+            'SELECT user_id FROM ' . t('classifieds_seller_profile') . ' WHERE user_id = ?',
+            [self::$sellerId]
+        ));
+    }
+
+    public function testИзбранноеДобавляетсяИУбирается(): void
+    {
+        $guest = Kernel::get('/classifieds/kofemashina');
+        self::assertSame(200, $guest['status']);
+        self::assertStringContainsString('Войти, чтобы сохранить', $guest['body']);
+
+        $guestPost = Kernel::post('/classifieds/kofemashina/favorite', [
+            '_token' => $this->token(Kernel::get('/login')['body']),
+            'op' => 'add',
+        ]);
+        self::assertSame(302, $guestPost['status']);
+        self::assertStringStartsWith('/login?next=%2Fclassifieds%2Fkofemashina', (string) ($guestPost['headers']['location'] ?? ''));
+
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $listing = Kernel::get('/classifieds/kofemashina');
+        self::assertStringContainsString('В избранное', $listing['body']);
+
+        $added = Kernel::post('/classifieds/kofemashina/favorite', [
+            '_token' => $this->token($listing['body']),
+            'op' => 'add',
+        ]);
+        self::assertSame(302, $added['status']);
+        self::assertStringContainsString('notice=favorite_added', (string) ($added['headers']['location'] ?? ''));
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_favorite') . ' WHERE user_id = ? AND listing_id = ?',
+            [self::$sellerId, self::$publishedId]
+        ));
+
+        $again = Kernel::post('/classifieds/kofemashina/favorite', [
+            '_token' => $this->token(Kernel::get('/classifieds/kofemashina')['body']),
+            'op' => 'add',
+        ]);
+        self::assertSame(302, $again['status']);
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_favorite') . ' WHERE user_id = ? AND listing_id = ?',
+            [self::$sellerId, self::$publishedId]
+        ));
+
+        $favorites = Kernel::get('/classifieds/cabinet/favorites');
+        self::assertSame(200, $favorites['status']);
+        self::assertStringContainsString('Кофемашина', $favorites['body']);
+        self::assertStringContainsString('Убрать из избранного', $favorites['body']);
+
+        $removed = Kernel::post('/classifieds/cabinet/favorites', [
+            '_token' => $this->token($favorites['body']),
+            'listing_id' => self::$publishedId,
+        ]);
+        self::assertSame(302, $removed['status']);
+        self::assertStringContainsString('notice=favorite_removed', (string) ($removed['headers']['location'] ?? ''));
+        self::assertSame(0, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_favorite') . ' WHERE user_id = ? AND listing_id = ?',
+            [self::$sellerId, self::$publishedId]
+        ));
+
+        $empty = Kernel::get('/classifieds/cabinet/favorites');
+        self::assertStringContainsString('Пока пусто', $empty['body']);
+    }
+
+    public function testИстёкшееОбъявлениеСкрываетсяИПродлевается(): void
+    {
+        run(
+            'UPDATE ' . t('classifieds_listing') . ' SET expires_at = ? WHERE id = ?',
+            [utcStamp(nowUtc()->sub(new \DateInterval('P1D'))), self::$publishedId]
+        );
+
+        self::assertSame(404, Kernel::get('/classifieds/kofemashina')['status']);
+        self::assertStringNotContainsString('Кофемашина', Kernel::get('/classifieds/c/tehnika')['body']);
+        self::assertStringNotContainsString('/classifieds/kofemashina', Kernel::get('/sitemap.xml')['body']);
+
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $cabinet = Kernel::get('/classifieds/cabinet');
+        self::assertStringContainsString('Истекло', $cabinet['body']);
+
+        $extended = Kernel::post('/classifieds/cabinet/' . self::$publishedId . '/action', [
+            '_token' => $this->token($cabinet['body']),
+            'op' => 'extend',
+        ]);
+        self::assertSame(302, $extended['status']);
+        self::assertStringContainsString('notice=listing_extended', (string) ($extended['headers']['location'] ?? ''));
+
+        $expires = fromDb((string) value(
+            'SELECT expires_at FROM ' . t('classifieds_listing') . ' WHERE id = ?',
+            [self::$publishedId]
+        ));
+        self::assertNotNull($expires);
+        self::assertGreaterThan(nowUtc(), $expires);
+        self::assertSame(200, Kernel::get('/classifieds/kofemashina')['status']);
+        self::assertStringContainsString('/classifieds/kofemashina', Kernel::get('/sitemap.xml')['body']);
+    }
+
+    public function testКлонированиеСоздаётЧерновикСАтрибутамиБезФотоИТолькоДляВладельца(): void
+    {
+        $condition = self::addAttribute('condition', 'Состояние', 'select', ['Новое', 'Б/у']);
+        classifiedsReplaceListingAttributes(self::$publishedId, [
+            $condition => ['value_text' => 'Б/у', 'value_number' => null],
+        ]);
+        run(
+            'UPDATE ' . t('classifieds_listing') . ' SET image = ? WHERE id = ?',
+            ['/uploads/classifieds/original.jpg', self::$publishedId]
+        );
+
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $cabinet = Kernel::get('/classifieds/cabinet');
+
+        $cloned = Kernel::post('/classifieds/cabinet/' . self::$publishedId . '/action', [
+            '_token' => $this->token($cabinet['body']),
+            'op' => 'clone',
+        ]);
+        self::assertSame(302, $cloned['status']);
+        self::assertStringContainsString('notice=listing_cloned', (string) ($cloned['headers']['location'] ?? ''));
+
+        $copy = one(
+            'SELECT id, slug, title, status, image, expires_at FROM ' . t('classifieds_listing')
+            . ' WHERE title = ? AND owner_id = ?',
+            ['Кофемашина (копия)', self::$sellerId]
+        );
+        self::assertNotNull($copy);
+        self::assertNotSame(self::$publishedId, (string) $copy['id']);
+        self::assertSame('DRAFT', $copy['status']);
+        self::assertNull($copy['image']);
+        self::assertNull($copy['expires_at']);
+        self::assertSame('Б/у', value(
+            'SELECT value_text FROM ' . t('classifieds_listing_attribute') . ' WHERE listing_id = ? AND attribute_id = ?',
+            [(string) $copy['id'], $condition]
+        ));
+        self::assertSame(0, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_listing_image') . ' WHERE listing_id = ?',
+            [(string) $copy['id']]
+        ));
+        self::assertSame('/uploads/classifieds/original.jpg', value(
+            'SELECT image FROM ' . t('classifieds_listing') . ' WHERE id = ?',
+            [self::$publishedId]
+        ));
+
+        $foreign = Kernel::post('/classifieds/cabinet/' . self::$foreignId . '/action', [
+            '_token' => $this->token($cabinet['body']),
+            'op' => 'clone',
+        ]);
+        self::assertSame(302, $foreign['status']);
+        self::assertSame(0, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_listing') . ' WHERE title = ?',
+            ['Чужое объявление (копия)']
+        ));
     }
 }

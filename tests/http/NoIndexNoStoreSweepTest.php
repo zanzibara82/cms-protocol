@@ -44,8 +44,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // было 62 запроса, из них помеченных 49. C1 доски добавляет 9 маршрутов и 12 вариантов
     // (витрина, категория с промахом, регистрация, кабинет, новая форма, чужая правка,
     // карточка с промахом и черновиком, две админские страницы): всего 74, помеченных 57.
-    // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем
-    // адреса, а не молчит.
+    // C3 добавляет профиль и избранное кабинета (помечены) и публичную страницу продавца
+    // (открыта): всего 79 вариантов, помеченных 61. Числа не подгоняются под прогон:
+    // любое расхождение плана с деревом краснит именем адреса, а не молчит.
     //
     // Адресов вне таблицы четыре: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -55,13 +56,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 76;
-    private const MARKED_TOTAL = 59;
+    private const VARIANTS_TOTAL = 79;
+    private const MARKED_TOTAL = 61;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (74 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 75;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (79 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 78;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -700,12 +701,21 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /classifieds/cabinet' => [
                 ['path' => '/classifieds/cabinet', 'outcome' => self::MARKED, 'status' => 200],
             ],
+            'GET /classifieds/cabinet/profile' => [
+                ['path' => '/classifieds/cabinet/profile', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/cabinet/favorites' => [
+                ['path' => '/classifieds/cabinet/favorites', 'outcome' => self::MARKED, 'status' => 200],
+            ],
             'GET /classifieds/cabinet/new' => [
                 ['path' => '/classifieds/cabinet/new', 'outcome' => self::MARKED, 'status' => 200],
             ],
             'GET /classifieds/cabinet/{id}' => [
                 // Редактор вошёл в обход, но объявление принадлежит продавцу: экран не его.
                 ['path' => '/classifieds/cabinet/{clsid}', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /classifieds/seller/{id}' => [
+                ['path' => '/classifieds/seller/{clsowner}', 'outcome' => self::OPEN, 'status' => 200],
             ],
             'GET /classifieds/{slug}' => [
                 ['path' => '/classifieds/{clsitem}', 'outcome' => self::OPEN, 'status' => 200],
@@ -918,7 +928,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
         self::assertIsArray($classifiedsCategory, 'Фикстура: видимой категории доски нет — обходу нечего открывать');
 
         $classifiedsListing = one(
-            'SELECT id, slug FROM ' . t('classifieds_listing') . ' WHERE status = ? ORDER BY slug',
+            'SELECT id, slug, owner_id FROM ' . t('classifieds_listing') . ' WHERE status = ? ORDER BY slug',
             ['PUBLISHED']
         );
         self::assertIsArray($classifiedsListing, 'Фикстура: опубликованного объявления доски нет');
@@ -943,6 +953,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'clsitem' => (string) $classifiedsListing['slug'],
             'clsid' => (string) $classifiedsListing['id'],
             'clsdraft' => (string) $classifiedsDraft['slug'],
+            'clsowner' => (string) $classifiedsListing['owner_id'],
         ] + self::buildDiscountTokens();
     }
 

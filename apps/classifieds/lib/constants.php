@@ -12,7 +12,7 @@ const CLASSIFIEDS_CURRENCY_LABEL = '₽';
 // Оговорки адресов: доска отдаёт публичные пути /classifieds, /classifieds/c/{slug} и
 // /classifieds/{slug}. Служебные сегменты заняты маршрутами, поэтому объявления и категории
 // не могут их увести (правило новостного раздела, проверяется стражем маршрутов).
-const CLASSIFIEDS_RESERVED_SLUGS = ['c', 'search', 'admin', 'cabinet', 'register'];
+const CLASSIFIEDS_RESERVED_SLUGS = ['c', 'search', 'admin', 'cabinet', 'register', 'seller'];
 
 // Цены на доске пишут люди, а не бухгалтерия: знак и порядок заведут при ошибке,
 // поэтому верхнего предела DECIMAL(12,2) хватает с запасом.
@@ -66,4 +66,12 @@ const CLASSIFIEDS_SORTS = [
 ];
 const CLASSIFIEDS_VIEWS = ['grid', 'list'];
 const CLASSIFIEDS_VIEW_DEFAULT = 'grid';
+
+// C3: срок жизни публикации. Продление сдвигает дату от текущего момента, а не от старой,
+// чтобы «продлить за неделю до конца» не теряло эту неделю.
+const CLASSIFIEDS_LISTING_DAYS = 30;
+
+const CLASSIFIEDS_PHONE_MAX = 40;
+const CLASSIFIEDS_CITY_MAX = 120;
+const CLASSIFIEDS_ABOUT_MAX = 2000;
 const CLASSIFIEDS_VIEW_LABELS = ['grid' => 'Сетка', 'list' => 'Список'];

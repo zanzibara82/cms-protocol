@@ -13,6 +13,12 @@ declare(strict_types=1);
  * @var bool $preview
  * @var list<array{id: string, href: string}> $gallery
  * @var list<array{id: string, title: string, display: string}> $attributes
+ * @var array{id: string, name: string, city: string, phone: string, about: string, show_phone: bool, member_since: ?DateTimeImmutable}|null $seller
+ * @var string $sellerHref
+ * @var bool $canFavorite
+ * @var bool $isFavorite
+ * @var string $favoriteAction
+ * @var string $favoriteLogin
  */
 ?>
 <article class="space-y-6">
@@ -75,6 +81,52 @@ declare(strict_types=1);
         <h2 class="text-xl font-semibold">Описание</h2>
         <p class="whitespace-pre-line text-ink/80"><?= e((string) $listing['body']) ?></p>
     </section>
+
+    <?php if ($seller !== null): ?>
+        <section class="space-y-3 rounded-xl border border-ink/10 bg-white p-4">
+            <h2 class="text-xl font-semibold">Продавец</h2>
+            <a class="inline-flex min-h-[44px] items-center font-medium underline underline-offset-4 hover:text-accent"
+               href="<?= e($sellerHref) ?>"><?= e($seller['name']) ?></a>
+            <div class="space-y-1 text-sm text-ink/70">
+                <?php if ($seller['city'] !== ''): ?>
+                    <p>Город: <?= e($seller['city']) ?></p>
+                <?php endif; ?>
+                <?php if ($seller['member_since'] !== null): ?>
+                    <p>На доске с <?= e(formatRuDate($seller['member_since'])) ?></p>
+                <?php endif; ?>
+                <?php if ($seller['phone'] !== ''): ?>
+                    <p>Телефон: <a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-accent"
+                                   href="tel:<?= e($seller['phone']) ?>"><?= e($seller['phone']) ?></a></p>
+                <?php endif; ?>
+            </div>
+            <?php if ($seller['about'] !== ''): ?>
+                <p class="whitespace-pre-line text-sm text-ink/80"><?= e($seller['about']) ?></p>
+            <?php endif; ?>
+        </section>
+    <?php endif; ?>
+
+    <?php if ($canFavorite): ?>
+        <div class="flex flex-wrap gap-2">
+            <?php if ($isFavorite): ?>
+                <form method="post" action="<?= e($favoriteAction) ?>">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="op" value="remove">
+                    <button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5"
+                            type="submit">Убрать из избранного</button>
+                </form>
+            <?php elseif ($favoriteLogin !== ''): ?>
+                <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5"
+                   href="<?= e($favoriteLogin) ?>">Войти, чтобы сохранить</a>
+            <?php else: ?>
+                <form method="post" action="<?= e($favoriteAction) ?>">
+                    <?= csrfField() ?>
+                    <input type="hidden" name="op" value="add">
+                    <button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90"
+                            type="submit">В избранное</button>
+                </form>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 
     <footer class="rounded-xl border border-ink/10 bg-cream p-4 text-sm text-ink/60">
         Объявление размещено на доске. Договоритесь с продавцом о встрече и осмотрите товар до оплаты.

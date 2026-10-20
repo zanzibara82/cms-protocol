@@ -107,7 +107,67 @@ function classifiedsCabinetPage(array $params = []): void
         'listings' => classifiedsOwnerListings((string) $user['id']),
         'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
         'name' => (string) $user['name'],
-    ], ['title' => 'Мои объявления — доска', 'noindex' => true]);
+        'favoriteCount' => classifiedsFavoriteCount((string) $user['id']),
+    ], ['title' => 'Мои объявления — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsProfilePage(array $params = []): void
+{
+    $user = classifiedsRequireAccount();
+
+    render('classifieds/cabinet/profile', [
+        'form' => classifiedsSellerForm($user, classifiedsSellerProfile((string) $user['id'])),
+        'errors' => [],
+        'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
+        'publicUrl' => classifiedsSellerHref((string) $user['id']),
+    ], ['title' => 'Профиль продавца — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsProfileSaveAction(array $params = []): void
+{
+    csrfCheck();
+    $user = classifiedsRequireAccount();
+    $check = classifiedsValidateSellerProfile($_POST);
+    $form = $check['values'];
+
+    if ($check['errors'] !== []) {
+        render('classifieds/cabinet/profile', [
+            'form' => $form,
+            'errors' => $check['errors'],
+            'notice' => '',
+            'publicUrl' => classifiedsSellerHref((string) $user['id']),
+        ], ['title' => 'Профиль продавца — Доска', 'noindex' => true]);
+
+        return;
+    }
+
+    $saved = classifiedsSaveSellerProfile((string) $user['id'], $form);
+    $notice = (string) ($saved['notice'] ?? '');
+    finishAppAction($saved, '/classifieds/cabinet/profile', $notice);
+}
+
+/** @param array<string, string> $params */
+function classifiedsFavoritesPage(array $params = []): void
+{
+    $user = classifiedsRequireAccount();
+
+    render('classifieds/cabinet/favorites', [
+        'listings' => classifiedsFavoriteListings((string) $user['id']),
+        'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
+    ], ['title' => 'Избранное — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsFavoriteRemoveAction(array $params = []): void
+{
+    csrfCheck();
+    $user = classifiedsRequireAccount();
+    $listingId = mb_substr(trim(postString('listing_id')), 0, 26);
+    $result = classifiedsFavoriteRemove((string) $user['id'], $listingId);
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, '/classifieds/cabinet/favorites', $notice);
 }
 
 /** @param array<string, string> $params */
@@ -455,6 +515,8 @@ function classifiedsListingAction(array $params = []): void
     $result = match ($op) {
         'publish' => classifiedsListingSetStatus($id, (string) $user['id'], 'PUBLISHED'),
         'hide' => classifiedsListingSetStatus($id, (string) $user['id'], 'DRAFT'),
+        'extend' => classifiedsListingExtend($id, (string) $user['id']),
+        'clone' => classifiedsListingClone($id, (string) $user['id']),
         'delete' => classifiedsListingDelete($id, (string) $user['id']),
         default => ['ok' => false, 'error' => 'Неизвестное действие с объявлением.', 'notice' => ''],
     };

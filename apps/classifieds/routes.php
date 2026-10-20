@@ -22,12 +22,18 @@ addRoute('GET', '/classifieds/search', 'classifiedsSearchPage', ['app' => 'class
 addRoute('GET', '/classifieds/register', 'classifiedsRegisterPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/register', 'classifiedsRegisterAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet', 'classifiedsCabinetPage', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/cabinet/profile', 'classifiedsProfilePage', ['app' => 'classifieds']);
+addRoute('POST', '/classifieds/cabinet/profile', 'classifiedsProfileSaveAction', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/cabinet/favorites', 'classifiedsFavoritesPage', ['app' => 'classifieds']);
+addRoute('POST', '/classifieds/cabinet/favorites', 'classifiedsFavoriteRemoveAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/new', 'classifiedsListingNewPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/cabinet/new', 'classifiedsListingSaveAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/{id}', 'classifiedsListingEditPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/cabinet/{id}', 'classifiedsListingSaveAction', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/cabinet/{id}/action', 'classifiedsListingAction', ['app' => 'classifieds']);
 
+addRoute('GET', '/classifieds/seller/{id}', 'classifiedsSellerPage', ['app' => 'classifieds']);
+addRoute('POST', '/classifieds/{slug}/favorite', 'classifiedsFavoriteAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/{slug}', 'classifiedsListingPage', ['app' => 'classifieds']);
 
 // Экраны админки — литералами: страж CsrfCoverageTest::postHandlers() ищет путь
