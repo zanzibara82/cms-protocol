@@ -19,6 +19,11 @@ declare(strict_types=1);
  * @var bool $isFavorite
  * @var string $favoriteAction
  * @var string $favoriteLogin
+ * @var bool $canContact
+ * @var string $contactAction
+ * @var string $contactLogin
+ * @var string $reportHref
+ * @var string $reportLogin
  */
 ?>
 <article class="space-y-6">
@@ -34,6 +39,11 @@ declare(strict_types=1);
         <p class="rounded-lg border border-ink/10 bg-accent/10 p-4 text-sm">
             Предпросмотр: объявление ещё не опубликовано — его видите только вы.
         </p>
+        <?php if ((string) $listing['status'] === 'REJECTED' && (string) ($listing['moderation_note'] ?? '') !== ''): ?>
+            <p class="rounded-lg border border-ink/20 bg-cream p-4 text-sm">
+                Проверка не пройдена: <?= e((string) $listing['moderation_note']) ?>
+            </p>
+        <?php endif; ?>
     <?php endif; ?>
 
     <header class="space-y-2">
@@ -126,6 +136,31 @@ declare(strict_types=1);
                 </form>
             <?php endif; ?>
         </div>
+    <?php endif; ?>
+
+    <?php if ($canContact): ?>
+        <section class="space-y-3 rounded-xl border border-ink/10 bg-white p-4">
+            <h2 class="text-xl font-semibold">Написать продавцу</h2>
+            <form class="space-y-2" method="post" action="<?= e($contactAction) ?>">
+                <?= csrfField() ?>
+                <label class="block" for="message-body">
+                    <span class="mb-1 block text-sm text-ink/70">Сообщение</span>
+                    <textarea class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="message-body"
+                              name="body" maxlength="<?= e((string) CLASSIFIEDS_MESSAGE_MAX) ?>" required></textarea>
+                </label>
+                <button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90"
+                        type="submit">Отправить</button>
+            </form>
+            <p class="text-sm text-ink/60">
+                <a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-accent"
+                   href="<?= e($reportHref) ?>">Пожаловаться на объявление</a>
+            </p>
+        </section>
+    <?php elseif ($contactLogin !== ''): ?>
+        <p class="rounded-xl border border-ink/10 bg-cream p-4 text-sm text-ink/60">
+            <a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-accent"
+               href="<?= e($contactLogin) ?>">Войдите</a>, чтобы написать продавцу или пожаловаться на объявление.
+        </p>
     <?php endif; ?>
 
     <footer class="rounded-xl border border-ink/10 bg-cream p-4 text-sm text-ink/60">

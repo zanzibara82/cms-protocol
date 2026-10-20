@@ -10,6 +10,8 @@ const CLASSIFIEDS_NAV_PATHS = [
     '/classifieds/admin' => 'Обзор',
     '/classifieds/admin/categories' => 'Категории',
     '/classifieds/admin/attributes' => 'Характеристики',
+    '/classifieds/admin/moderation' => 'Проверка',
+    '/classifieds/admin/reports' => 'Жалобы',
 ];
 
 const CLASSIFIEDS_NOTICE_TEXT = [
@@ -19,6 +21,7 @@ const CLASSIFIEDS_NOTICE_TEXT = [
     'attribute_deleted' => 'Характеристика удалена.',
     'account_created' => 'Аккаунт создан — добро пожаловать на доску.',
     'listing_saved' => 'Объявление сохранено.',
+    'listing_submitted' => 'Объявление отправлено на проверку — редактор скоро его посмотрит.',
     'listing_published' => 'Объявление опубликовано.',
     'listing_hidden' => 'Объявление снято с публикации.',
     'listing_deleted' => 'Объявление удалено.',
@@ -27,6 +30,13 @@ const CLASSIFIEDS_NOTICE_TEXT = [
     'profile_saved' => 'Профиль продавца сохранён.',
     'favorite_added' => 'Объявление в избранном.',
     'favorite_removed' => 'Объявление убрано из избранного.',
+    'report_sent' => 'Жалоба отправлена — редактор её рассмотрит.',
+    'report_duplicate' => 'Жалоба на это объявление уже отправлена и ждёт рассмотрения.',
+    'report_resolved' => 'Жалоба закрыта.',
+    'moderation_approved' => 'Объявление опубликовано.',
+    'moderation_rejected' => 'Объявление отклонено, продавцу отправлена причина.',
+    'message_sent' => 'Сообщение отправлено.',
+    'notifications_read' => 'Уведомления отмечены прочитанными.',
 ];
 
 /**
@@ -78,6 +88,8 @@ function classifiedsAdminSummary(array $params = []): void
         'attributes' => (int) value('SELECT COUNT(*) FROM ' . t('classifieds_attribute')),
         'listings' => (int) value('SELECT COUNT(*) FROM ' . t('classifieds_listing')),
         'published' => (int) value('SELECT COUNT(*) FROM ' . t('classifieds_listing') . " WHERE status = 'PUBLISHED'"),
+        'pending' => classifiedsModerationPendingCount(),
+        'reports' => classifiedsReportNewCount(),
         'sellers' => (int) value('SELECT COUNT(*) FROM ' . t('user') . " WHERE role = 'seller'"),
     ];
 
@@ -258,4 +270,53 @@ function classifiedsCategoryAction(array $params = []): void
 
     $notice = (string) ($result['notice'] ?? '');
     finishAppAction($result, '/classifieds/admin/categories', $notice);
+}
+
+/** @param array<string, string> $params */
+function classifiedsAdminModeration(array $params = []): void
+{
+    render('classifieds/admin/moderation', array_merge([
+        'nav' => classifiedsAdminNav(requestPath()),
+        'notice' => classifiedsAdminNotice(),
+        'rows' => classifiedsModerationQueue(),
+    ], classifiedsAdminAlert()), ['title' => 'Проверка объявлений — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsModerationAction(array $params = []): void
+{
+    csrfCheck();
+    $user = currentUser();
+    $id = mb_substr(trim(postString('id')), 0, 26);
+    $decision = postString('op');
+    $note = postString('note');
+    $result = $user === null
+        ? ['ok' => false, 'error' => 'Нужен вход редактора.', 'notice' => '']
+        : classifiedsModerationDecide($id, (string) $user['id'], $decision, $note);
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, '/classifieds/admin/moderation', $notice);
+}
+
+/** @param array<string, string> $params */
+function classifiedsAdminReports(array $params = []): void
+{
+    render('classifieds/admin/reports', array_merge([
+        'nav' => classifiedsAdminNav(requestPath()),
+        'notice' => classifiedsAdminNotice(),
+        'rows' => classifiedsReportQueue(),
+        'reasons' => CLASSIFIEDS_REPORT_REASONS,
+    ], classifiedsAdminAlert()), ['title' => 'Жалобы — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsAdminReportAction(array $params = []): void
+{
+    csrfCheck();
+    $user = currentUser();
+    $id = mb_substr(trim(postString('id')), 0, 26);
+    $result = $user === null
+        ? ['ok' => false, 'error' => 'Нужен вход редактора.', 'notice' => '']
+        : classifiedsReportResolve($id, (string) $user['id']);
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, '/classifieds/admin/reports', $notice);
 }

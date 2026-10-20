@@ -34,7 +34,7 @@ abstract class ClassifiedsDbTestCase extends TestCase
 
     protected function setUp(): void
     {
-        foreach (['classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_notification', 'classifieds_report', 'classifieds_message', 'classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DELETE FROM ' . t($table));
         }
 
@@ -47,7 +47,7 @@ abstract class ClassifiedsDbTestCase extends TestCase
     {
         // Порядок важен: объявления снимаются раньше категорий, иначе MySQL не даст уронить
         // таблицу, на которую ссылается внешний ключ.
-        foreach (['classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_notification', 'classifieds_report', 'classifieds_message', 'classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
     }

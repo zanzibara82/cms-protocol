@@ -60,7 +60,7 @@ final class ClassifiedsHttpTest extends TestCase
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
-        foreach (['classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_notification', 'classifieds_report', 'classifieds_message', 'classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
         run('DELETE FROM ' . t('app_installation') . " WHERE id = 'classifieds'");
@@ -71,6 +71,9 @@ final class ClassifiedsHttpTest extends TestCase
     {
         Kernel::freshCookies();
         run('DELETE FROM ' . t('classifieds_registration_attempt'));
+        run('DELETE FROM ' . t('classifieds_notification'));
+        run('DELETE FROM ' . t('classifieds_report'));
+        run('DELETE FROM ' . t('classifieds_message'));
         run('DELETE FROM ' . t('classifieds_favorite'));
         run('DELETE FROM ' . t('classifieds_seller_profile'));
         run('DELETE FROM ' . t('classifieds_listing_attribute'));
@@ -293,11 +296,30 @@ final class ClassifiedsHttpTest extends TestCase
 
         $row = one('SELECT id, slug, status FROM ' . t('classifieds_listing') . ' WHERE slug = ?', ['stol-pismennyy']);
         self::assertNotNull($row);
-        self::assertSame('PUBLISHED', $row['status']);
+        self::assertSame('PENDING_REVIEW', $row['status']);
+        Kernel::freshCookies();
+        self::assertSame(404, Kernel::get('/classifieds/stol-pismennyy')['status']);
+
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $queue = Kernel::get('/classifieds/admin/moderation');
+        self::assertSame(200, $queue['status']);
+        self::assertStringContainsString('Стол письменный', $queue['body']);
+
+        $approved = Kernel::post('/classifieds/admin/moderation', [
+            '_token' => $this->token($queue['body']),
+            'id' => (string) $row['id'],
+            'op' => 'approve',
+        ]);
+        self::assertSame(302, $approved['status']);
+        self::assertSame('PUBLISHED', value('SELECT status FROM ' . t('classifieds_listing') . ' WHERE id = ?', [(string) $row['id']]));
 
         $public = Kernel::get('/classifieds/stol-pismennyy');
         self::assertSame(200, $public['status']);
         self::assertStringContainsString('Стол письменный', $public['body']);
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND kind = ?',
+            [self::$sellerId, 'moderation']
+        ));
     }
 
     public function testПравкаСохраняетАдресОбъявления(): void
@@ -370,6 +392,17 @@ final class ClassifiedsHttpTest extends TestCase
             'op' => 'publish',
         ]);
         self::assertSame(302, $published['status']);
+        self::assertSame('PENDING_REVIEW', value('SELECT status FROM ' . t('classifieds_listing') . ' WHERE id = ?', [self::$publishedId]));
+        Kernel::freshCookies();
+        self::assertSame(404, Kernel::get('/classifieds/kofemashina')['status']);
+
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $queue = Kernel::get('/classifieds/admin/moderation');
+        Kernel::post('/classifieds/admin/moderation', [
+            '_token' => $this->token($queue['body']),
+            'id' => self::$publishedId,
+            'op' => 'approve',
+        ]);
         self::assertSame(200, Kernel::get('/classifieds/kofemashina')['status']);
     }
 
@@ -480,6 +513,11 @@ final class ClassifiedsHttpTest extends TestCase
             [(string) $listing['id'], $condition]
         ));
 
+        // Проверка характеристик не про модерацию: объявление открываем напрямую.
+        run(
+            'UPDATE ' . t('classifieds_listing') . " SET status = 'PUBLISHED', expires_at = ? WHERE id = ?",
+            [utcStamp(nowUtc()->modify('+30 days')), (string) $listing['id']]
+        );
         $page = Kernel::get('/classifieds/pylesos');
         self::assertSame(200, $page['status']);
         self::assertStringContainsString('Состояние', $page['body']);
@@ -760,6 +798,163 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertSame(0, (int) value(
             'SELECT COUNT(*) FROM ' . t('classifieds_listing') . ' WHERE title = ?',
             ['Чужое объявление (копия)']
+        ));
+    }
+
+    public function testРедакторОтклоняетОбъявлениеСПричинойИПродавецОтправляетСнова(): void
+    {
+        $id = self::addListing(self::$sellerId, 'na-proverku', 'На проверке', 'PENDING_REVIEW');
+
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $queue = Kernel::get('/classifieds/admin/moderation');
+        self::assertSame(200, $queue['status']);
+        self::assertStringContainsString('На проверке', $queue['body']);
+
+        $rejected = Kernel::post('/classifieds/admin/moderation', [
+            '_token' => $this->token($queue['body']),
+            'id' => $id,
+            'op' => 'reject',
+            'note' => 'Фотография не относится к товару.',
+        ]);
+        self::assertSame(302, $rejected['status']);
+        $row = one('SELECT status, moderation_note FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$id]);
+        self::assertNotNull($row);
+        self::assertSame('REJECTED', $row['status']);
+        self::assertSame('Фотография не относится к товару.', $row['moderation_note']);
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND kind = ?',
+            [self::$sellerId, 'moderation']
+        ));
+
+        Kernel::freshCookies();
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $cabinet = Kernel::get('/classifieds/cabinet');
+        self::assertStringContainsString('Причина отказа: Фотография не относится к товару.', $cabinet['body']);
+
+        $preview = Kernel::get('/classifieds/na-proverku');
+        self::assertSame(200, $preview['status']);
+        self::assertStringContainsString('Проверка не пройдена', $preview['body']);
+
+        $again = Kernel::post('/classifieds/cabinet/' . $id . '/action', [
+            '_token' => $this->token($cabinet['body']),
+            'op' => 'publish',
+        ]);
+        self::assertSame(302, $again['status']);
+        $againRow = one('SELECT status, moderation_note FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$id]);
+        self::assertNotNull($againRow);
+        self::assertSame('PENDING_REVIEW', $againRow['status']);
+        self::assertNull($againRow['moderation_note']);
+    }
+
+    public function testПерепискаПоОбъявлениюДоходитДоПродавцаИОбратноСУведомлениями(): void
+    {
+        $this->login(self::OTHER_EMAIL, self::OTHER_PASSWORD);
+        $listing = Kernel::get('/classifieds/kofemashina');
+        self::assertSame(200, $listing['status']);
+        self::assertStringContainsString('Написать продавцу', $listing['body']);
+
+        $sent = Kernel::post('/classifieds/kofemashina/message', [
+            '_token' => $this->token($listing['body']),
+            'body' => 'Здравствуйте! Кофемашина ещё в продаже?',
+        ]);
+        self::assertSame(302, $sent['status']);
+        self::assertStringContainsString(
+            '/classifieds/cabinet/messages/' . self::$publishedId,
+            (string) ($sent['headers']['location'] ?? '')
+        );
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('classifieds_message')));
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND kind = ?',
+            [self::$sellerId, 'message']
+        ));
+
+        Kernel::freshCookies();
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $thread = Kernel::get('/classifieds/cabinet/messages/' . self::$publishedId . '?with=' . self::$otherId);
+        self::assertSame(200, $thread['status']);
+        self::assertStringContainsString('Кофемашина ещё в продаже', $thread['body']);
+
+        $replied = Kernel::post('/classifieds/cabinet/messages/' . self::$publishedId, [
+            '_token' => $this->token($thread['body']),
+            'with' => self::$otherId,
+            'body' => 'Да, в продаже. Можете посмотреть сегодня.',
+        ]);
+        self::assertSame(302, $replied['status']);
+        self::assertSame(2, (int) value('SELECT COUNT(*) FROM ' . t('classifieds_message')));
+        self::assertSame(0, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_message') . ' WHERE recipient_id = ? AND read_at IS NULL',
+            [self::$sellerId]
+        ));
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND kind = ?',
+            [self::$otherId, 'message']
+        ));
+
+        Kernel::freshCookies();
+        $this->login(self::OTHER_EMAIL, self::OTHER_PASSWORD);
+        $inbox = Kernel::get('/classifieds/cabinet/messages');
+        self::assertSame(200, $inbox['status']);
+        self::assertStringContainsString('Кофемашина', $inbox['body']);
+
+        $thread = Kernel::get('/classifieds/cabinet/messages/' . self::$publishedId . '?with=' . self::$sellerId);
+        self::assertSame(200, $thread['status']);
+        self::assertStringContainsString('Можете посмотреть сегодня', $thread['body']);
+
+        $notifications = Kernel::get('/classifieds/cabinet/notifications');
+        self::assertSame(200, $notifications['status']);
+        self::assertStringContainsString('Новое сообщение', $notifications['body']);
+
+        $read = Kernel::post('/classifieds/cabinet/notifications', [
+            '_token' => $this->token($notifications['body']),
+        ]);
+        self::assertSame(302, $read['status']);
+        self::assertSame(0, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND read_at IS NULL',
+            [self::$otherId]
+        ));
+    }
+
+    public function testЖалобаСоздаётсяОдинРазИЗакрываетсяРедактором(): void
+    {
+        $this->login(self::OTHER_EMAIL, self::OTHER_PASSWORD);
+        $form = Kernel::get('/classifieds/kofemashina/report');
+        self::assertSame(200, $form['status']);
+        self::assertStringContainsString('Спам или реклама', $form['body']);
+
+        $sent = Kernel::post('/classifieds/kofemashina/report', [
+            '_token' => $this->token($form['body']),
+            'reason' => 'spam',
+            'comment' => 'Одинаковый текст в десятке объявлений.',
+        ]);
+        self::assertSame(302, $sent['status']);
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('classifieds_report')));
+
+        $again = Kernel::post('/classifieds/kofemashina/report', [
+            '_token' => $this->token(Kernel::get('/classifieds/kofemashina/report')['body']),
+            'reason' => 'fraud',
+            'comment' => '',
+        ]);
+        self::assertSame(302, $again['status']);
+        self::assertStringContainsString('notice=report_duplicate', (string) ($again['headers']['location'] ?? ''));
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('classifieds_report')));
+
+        Kernel::freshCookies();
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $reports = Kernel::get('/classifieds/admin/reports');
+        self::assertSame(200, $reports['status']);
+        self::assertStringContainsString('Одинаковый текст', $reports['body']);
+
+        $reportId = (string) value('SELECT id FROM ' . t('classifieds_report') . " WHERE status = 'NEW'");
+        $resolved = Kernel::post('/classifieds/admin/reports', [
+            '_token' => $this->token($reports['body']),
+            'id' => $reportId,
+            'op' => 'resolve',
+        ]);
+        self::assertSame(302, $resolved['status']);
+        self::assertSame('RESOLVED', value('SELECT status FROM ' . t('classifieds_report') . ' WHERE id = ?', [$reportId]));
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND kind = ?',
+            [self::$otherId, 'report']
         ));
     }
 }

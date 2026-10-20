@@ -15,3 +15,7 @@ require_once __DIR__ . '/listings.php';
 require_once __DIR__ . '/feed.php';
 require_once __DIR__ . '/sellers.php';
 require_once __DIR__ . '/favorites.php';
+require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/reports.php';
+require_once __DIR__ . '/messages.php';
+require_once __DIR__ . '/moderation.php';

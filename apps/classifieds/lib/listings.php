@@ -10,9 +10,9 @@ declare(strict_types=1);
 const CLASSIFIEDS_CARD_COLUMNS = 'l.id, l.slug, l.title, l.category_id, l.price, l.currency, l.negotiable,'
     . ' l.location, l.image, l.status, l.expires_at, l.created_at';
 
-/** Полный набор: страница объявления и кабинет переживают описание и SEO. */
+/** Полный набор: страница объявления и кабинет переживают описание, SEO и решение проверки. */
 const CLASSIFIEDS_FULL_COLUMNS = CLASSIFIEDS_CARD_COLUMNS . ', l.owner_id, l.body, l.seo_title,'
-    . ' l.seo_description, l.noindex, l.updated_at';
+    . ' l.seo_description, l.noindex, l.moderation_note, l.submitted_at, l.updated_at';
 
 /** Страница каталога: строк на лист. */
 /** Публичная запись видна, пока срок не истёк; NULL оставлен для старых строк. */
@@ -27,7 +27,7 @@ const CLASSIFIEDS_HOME_LIMIT = 12;
  * Приводит строку базы к договору шаблонов: NULL там, где пусто, и строгие типы.
  *
  * @param array<string, mixed> $row
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}
  */
 function classifiedsListingShape(array $row): array
 {
@@ -45,6 +45,8 @@ function classifiedsListingShape(array $row): array
         'image' => $row['image'] !== null && (string) $row['image'] !== '' ? (string) $row['image'] : null,
         'status' => (string) $row['status'],
         'expires_at' => $row['expires_at'] !== null && (string) $row['expires_at'] !== '' ? (string) $row['expires_at'] : null,
+        'moderation_note' => $row['moderation_note'] !== null && (string) $row['moderation_note'] !== '' ? (string) $row['moderation_note'] : null,
+        'submitted_at' => $row['submitted_at'] !== null && (string) $row['submitted_at'] !== '' ? (string) $row['submitted_at'] : null,
         'seo_title' => $row['seo_title'] !== null && (string) $row['seo_title'] !== '' ? (string) $row['seo_title'] : null,
         'seo_description' => $row['seo_description'] !== null && (string) $row['seo_description'] !== '' ? (string) $row['seo_description'] : null,
         'noindex' => (int) $row['noindex'] === 1,
@@ -80,7 +82,7 @@ function classifiedsListingExpiresAt(array $listing): ?DateTimeImmutable
     return fromDb(isset($listing['expires_at']) ? (string) $listing['expires_at'] : null);
 }
 
-/** @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null */
+/** @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null */
 function classifiedsListingById(string $id): ?array
 {
     $row = one('SELECT ' . CLASSIFIEDS_FULL_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l WHERE l.id = ?', [$id]);
@@ -111,7 +113,7 @@ function classifiedsPublishedListingWithCategory(string $slug): ?array
  * Объявление любого статуса по адресу — для предпросмотра и кабинета: владельцу
  * черновик виден по прямой ссылке, гостю адрес отвечает как несуществующий.
  *
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
  */
 function classifiedsListingAnyStatus(string $slug): ?array
 {
@@ -180,7 +182,8 @@ function classifiedsHomeFeed(): array
 function classifiedsOwnerListings(string $ownerId): array
 {
     return all(
-        'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l'
+        'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ', l.moderation_note, l.submitted_at'
+        . ' FROM ' . t('classifieds_listing') . ' l'
         . ' WHERE l.owner_id = ?'
         . ' ORDER BY l.created_at DESC, l.id DESC',
         [$ownerId]
@@ -336,6 +339,8 @@ function classifiedsCreateListing(string $ownerId, array $values, ?DateTimeImmut
             'image' => isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
             'status' => (string) $values['status'],
             'expires_at' => (string) $values['status'] === 'PUBLISHED' ? classifiedsListingNewExpiry($moment) : null,
+            'moderation_note' => null,
+            'submitted_at' => (string) $values['status'] === 'PENDING_REVIEW' ? utcStamp($moment) : null,
             'seo_title' => (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
             'seo_description' => (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
             'noindex' => (int) $values['noindex'],
@@ -383,6 +388,9 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
     // Первая публикация, повторная после черновика и продление истёкшей записи получают
     // новый срок. Обычное редактирование опубликованного срок не сдвигает.
     $expiresAt = $listing['expires_at'];
+    // Отправка на проверку начинает новый круг: старая причина отказа больше не актуальна.
+    $moderationNote = $status === 'PENDING_REVIEW' ? null : $listing['moderation_note'];
+    $submittedAt = $status === 'PENDING_REVIEW' ? utcStamp($moment) : null;
 
     if ($status !== 'PUBLISHED') {
         $expiresAt = null;
@@ -390,10 +398,14 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
         $expiresAt = classifiedsListingNewExpiry($moment);
     }
 
+    if ($status !== 'REJECTED') {
+        $moderationNote = null;
+    }
+
     run(
         'UPDATE ' . t('classifieds_listing')
         . ' SET category_id = ?, slug = ?, title = ?, body = ?, price = ?, negotiable = ?, location = ?,' .
-        ' image = ?, status = ?, expires_at = ?, seo_title = ?, seo_description = ?, noindex = ?, updated_at = ? WHERE id = ?',
+        ' image = ?, status = ?, expires_at = ?, moderation_note = ?, submitted_at = ?, seo_title = ?, seo_description = ?, noindex = ?, updated_at = ? WHERE id = ?',
         [
             (string) $values['category'],
             $slug,
@@ -405,6 +417,8 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
             isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
             $status,
             $expiresAt,
+            $moderationNote,
+            $submittedAt,
             (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
             (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
             (int) $values['noindex'],
@@ -444,14 +458,25 @@ function classifiedsListingSetStatus(string $id, string $ownerId, string $status
 
     $moment = $now ?? nowUtc();
     $expiresAt = $status === 'PUBLISHED' ? classifiedsListingNewExpiry($moment) : null;
+    $submittedAt = $status === 'PENDING_REVIEW' ? utcStamp($moment) : null;
+    $note = $status === 'PENDING_REVIEW' ? null : $listing['moderation_note'];
 
     run(
-        'UPDATE ' . t('classifieds_listing') . ' SET status = ?, expires_at = ?, updated_at = ? WHERE id = ?',
-        [$status, $expiresAt, utcStamp($moment), $id]
+        'UPDATE ' . t('classifieds_listing') . ' SET status = ?, expires_at = ?, moderation_note = ?,'
+        . ' submitted_at = ?, updated_at = ? WHERE id = ?',
+        [$status, $expiresAt, $note, $submittedAt, utcStamp($moment), $id]
     );
     logInfo('classifieds.listing_status', ['listingId' => $id, 'status' => $status]);
 
-    return ['ok' => true, 'error' => '', 'notice' => $status === 'PUBLISHED' ? 'listing_published' : 'listing_hidden'];
+    return [
+        'ok' => true,
+        'error' => '',
+        'notice' => match ($status) {
+            'PUBLISHED' => 'listing_published',
+            'PENDING_REVIEW' => 'listing_submitted',
+            default => 'listing_hidden',
+        },
+    ];
 }
 
 /**

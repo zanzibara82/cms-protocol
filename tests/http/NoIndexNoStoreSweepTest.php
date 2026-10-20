@@ -45,8 +45,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // (витрина, категория с промахом, регистрация, кабинет, новая форма, чужая правка,
     // карточка с промахом и черновиком, две админские страницы): всего 74, помеченных 57.
     // C3 добавляет профиль и избранное кабинета (помечены) и публичную страницу продавца
-    // (открыта): всего 79 вариантов, помеченных 61. Числа не подгоняются под прогон:
-    // любое расхождение плана с деревом краснит именем адреса, а не молчит.
+    // (открыта). C4 добавляет переписку и уведомления кабинета, форму жалобы и два экрана
+    // админки — все помечены: всего 85 вариантов, помеченных 67. Числа не подгоняются под
+    // прогон: любое расхождение плана с деревом краснит именем адреса, а не молчит.
     //
     // Адресов вне таблицы четыре: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -56,13 +57,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 79;
-    private const MARKED_TOTAL = 61;
+    private const VARIANTS_TOTAL = 85;
+    private const MARKED_TOTAL = 67;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (79 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 78;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (85 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 84;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -684,7 +685,8 @@ final class NoIndexNoStoreSweepTest extends TestCase
 
             // Доска объявлений: витрина и категория открыты, карточка опубликованного
             // объявления открыта. Кабинет под редактором — не его экран: форма правки
-            // чужого объявления честно даёт 404, а сам кабинет помечен noindex.
+            // чужого объявления честно даёт 404, а сам кабинет помечен noindex. Черновик
+            // редактор видит как предпросмотр: модерации нужен полный текст до решения.
             'GET /classifieds' => [
                 ['path' => '/classifieds', 'outcome' => self::OPEN, 'status' => 200],
             ],
@@ -707,6 +709,16 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /classifieds/cabinet/favorites' => [
                 ['path' => '/classifieds/cabinet/favorites', 'outcome' => self::MARKED, 'status' => 200],
             ],
+            'GET /classifieds/cabinet/messages' => [
+                ['path' => '/classifieds/cabinet/messages', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/cabinet/messages/{id}' => [
+                // Редактор не участник переписки по чужому объявлению: тема отвечает 404.
+                ['path' => '/classifieds/cabinet/messages/{clsid}', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /classifieds/cabinet/notifications' => [
+                ['path' => '/classifieds/cabinet/notifications', 'outcome' => self::MARKED, 'status' => 200],
+            ],
             'GET /classifieds/cabinet/new' => [
                 ['path' => '/classifieds/cabinet/new', 'outcome' => self::MARKED, 'status' => 200],
             ],
@@ -717,10 +729,15 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /classifieds/seller/{id}' => [
                 ['path' => '/classifieds/seller/{clsowner}', 'outcome' => self::OPEN, 'status' => 200],
             ],
+            'GET /classifieds/{slug}/report' => [
+                // Форма жалобы закрыта от индексации и открыта вошедшему не-владельцу.
+                ['path' => '/classifieds/{clsitem}/report', 'outcome' => self::MARKED, 'status' => 200],
+            ],
             'GET /classifieds/{slug}' => [
                 ['path' => '/classifieds/{clsitem}', 'outcome' => self::OPEN, 'status' => 200],
                 ['path' => '/classifieds/net-takogo-obyavleniya', 'outcome' => self::MARKED, 'status' => 404],
-                ['path' => '/classifieds/{clsdraft}', 'outcome' => self::MARKED, 'status' => 404],
+                // Редактор видит предпросмотр чужого черновика: C4 пускает модератора к очереди.
+                ['path' => '/classifieds/{clsdraft}', 'outcome' => self::MARKED, 'status' => 200],
             ],
             'GET /classifieds/admin' => [
                 ['path' => '/classifieds/admin', 'outcome' => self::MARKED, 'status' => 200],
@@ -730,6 +747,12 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /classifieds/admin/attributes' => [
                 ['path' => '/classifieds/admin/attributes', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/admin/moderation' => [
+                ['path' => '/classifieds/admin/moderation', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/admin/reports' => [
+                ['path' => '/classifieds/admin/reports', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
 

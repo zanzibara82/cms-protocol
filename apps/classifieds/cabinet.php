@@ -52,7 +52,11 @@ function classifiedsFormFromListing(array $listing): array
         'price' => $listing['price'] === null ? '' : number_format((float) $listing['price'], 2, '.', ''),
         'negotiable' => $listing['negotiable'] ? 1 : 0,
         'location' => (string) ($listing['location'] ?? ''),
-        'status' => (string) $listing['status'],
+        // Отклонённое и ожидающее объявление форма показывает как «на проверку»:
+        // сохранение снова отправит его редактору.
+        'status' => (string) $listing['status'] === 'PUBLISHED'
+            ? 'PUBLISHED'
+            : ((string) $listing['status'] === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW'),
         'seo_title' => (string) ($listing['seo_title'] ?? ''),
         'seo_description' => (string) ($listing['seo_description'] ?? ''),
         'noindex' => $listing['noindex'] ? 1 : 0,
@@ -89,7 +93,9 @@ function classifiedsFormFromPost(array $post): array
         'price' => trim((string) ($post['price'] ?? '')),
         'negotiable' => ($post['negotiable'] ?? '') === '1' ? 1 : 0,
         'location' => trim((string) ($post['location'] ?? '')),
-        'status' => strtoupper(trim((string) ($post['status'] ?? ''))) === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT',
+        'status' => in_array(strtoupper(trim((string) ($post['status'] ?? ''))), CLASSIFIEDS_STATUS, true)
+            ? strtoupper(trim((string) ($post['status'] ?? '')))
+            : 'DRAFT',
         'seo_title' => trim((string) ($post['seo_title'] ?? '')),
         'seo_description' => trim((string) ($post['seo_description'] ?? '')),
         'noindex' => ($post['noindex'] ?? '') === '1' ? 1 : 0,
@@ -108,6 +114,8 @@ function classifiedsCabinetPage(array $params = []): void
         'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
         'name' => (string) $user['name'],
         'favoriteCount' => classifiedsFavoriteCount((string) $user['id']),
+        'messageUnread' => classifiedsUnreadMessages((string) $user['id']),
+        'notificationUnread' => classifiedsUnreadNotifications((string) $user['id']),
     ], ['title' => 'Мои объявления — Доска', 'noindex' => true]);
 }
 
@@ -168,6 +176,83 @@ function classifiedsFavoriteRemoveAction(array $params = []): void
     $result = classifiedsFavoriteRemove((string) $user['id'], $listingId);
     $notice = (string) ($result['notice'] ?? '');
     finishAppAction($result, '/classifieds/cabinet/favorites', $notice);
+}
+
+/** Адрес темы: объявление и собеседник. */
+function classifiedsMessageThreadHref(string $listingId, string $otherId): string
+{
+    return '/classifieds/cabinet/messages/' . rawurlencode($listingId)
+        . '?with=' . rawurlencode($otherId);
+}
+
+/** @param array<string, string> $params */
+function classifiedsMessagesPage(array $params = []): void
+{
+    $user = classifiedsRequireAccount();
+
+    render('classifieds/cabinet/messages', [
+        'threads' => classifiedsMessageThreads((string) $user['id']),
+        'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
+    ], ['title' => 'Сообщения — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsMessageThreadPage(array $params = []): void
+{
+    $user = classifiedsRequireAccount();
+    $listingId = mb_substr(trim((string) ($params['id'] ?? '')), 0, 26);
+    $otherId = mb_substr(trim((string) queryString('with', '')), 0, 26);
+    $thread = classifiedsMessageThread($listingId, (string) $user['id'], $otherId);
+
+    if ($thread === null) {
+        notFound();
+    }
+
+    render('classifieds/cabinet/thread', [
+        'thread' => $thread,
+        'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
+        'action' => classifiedsMessageThreadHref($listingId, (string) $thread['other']['id']),
+    ], ['title' => 'Переписка — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsMessageReplyAction(array $params = []): void
+{
+    csrfCheck();
+    $user = classifiedsRequireAccount();
+    $listingId = mb_substr(trim((string) ($params['id'] ?? '')), 0, 26);
+    $otherId = mb_substr(trim(postString('with')), 0, 26);
+    $back = classifiedsMessageThreadHref($listingId, $otherId);
+    $result = classifiedsMessageSend(
+        $listingId,
+        (string) $user['id'],
+        $otherId,
+        postString('body')
+    );
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, $back, $notice);
+}
+
+/** @param array<string, string> $params */
+function classifiedsNotificationsPage(array $params = []): void
+{
+    $user = classifiedsRequireAccount();
+
+    render('classifieds/cabinet/notifications', [
+        'notifications' => classifiedsNotificationsFor((string) $user['id']),
+        'unread' => classifiedsUnreadNotifications((string) $user['id']),
+        'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
+    ], ['title' => 'Уведомления — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsNotificationsReadAction(array $params = []): void
+{
+    csrfCheck();
+    $user = classifiedsRequireAccount();
+    $result = classifiedsNotificationsMarkRead((string) $user['id']);
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, '/classifieds/cabinet/notifications', $notice);
 }
 
 /** @param array<string, string> $params */
@@ -383,6 +468,12 @@ function classifiedsListingSaveAction(array $params = []): void
     $values = $check['values'];
     $values['attributes'] = $attributeCheck['values'];
 
+    // Публикация впервые и повторная после отказа идут через очередь проверки. Правка уже
+    // опубликованного объявления остаётся на витрине и заново редактора не ждёт.
+    if ($values['status'] === 'PUBLISHED' && ($listing === null || (string) $listing['status'] !== 'PUBLISHED')) {
+        $values['status'] = 'PENDING_REVIEW';
+    }
+
     // Новый файл проверяется после полей: если форма с ошибками, тратить запись на диск незачем.
     $uploaded = null;
     $file = uploadedFile('image');
@@ -495,6 +586,10 @@ function classifiedsListingSaveAction(array $params = []): void
         classifiedsImageDelete($href);
     }
 
+    if ($values['status'] === 'PENDING_REVIEW') {
+        $saved['notice'] = 'listing_submitted';
+    }
+
     $notice = (string) ($saved['notice'] ?? '');
     finishAppAction($saved, '/classifieds/cabinet', $notice);
 }
@@ -513,7 +608,7 @@ function classifiedsListingAction(array $params = []): void
     $op = postString('op');
 
     $result = match ($op) {
-        'publish' => classifiedsListingSetStatus($id, (string) $user['id'], 'PUBLISHED'),
+        'publish' => classifiedsListingSetStatus($id, (string) $user['id'], 'PENDING_REVIEW'),
         'hide' => classifiedsListingSetStatus($id, (string) $user['id'], 'DRAFT'),
         'extend' => classifiedsListingExtend($id, (string) $user['id']),
         'clone' => classifiedsListingClone($id, (string) $user['id']),

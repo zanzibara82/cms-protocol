@@ -152,8 +152,9 @@ function classifiedsListingPage(array $params = []): void
         // нельзя проверить до публикации. Чужаку тот же адрес отвечает 404.
         $draft = classifiedsListingAnyStatus($slug);
         $user = currentUser();
+        $moderator = $user !== null && $user['blocked_at'] === null && roleGrantsManage($user);
 
-        if ($draft === null || $user === null || (string) $draft['owner_id'] !== (string) $user['id']) {
+        if ($draft === null || $user === null || ((string) $draft['owner_id'] !== (string) $user['id'] && !$moderator)) {
             notFound();
         }
 
@@ -173,6 +174,12 @@ function classifiedsListingPage(array $params = []): void
     $isFavorite = $user !== null && classifiedsIsFavorite((string) $user['id'], (string) $listing['id']);
     $favoriteAction = $listingHref . '/favorite';
     $favoriteLogin = $user === null ? '/login?next=' . rawurlencode($listingHref) : '';
+    $canContact = !$preview
+        && $listing['status'] === 'PUBLISHED'
+        && !classifiedsListingIsExpired($listing)
+        && $user !== null
+        && (string) $user['id'] !== (string) $listing['owner_id'];
+    $contactLogin = $user === null ? '/login?next=' . rawurlencode($listingHref) : '';
 
     render('classifieds/listing', [
         'listing' => $listing,
@@ -190,6 +197,11 @@ function classifiedsListingPage(array $params = []): void
         'isFavorite' => $isFavorite,
         'favoriteAction' => $favoriteAction,
         'favoriteLogin' => $favoriteLogin,
+        'canContact' => $canContact,
+        'contactAction' => $listingHref . '/message',
+        'contactLogin' => $contactLogin,
+        'reportHref' => $listingHref . '/report',
+        'reportLogin' => $user === null ? '/login?next=' . rawurlencode($listingHref . '/report') : '',
     ], [
         'title' => (string) ($listing['seo_title'] ?? $listing['title']),
         'description' => (string) ($listing['seo_description'] ?? excerpt($listing['body'], 160)),
@@ -257,6 +269,122 @@ function classifiedsFavoriteAction(array $params = []): void
     $notice = (string) ($result['notice'] ?? '');
 
     finishAppAction($result, $back, $notice);
+}
+
+/** @param array<string, string> $params */
+function classifiedsMessageSendAction(array $params = []): void
+{
+    csrfCheck();
+    $slug = trim((string) ($params['slug'] ?? ''));
+    $listing = classifiedsPublishedListingWithCategory($slug);
+
+    if ($listing === null) {
+        notFound();
+    }
+
+    $href = classifiedsListingHref((string) $listing['slug']);
+    $user = classifiedsAccount();
+
+    if ($user === null) {
+        redirect('/login?next=' . rawurlencode($href));
+    }
+
+    $result = classifiedsMessageSend(
+        (string) $listing['id'],
+        (string) $user['id'],
+        (string) $listing['owner_id'],
+        postString('body')
+    );
+    $notice = (string) ($result['notice'] ?? '');
+    $back = ($result['ok'] ?? false) === true
+        ? classifiedsMessageThreadHref((string) $listing['id'], (string) $listing['owner_id'])
+        : $href;
+    finishAppAction($result, $back, $notice);
+}
+
+/** Форма жалобы: открыта только вошедшему и только на чужое открытое объявление. */
+/**
+ * @param array<string, mixed> $params
+ */
+function classifiedsReportPage(array $params = []): void
+{
+    $slug = trim((string) ($params['slug'] ?? ''));
+    $listing = classifiedsPublishedListingWithCategory($slug);
+
+    if ($listing === null) {
+        notFound();
+    }
+
+    $href = classifiedsListingHref((string) $listing['slug']);
+    $reportHref = $href . '/report';
+    $user = classifiedsAccount();
+
+    if ($user === null) {
+        redirect('/login?next=' . rawurlencode($reportHref));
+    }
+
+    if ((string) $listing['owner_id'] === (string) $user['id']) {
+        finishAppAction(
+            ['ok' => false, 'error' => 'На своё объявление жаловаться не нужно.'],
+            $href,
+            ''
+        );
+
+        return;
+    }
+
+    render('classifieds/report', [
+        'listing' => $listing,
+        'reasons' => CLASSIFIEDS_REPORT_REASONS,
+        'errors' => [],
+        'form' => ['reason' => '', 'comment' => ''],
+        'action' => $reportHref,
+        'back' => $href,
+    ], ['title' => 'Жалоба на объявление — Доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsReportAction(array $params = []): void
+{
+    csrfCheck();
+    $slug = trim((string) ($params['slug'] ?? ''));
+    $listing = classifiedsPublishedListingWithCategory($slug);
+
+    if ($listing === null) {
+        notFound();
+    }
+
+    $href = classifiedsListingHref((string) $listing['slug']);
+    $user = classifiedsAccount();
+
+    if ($user === null) {
+        redirect('/login?next=' . rawurlencode($href . '/report'));
+    }
+
+    $reason = postString('reason');
+    $comment = postString('comment');
+    $result = classifiedsReportCreate(
+        (string) $listing['id'],
+        (string) $user['id'],
+        $reason,
+        $comment
+    );
+
+    if (($result['ok'] ?? false) !== true) {
+        render('classifieds/report', [
+            'listing' => $listing,
+            'reasons' => CLASSIFIEDS_REPORT_REASONS,
+            'errors' => ['reason' => (string) ($result['error'] ?? '')],
+            'form' => ['reason' => $reason, 'comment' => $comment],
+            'action' => $href . '/report',
+            'back' => $href,
+        ], ['title' => 'Жалоба на объявление — Доска', 'noindex' => true]);
+
+        return;
+    }
+
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, $href, $notice);
 }
 
 /**

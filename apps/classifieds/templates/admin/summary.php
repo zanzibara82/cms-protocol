@@ -36,6 +36,10 @@ $content = $nav
     . $panel('Объявления', '/classifieds', [
         'всего' => $counts['listings'],
         'опубликовано' => $counts['published'],
+        'на проверке' => $counts['pending'],
+    ])
+    . $panel('Жалобы', '/classifieds/admin/reports', [
+        'новых' => $counts['reports'],
     ])
     . '</div>'
     . '<p class="mt-4 text-sm text-ink/60">Продавцов на доске: ' . e((string) $counts['sellers']) . '.</p>';

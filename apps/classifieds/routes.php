@@ -26,6 +26,11 @@ addRoute('GET', '/classifieds/cabinet/profile', 'classifiedsProfilePage', ['app'
 addRoute('POST', '/classifieds/cabinet/profile', 'classifiedsProfileSaveAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/favorites', 'classifiedsFavoritesPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/cabinet/favorites', 'classifiedsFavoriteRemoveAction', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/cabinet/messages', 'classifiedsMessagesPage', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/cabinet/messages/{id}', 'classifiedsMessageThreadPage', ['app' => 'classifieds']);
+addRoute('POST', '/classifieds/cabinet/messages/{id}', 'classifiedsMessageReplyAction', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/cabinet/notifications', 'classifiedsNotificationsPage', ['app' => 'classifieds']);
+addRoute('POST', '/classifieds/cabinet/notifications', 'classifiedsNotificationsReadAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/new', 'classifiedsListingNewPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/cabinet/new', 'classifiedsListingSaveAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/{id}', 'classifiedsListingEditPage', ['app' => 'classifieds']);
@@ -34,6 +39,9 @@ addRoute('POST', '/classifieds/cabinet/{id}/action', 'classifiedsListingAction',
 
 addRoute('GET', '/classifieds/seller/{id}', 'classifiedsSellerPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/{slug}/favorite', 'classifiedsFavoriteAction', ['app' => 'classifieds']);
+addRoute('POST', '/classifieds/{slug}/message', 'classifiedsMessageSendAction', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/{slug}/report', 'classifiedsReportPage', ['app' => 'classifieds']);
+addRoute('POST', '/classifieds/{slug}/report', 'classifiedsReportAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/{slug}', 'classifiedsListingPage', ['app' => 'classifieds']);
 
 // Экраны админки — литералами: страж CsrfCoverageTest::postHandlers() ищет путь
@@ -43,6 +51,10 @@ addRoute('GET', '/classifieds/admin/categories', 'classifiedsAdminCategories', [
 addRoute('POST', '/classifieds/admin/categories', 'classifiedsCategoryAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/classifieds/admin/attributes', 'classifiedsAdminAttributes', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/classifieds/admin/attributes', 'classifiedsAttributeAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/classifieds/admin/moderation', 'classifiedsAdminModeration', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/classifieds/admin/moderation', 'classifiedsModerationAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/classifieds/admin/reports', 'classifiedsAdminReports', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/classifieds/admin/reports', 'classifiedsAdminReportAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 
 // Карта сайтов: только открытые категории и опубликованные объявления (C1 — базовый набор,
 // счётчики и приоритеты приедут вместе с SEO-этапом C6).
