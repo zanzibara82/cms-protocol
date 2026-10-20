@@ -34,7 +34,7 @@ abstract class ClassifiedsDbTestCase extends TestCase
 
     protected function setUp(): void
     {
-        foreach (['classifieds_listing', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DELETE FROM ' . t($table));
         }
 
@@ -47,7 +47,7 @@ abstract class ClassifiedsDbTestCase extends TestCase
     {
         // Порядок важен: объявления снимаются раньше категорий, иначе MySQL не даст уронить
         // таблицу, на которую ссылается внешний ключ.
-        foreach (['classifieds_listing', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
     }
@@ -113,6 +113,45 @@ abstract class ClassifiedsDbTestCase extends TestCase
     }
 
     /** Продавец: строка tbl_user с ролью seller — так кабинет отличает своего от редактора. */
+    /**
+     * Характеристика категории для фикстур: тип, варианты и флаги — напрямую в таблицу,
+     * чтобы проверять значения и ленту, не повторяя админскую форму.
+     *
+     * @param list<string> $options
+     */
+    protected static function makeAttribute(
+        string $categoryId,
+        string $key,
+        string $title,
+        string $kind = 'text',
+        array $options = [],
+        int $required = 0,
+        int $filterable = 1
+    ): string {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('classifieds_attribute', [
+            'id' => $id,
+            'category_id' => $categoryId,
+            'key_slug' => $key,
+            'title' => $title,
+            'kind' => $kind,
+            'unit' => $kind === 'number' ? 'см' : null,
+            'option_list' => $options === [] ? null : implode("\n", $options),
+            'required' => $required,
+            'filterable' => $filterable,
+            'order_index' => (int) value(
+                'SELECT COALESCE(MAX(order_index), 0) + 1 FROM ' . t('classifieds_attribute') . ' WHERE category_id = ?',
+                [$categoryId]
+            ),
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
     protected static function makeSeller(string $email = 'seller@example.ru'): string
     {
         return TestDb::seedUser($email, 'secret-pass-1', 'seller');

@@ -290,25 +290,36 @@ function classifiedsCreateListing(string $ownerId, array $values, ?DateTimeImmut
     // Цена и валюта пишутся только вместе: без рублёвой цены поле остаётся NULL,
     // и карточка показывает «договорная».
     $price = $values['price_float'];
-    insert('classifieds_listing', [
-        'id' => $id,
-        'owner_id' => $ownerId,
-        'category_id' => (string) $values['category'],
-        'slug' => $slug,
-        'title' => (string) $values['title'],
-        'body' => (string) $values['body'],
-        'price' => $price,
-        'currency' => (string) ($values['currency'] ?? CLASSIFIEDS_CURRENCY),
-        'negotiable' => (int) $values['negotiable'],
-        'location' => (string) $values['location'] !== '' ? (string) $values['location'] : null,
-        'image' => isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
-        'status' => (string) $values['status'],
-        'seo_title' => (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
-        'seo_description' => (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
-        'noindex' => (int) $values['noindex'],
-        'created_at' => utcStamp($moment),
-        'updated_at' => utcStamp($moment),
-    ]);
+
+    tx(static function () use ($id, $ownerId, $values, $slug, $price, $moment): void {
+        insert('classifieds_listing', [
+            'id' => $id,
+            'owner_id' => $ownerId,
+            'category_id' => (string) $values['category'],
+            'slug' => $slug,
+            'title' => (string) $values['title'],
+            'body' => (string) $values['body'],
+            'price' => $price,
+            'currency' => (string) ($values['currency'] ?? CLASSIFIEDS_CURRENCY),
+            'negotiable' => (int) $values['negotiable'],
+            'location' => (string) $values['location'] !== '' ? (string) $values['location'] : null,
+            'image' => isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
+            'status' => (string) $values['status'],
+            'seo_title' => (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
+            'seo_description' => (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
+            'noindex' => (int) $values['noindex'],
+            'created_at' => utcStamp($moment),
+            'updated_at' => utcStamp($moment),
+        ]);
+
+        if (isset($values['attributes']) && is_array($values['attributes'])) {
+            classifiedsReplaceListingAttributes($id, $values['attributes']);
+        }
+
+        if (isset($values['gallery']) && is_array($values['gallery'])) {
+            classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $moment);
+        }
+    });
 
     logInfo('classifieds.listing_created', ['listingId' => $id, 'slug' => $slug, 'status' => (string) $values['status']]);
 
@@ -358,6 +369,14 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
         ]
     );
 
+    if (isset($values['attributes']) && is_array($values['attributes'])) {
+        classifiedsReplaceListingAttributes($id, $values['attributes']);
+    }
+
+    if (isset($values['gallery']) && is_array($values['gallery'])) {
+        classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $now);
+    }
+
     return ['ok' => true, 'error' => '', 'notice' => 'listing_saved'];
 }
 
@@ -399,8 +418,19 @@ function classifiedsListingDelete(string $id, string $ownerId): array
         return ['ok' => false, 'error' => 'Объявления уже нет — обновите список.', 'notice' => ''];
     }
 
+    $files = classifiedsListingGalleryHrefs($id);
+    $cover = (string) ($listing['image'] ?? '');
+
+    if ($cover !== '') {
+        array_unshift($files, $cover);
+    }
+
     run('DELETE FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$id]);
     logInfo('classifieds.listing_deleted', ['listingId' => $id]);
+
+    foreach (array_unique($files) as $href) {
+        classifiedsImageDelete($href);
+    }
 
     return ['ok' => true, 'error' => '', 'notice' => 'listing_deleted'];
 }

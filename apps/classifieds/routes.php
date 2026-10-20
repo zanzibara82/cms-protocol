@@ -14,6 +14,7 @@ require_once __DIR__ . '/admin.php';
 // в CLASSIFIEDS_RESERVED_SLUGS, поэтому объявление не может увести у категории её страницу.
 addRoute('GET', '/classifieds', 'classifiedsCatalogPage', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/c/{slug}', 'classifiedsCategoryPage', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/search', 'classifiedsSearchPage', ['app' => 'classifieds']);
 
 // Кабинет продавца. Гейта маршрута нет намеренно: ядро пускает в приватные пути только
 // роли admin/editor, а продавец — своя роль seller. Поэтому вход проверяет обработчик:
@@ -34,6 +35,8 @@ addRoute('GET', '/classifieds/{slug}', 'classifiedsListingPage', ['app' => 'clas
 addRoute('GET', '/classifieds/admin', 'classifiedsAdminSummary', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/classifieds/admin/categories', 'classifiedsAdminCategories', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/classifieds/admin/categories', 'classifiedsCategoryAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/classifieds/admin/attributes', 'classifiedsAdminAttributes', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/classifieds/admin/attributes', 'classifiedsAttributeAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 
 // Карта сайтов: только открытые категории и опубликованные объявления (C1 — базовый набор,
 // счётчики и приоритеты приедут вместе с SEO-этапом C6).

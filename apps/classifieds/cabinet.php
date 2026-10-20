@@ -40,7 +40,7 @@ function classifiedsRequireAccount(): array
 
 /** Форма объявления из строки базы: поля приводятся к тому же виду, что и при POST.
  * @param array<string, mixed> $listing
- * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, image: string}
+ * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, image: string, attrs: array<string, string>}
  */
 function classifiedsFormFromListing(array $listing): array
 {
@@ -57,6 +57,7 @@ function classifiedsFormFromListing(array $listing): array
         'seo_description' => (string) ($listing['seo_description'] ?? ''),
         'noindex' => $listing['noindex'] ? 1 : 0,
         'image' => (string) ($listing['image'] ?? ''),
+        'attrs' => classifiedsListingAttributeFormValues((string) $listing['id']),
     ];
 }
 
@@ -65,10 +66,21 @@ function classifiedsFormFromListing(array $listing): array
  * мусором, и показывать человеку свою же опечатку честнее, чем молча стереть.
  *
  * @param array<string, mixed> $post
- * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, image: string}
+ * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, image: string, attrs: array<string, string>}
  */
 function classifiedsFormFromPost(array $post): array
 {
+    $raw = $post['attrs'] ?? null;
+    $attrs = [];
+
+    if (is_array($raw)) {
+        foreach ($raw as $id => $value) {
+            if (is_scalar($value)) {
+                $attrs[(string) $id] = trim((string) $value);
+            }
+        }
+    }
+
     return [
         'title' => trim((string) ($post['title'] ?? '')),
         'slug' => trim((string) ($post['slug'] ?? '')),
@@ -82,6 +94,7 @@ function classifiedsFormFromPost(array $post): array
         'seo_description' => trim((string) ($post['seo_description'] ?? '')),
         'noindex' => ($post['noindex'] ?? '') === '1' ? 1 : 0,
         'image' => '',
+        'attrs' => $attrs,
     ];
 }
 
@@ -216,25 +229,34 @@ function classifiedsListingNewPage(array $params = []): void
 {
     classifiedsRequireAccount();
 
+    $source = isset($_GET['category']) ? $_GET : [];
+    $form = $source === [] ? [
+        'title' => '',
+        'slug' => '',
+        'category' => '',
+        'body' => '',
+        'price' => '',
+        'negotiable' => 0,
+        'location' => '',
+        'status' => 'DRAFT',
+        'seo_title' => '',
+        'seo_description' => '',
+        'noindex' => 0,
+        'image' => '',
+        'attrs' => [],
+    ] : classifiedsFormFromPost($source);
+    $attributes = classifiedsCategoryById((string) $form['category']) !== null
+        ? classifiedsAttributesForCategory((string) $form['category'])
+        : [];
+
     render('classifieds/listing-form', [
         'mode' => 'new',
         'listing' => null,
-        'form' => [
-            'title' => '',
-            'slug' => '',
-            'category' => '',
-            'body' => '',
-            'price' => '',
-            'negotiable' => 0,
-            'location' => '',
-            'status' => 'DRAFT',
-            'seo_title' => '',
-            'seo_description' => '',
-            'noindex' => 0,
-            'image' => '',
-        ],
+        'form' => $form,
         'errors' => [],
         'categories' => classifiedsCategoryAll(),
+        'attributes' => $attributes,
+        'gallery' => [],
         'action' => '/classifieds/cabinet/new',
     ], ['title' => 'Новое объявление — доска', 'noindex' => true]);
 }
@@ -250,12 +272,24 @@ function classifiedsListingEditPage(array $params = []): void
         notFound();
     }
 
+    $form = classifiedsFormFromListing($listing);
+
+    if (isset($_GET['category'])) {
+        $form['category'] = trim((string) $_GET['category']);
+    }
+
+    $attributes = classifiedsCategoryById((string) $form['category']) !== null
+        ? classifiedsAttributesForCategory((string) $form['category'])
+        : [];
+
     render('classifieds/listing-form', [
         'mode' => 'edit',
         'listing' => $listing,
-        'form' => classifiedsFormFromListing($listing),
+        'form' => $form,
         'errors' => [],
         'categories' => classifiedsCategoryAll(),
+        'attributes' => $attributes,
+        'gallery' => classifiedsListingImages($id),
         'action' => '/classifieds/cabinet/' . rawurlencode($id),
     ], ['title' => 'Правка объявления — доска', 'noindex' => true]);
 }
@@ -283,8 +317,11 @@ function classifiedsListingSaveAction(array $params = []): void
     }
 
     $check = classifiedsValidateListing($_POST, $listing === null ? '' : (string) $listing['id']);
+    $attributeCheck = classifiedsValidateListingAttributes($_POST, (string) $check['values']['category']);
+    $check['errors'] = array_merge($check['errors'], $attributeCheck['errors']);
     $action = $listing === null ? '/classifieds/cabinet/new' : '/classifieds/cabinet/' . rawurlencode($id);
     $values = $check['values'];
+    $values['attributes'] = $attributeCheck['values'];
 
     // Новый файл проверяется после полей: если форма с ошибками, тратить запись на диск незачем.
     $uploaded = null;
@@ -300,13 +337,56 @@ function classifiedsListingSaveAction(array $params = []): void
         }
     }
 
+    $galleryExisting = $listing === null ? [] : classifiedsListingImages((string) $listing['id']);
+    $removeGallery = $_POST['remove_gallery'] ?? [];
+    $removeGallery = is_array($removeGallery) ? array_map('strval', $removeGallery) : [];
+    $keptGallery = [];
+    $removedGalleryFiles = [];
+
+    foreach ($galleryExisting as $image) {
+        if (in_array((string) $image['id'], $removeGallery, true)) {
+            $removedGalleryFiles[] = (string) $image['href'];
+        } else {
+            $keptGallery[] = (string) $image['href'];
+        }
+    }
+
+    $uploadedGallery = [];
+
+    if ($check['errors'] === []) {
+        $storedGallery = classifiedsGalleryUpload('images', max(0, CLASSIFIEDS_GALLERY_MAX - count($keptGallery)));
+
+        if (!$storedGallery['ok']) {
+            $check['errors']['gallery'] = $storedGallery['error'];
+        } else {
+            $uploadedGallery = $storedGallery['hrefs'];
+        }
+    }
+
+    $values['gallery'] = array_merge($keptGallery, $uploadedGallery);
+
     if ($check['errors'] !== []) {
+        if ($uploaded !== null) {
+            classifiedsImageDelete($uploaded);
+        }
+
+        foreach ($uploadedGallery as $href) {
+            classifiedsImageDelete($href);
+        }
+
+        $form = classifiedsFormFromPost($_POST);
+        $attributes = classifiedsCategoryById((string) $form['category']) !== null
+            ? classifiedsAttributesForCategory((string) $form['category'])
+            : [];
+
         render('classifieds/listing-form', [
             'mode' => $listing === null ? 'new' : 'edit',
             'listing' => $listing,
-            'form' => classifiedsFormFromPost($_POST),
+            'form' => $form,
             'errors' => $check['errors'],
             'categories' => classifiedsCategoryAll(),
+            'attributes' => $attributes,
+            'gallery' => $galleryExisting,
             'action' => $action,
         ], ['title' => 'Форма объявления — доска', 'noindex' => true]);
 
@@ -332,19 +412,27 @@ function classifiedsListingSaveAction(array $params = []): void
             classifiedsImageDelete($uploaded);
         }
 
+        foreach ($uploadedGallery as $href) {
+            classifiedsImageDelete($href);
+        }
+
         finishAppAction($saved, $action, '');
 
         return;
     }
 
-    // Старая картинка уходит только после успешной записи новой ссылки: до этого она ещё
-    // нужна странице объявления, если транзакция базы не прошла.
+    // Старые файлы уходят только после успешной записи новых ссылок: до этого они ещё
+    // нужны странице объявления, если запись в базу не прошла.
     if ($listing !== null && $uploaded !== null && (string) ($listing['image'] ?? '') !== '') {
         classifiedsImageDelete((string) $listing['image']);
     }
 
     if ($listing !== null && postString('remove_image') === '1' && (string) ($listing['image'] ?? '') !== '') {
         classifiedsImageDelete((string) $listing['image']);
+    }
+
+    foreach ($removedGalleryFiles as $href) {
+        classifiedsImageDelete($href);
     }
 
     $notice = (string) ($saved['notice'] ?? '');

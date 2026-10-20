@@ -55,13 +55,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 74;
-    private const MARKED_TOTAL = 57;
+    private const VARIANTS_TOTAL = 76;
+    private const MARKED_TOTAL = 59;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
     // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (74 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 73;
+    private const MARKED_ON_NOT_INSTALLED = 75;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -691,6 +691,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ['path' => '/classifieds/c/{clscategory}', 'outcome' => self::OPEN, 'status' => 200],
                 ['path' => '/classifieds/c/net-takoy-kategorii', 'outcome' => self::MARKED, 'status' => 404],
             ],
+            'GET /classifieds/search' => [
+                ['path' => '/classifieds/search', 'outcome' => self::MARKED, 'status' => 200],
+            ],
             'GET /classifieds/register' => [
                 ['path' => '/classifieds/register', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/classifieds/cabinet'],
             ],
@@ -715,6 +718,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /classifieds/admin/categories' => [
                 ['path' => '/classifieds/admin/categories', 'outcome' => self::MARKED, 'status' => 200],
             ],
+            'GET /classifieds/admin/attributes' => [
+                ['path' => '/classifieds/admin/attributes', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+
 
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
             // тот же помеченный экран, собранный ядром.

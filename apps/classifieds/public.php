@@ -75,18 +75,68 @@ function classifiedsCategoryPage(array $params = []): void
     }
 
     $page = pageOf((string) queryString('page', '1'));
-    $feed = classifiedsCategoryFeed($category, $page);
+    $attributes = classifiedsAttributesForCategory((string) $category['id']);
+    $filters = classifiedsFiltersFromQuery($_GET, $attributes);
+    $state = classifiedsFeedState($_GET);
+    $ids = array_merge([(string) $category['id']], classifiedsCategoryDescendants((string) $category['id']));
+    $feed = classifiedsListingFeed([
+        'category_ids' => $ids,
+        'q' => $state['q'],
+        'filters' => $filters['values'],
+        'sort' => $state['sort'],
+        'view' => $state['view'],
+    ], $page);
+    $feedState = [
+        'q' => $state['q'],
+        'sort' => $state['sort'],
+        'view' => $state['view'],
+        'filters' => $filters['values'],
+    ];
 
     render('classifieds/category', [
         'category' => $category,
         'categories' => classifiedsCategoryVisible(),
+        'attributes' => $attributes,
         'list' => $feed,
         'total' => $feed['total'],
+        'state' => $feedState,
+        'base' => classifiedsCategoryHref((string) $category['slug']),
         'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
     ], [
         'title' => (string) $category['title'] . ' — доска объявлений',
         'description' => 'Объявления в категории «' . (string) $category['title'] . '».',
-        'noindex' => $feed['current'] > 1,
+        'noindex' => $feed['current'] > 1 || $state['q'] !== '' || $filters['active'],
+    ]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsSearchPage(array $params = []): void
+{
+    $page = pageOf((string) queryString('page', '1'));
+    $state = classifiedsFeedState($_GET);
+    $feed = classifiedsListingFeed([
+        'q' => $state['q'],
+        'sort' => $state['sort'],
+        'view' => $state['view'],
+    ], $page);
+    $feedState = [
+        'q' => $state['q'],
+        'sort' => $state['sort'],
+        'view' => $state['view'],
+        'filters' => [],
+    ];
+
+    render('classifieds/search', [
+        'categories' => classifiedsCategoryVisible(),
+        'list' => $feed,
+        'total' => $feed['total'],
+        'q' => $state['q'],
+        'state' => $feedState,
+        'base' => '/classifieds/search',
+    ], [
+        'title' => $state['q'] !== '' ? 'Поиск: ' . $state['q'] . ' — доска объявлений' : 'Поиск объявлений — доска',
+        'description' => 'Поиск частных объявлений по словам.',
+        'noindex' => true,
     ]);
 }
 
@@ -126,6 +176,8 @@ function classifiedsListingPage(array $params = []): void
         'categoryTitle' => $categoryTitle,
         'preview' => $preview,
         'categories' => classifiedsCategoryVisible(),
+        'gallery' => classifiedsListingGalleryHrefs($listing['id']),
+        'attributes' => classifiedsListingAttributeValues($listing['id']),
     ], [
         'title' => (string) ($listing['seo_title'] ?? $listing['title']),
         'description' => (string) ($listing['seo_description'] ?? excerpt($listing['body'], 160)),

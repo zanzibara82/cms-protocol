@@ -3,26 +3,30 @@
 declare(strict_types=1);
 
 /**
- * Карточка объявления: картинка, цена, заголовок, место и дата.
+ * Карточка объявления: картинка, цена, заголовок, место и дата. Вид «список» кладёт
+ * картинку слева, «сетка» — сверху.
  *
  * @var array<string, mixed> $listing
+ * @var string $view grid или list
  */
+$view = isset($view) && is_string($view) ? $view : 'grid';
 $href = '/classifieds/' . rawurlencode((string) $listing['slug']);
 $price = classifiedsPriceLabel(
     $listing['price'] === null ? null : (float) $listing['price'],
     (int) $listing['negotiable'] === 1
 );
 $date = formatRuDate(fromDb((string) $listing['created_at']));
+$list = $view === 'list';
 ?>
-<article class="flex h-full flex-col overflow-hidden rounded-xl border border-ink/10 bg-white">
-    <a class="block min-h-[44px] aspect-[4/3] bg-cream" href="<?= e($href) ?>">
+<article class="<?= e($list ? 'flex h-full gap-4 rounded-xl border border-ink/10 bg-white p-3' : 'flex h-full flex-col overflow-hidden rounded-xl border border-ink/10 bg-white') ?>">
+    <a class="block min-h-[44px] <?= e($list ? 'w-32 shrink-0 overflow-hidden rounded-lg bg-cream sm:w-48' : 'aspect-[4/3] bg-cream') ?>" href="<?= e($href) ?>">
         <?php if ((string) ($listing['image'] ?? '') !== ''): ?>
             <img class="h-full w-full object-cover" src="<?= e((string) $listing['image']) ?>" alt="" loading="lazy">
         <?php else: ?>
             <span class="flex h-full items-center justify-center text-sm text-ink/40">Без фото</span>
         <?php endif; ?>
     </a>
-    <div class="flex flex-1 flex-col gap-1 p-4">
+    <div class="<?= e($list ? 'flex flex-1 flex-col gap-1 py-1' : 'flex flex-1 flex-col gap-1 p-4') ?>">
         <p class="text-lg font-semibold tabular-nums"><?= e($price) ?></p>
         <h3 class="font-medium">
             <a class="inline-flex min-h-[44px] items-center underline-offset-4 hover:underline" href="<?= e($href) ?>"><?= e((string) $listing['title']) ?></a>

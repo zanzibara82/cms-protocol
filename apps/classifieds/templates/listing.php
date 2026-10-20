@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Страница объявления: фото, цена, описание, место и дата.
+ * Страница объявления: фото, галерея, характеристики, цена, описание и место.
  *
  * @var array<string, mixed> $listing
  * @var string $priceLabel
@@ -11,6 +11,8 @@ declare(strict_types=1);
  * @var string $categoryHref
  * @var string $categoryTitle
  * @var bool $preview
+ * @var list<array{id: string, href: string}> $gallery
+ * @var list<array{id: string, title: string, display: string}> $attributes
  */
 ?>
 <article class="space-y-6">
@@ -43,6 +45,30 @@ declare(strict_types=1);
 
     <?php if ((string) ($listing['image'] ?? '') !== ''): ?>
         <img class="w-full rounded-xl object-cover" src="<?= e((string) $listing['image']) ?>" alt="" loading="lazy">
+    <?php endif; ?>
+
+    <?php if ($gallery !== []): ?>
+        <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Дополнительные изображения">
+            <?php foreach ($gallery as $image): ?>
+                <li>
+                    <img class="h-40 w-full rounded-lg object-cover" src="<?= e($image['href']) ?>" alt="" loading="lazy">
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    <?php endif; ?>
+
+    <?php if ($attributes !== []): ?>
+        <section class="space-y-2">
+            <h2 class="text-xl font-semibold">Характеристики</h2>
+            <dl class="divide-y divide-ink/10 rounded-xl border border-ink/10 bg-white">
+                <?php foreach ($attributes as $attribute): ?>
+                    <div class="flex flex-wrap justify-between gap-3 px-4 py-3 text-sm">
+                        <dt class="text-ink/60"><?= e($attribute['title']) ?></dt>
+                        <dd class="font-medium"><?= e($attribute['display']) ?></dd>
+                    </div>
+                <?php endforeach; ?>
+            </dl>
+        </section>
     <?php endif; ?>
 
     <section class="space-y-2">

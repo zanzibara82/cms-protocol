@@ -30,6 +30,9 @@ $content = $nav
     . $panel('Категории', '/classifieds/admin/categories', [
         'всего' => $counts['categories'],
     ])
+    . $panel('Характеристики', '/classifieds/admin/attributes', [
+        'полей' => $counts['attributes'],
+    ])
     . $panel('Объявления', '/classifieds', [
         'всего' => $counts['listings'],
         'опубликовано' => $counts['published'],

@@ -12,7 +12,7 @@ const CLASSIFIEDS_CURRENCY_LABEL = '₽';
 // Оговорки адресов: доска отдаёт публичные пути /classifieds, /classifieds/c/{slug} и
 // /classifieds/{slug}. Служебные сегменты заняты маршрутами, поэтому объявления и категории
 // не могут их увести (правило новостного раздела, проверяется стражем маршрутов).
-const CLASSIFIEDS_RESERVED_SLUGS = ['c', 'admin', 'cabinet', 'register'];
+const CLASSIFIEDS_RESERVED_SLUGS = ['c', 'search', 'admin', 'cabinet', 'register'];
 
 // Цены на доске пишут люди, а не бухгалтерия: знак и порядок заведут при ошибке,
 // поэтому верхнего предела DECIMAL(12,2) хватает с запасом.
@@ -33,3 +33,37 @@ const CLASSIFIEDS_REGISTER_WINDOW = 60;
 const CLASSIFIEDS_EMAIL_MAX = 190;
 const CLASSIFIEDS_PASSWORD_MIN = 8;
 const CLASSIFIEDS_NAME_MAX = 120;
+
+// Галерея C2: к главному снимку добавляются дополнительные. Предел в шесть кадров — один
+// экран просмотра; больше на доске объявлений всё равно не смотрят.
+const CLASSIFIEDS_GALLERY_MAX = 5;
+
+// Характеристики категорий. Набор типов на этом этапе — те, что дают форму и фильтр без
+// отдельного хранилища вариантов: строка, число, список и «да/нет». Остальные типы ТЗ
+// (дата, диапазон, изображение, гео) приедут со своими фильтрами.
+const CLASSIFIEDS_ATTRIBUTE_KINDS = [
+    'text' => 'Строка',
+    'number' => 'Число',
+    'select' => 'Список',
+    'bool' => 'Да/нет',
+];
+const CLASSIFIEDS_ATTRIBUTE_KEY_MAX = 40;
+const CLASSIFIEDS_ATTRIBUTE_TITLE_MAX = 120;
+const CLASSIFIEDS_ATTRIBUTE_UNIT_MAX = 20;
+const CLASSIFIEDS_ATTRIBUTE_VALUE_MAX = 255;
+const CLASSIFIEDS_ATTRIBUTE_OPTION_MAX = 80;
+const CLASSIFIEDS_ATTRIBUTE_OPTIONS_MAX = 50;
+
+// Витрина C2: поиск по словам, сортировки и вид каталога. Релевантность имеет смысл только
+// вместе с запросом, поэтому без q обработчик возвращает сортировку по дате.
+const CLASSIFIEDS_SEARCH_MAX = 120;
+const CLASSIFIEDS_SORT_DEFAULT = 'date';
+const CLASSIFIEDS_SORTS = [
+    'date' => 'Сначала новые',
+    'price_asc' => 'Цена: по возрастанию',
+    'price_desc' => 'Цена: по убыванию',
+    'relevance' => 'По релевантности',
+];
+const CLASSIFIEDS_VIEWS = ['grid', 'list'];
+const CLASSIFIEDS_VIEW_DEFAULT = 'grid';
+const CLASSIFIEDS_VIEW_LABELS = ['grid' => 'Сетка', 'list' => 'Список'];

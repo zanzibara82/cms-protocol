@@ -60,7 +60,7 @@ final class ClassifiedsHttpTest extends TestCase
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
-        foreach (['classifieds_listing', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
         run('DELETE FROM ' . t('app_installation') . " WHERE id = 'classifieds'");
@@ -71,6 +71,9 @@ final class ClassifiedsHttpTest extends TestCase
     {
         Kernel::freshCookies();
         run('DELETE FROM ' . t('classifieds_registration_attempt'));
+        run('DELETE FROM ' . t('classifieds_listing_attribute'));
+        run('DELETE FROM ' . t('classifieds_listing_image'));
+        run('DELETE FROM ' . t('classifieds_attribute'));
         run('DELETE FROM ' . t('login_attempt'));
         // Объявления, созданные прошлым тестом, не должны влиять на выдачу следующего.
         run('DELETE FROM ' . t('classifieds_listing') . ' WHERE id NOT IN (?, ?, ?)', [self::$publishedId, self::$draftId, self::$foreignId]);
@@ -99,6 +102,37 @@ final class ClassifiedsHttpTest extends TestCase
             'seo_title' => null,
             'seo_description' => null,
             'noindex' => 0,
+            'created_at' => $moment,
+            'updated_at' => $moment,
+        ]);
+
+        return $id;
+    }
+
+    /**
+     * @param list<string> $options
+     */
+    private static function addAttribute(
+        string $key,
+        string $title,
+        string $kind = 'text',
+        array $options = [],
+        int $filterable = 1
+    ): string {
+        $id = newId();
+        $moment = utcStamp(nowUtc());
+
+        insert('classifieds_attribute', [
+            'id' => $id,
+            'category_id' => self::$categoryId,
+            'key_slug' => $key,
+            'title' => $title,
+            'kind' => $kind,
+            'unit' => null,
+            'option_list' => $options === [] ? null : implode("\n", $options),
+            'required' => 0,
+            'filterable' => $filterable,
+            'order_index' => 1,
             'created_at' => $moment,
             'updated_at' => $moment,
         ]);
@@ -369,5 +403,137 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertStringContainsString('/classifieds/kofemashina', $page['body']);
         self::assertStringContainsString('/classifieds/c/tehnika', $page['body']);
         self::assertStringNotContainsString('/classifieds/chernovik', $page['body']);
+    }
+
+    public function testПоискНаходитОбъявлениеИВсегдаЗакрытОтИндексации(): void
+    {
+        $page = Kernel::get('/classifieds/search?q=' . rawurlencode('кофемашина'));
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Кофемашина', $page['body']);
+        self::assertStringContainsString('name="robots" content="noindex', $page['body']);
+        self::assertStringNotContainsString('Черновик продавца', $page['body']);
+
+        $empty = Kernel::get('/classifieds/search?q=' . rawurlencode('невидимка'));
+        self::assertSame(200, $empty['status']);
+        self::assertStringContainsString('не нашлось', $empty['body']);
+    }
+
+    public function testФильтрыИСортировкаКатегорииРаботаютПоХарактеристикам(): void
+    {
+        $color = self::addAttribute('color', 'Цвет', 'select', ['Чёрный', 'Белый']);
+        classifiedsReplaceListingAttributes(self::$publishedId, [
+            $color => ['value_text' => 'Чёрный', 'value_number' => null],
+        ]);
+
+        $filtered = Kernel::get('/classifieds/c/tehnika?f[' . rawurlencode($color) . '][value]=' . rawurlencode('Чёрный'));
+        self::assertSame(200, $filtered['status']);
+        self::assertStringContainsString('Кофемашина', $filtered['body']);
+        self::assertStringContainsString('name="f[' . $color . '][value]"', $filtered['body']);
+
+        run('UPDATE ' . t('classifieds_listing') . ' SET price = 9000 WHERE id = ?', [self::$publishedId]);
+        $cheap = self::addListing(self::$sellerId, 'noutbuk', 'Ноутбук', 'PUBLISHED');
+        run('UPDATE ' . t('classifieds_listing') . ' SET price = 1000 WHERE id = ?', [$cheap]);
+
+        $sorted = Kernel::get('/classifieds/c/tehnika?sort=price_asc');
+        self::assertSame(200, $sorted['status']);
+        self::assertLessThan(
+            (int) strpos($sorted['body'], 'Кофемашина'),
+            (int) strpos($sorted['body'], 'Ноутбук'),
+            'Сортировка по цене поставила дешёвое объявление раньше'
+        );
+
+        $junk = Kernel::get('/classifieds/c/tehnika?f[' . rawurlencode($color) . '][value]=' . rawurlencode('Лифтбек') . '&sort=magic');
+        self::assertSame(200, $junk['status']);
+    }
+
+    public function testКабинетСохраняетХарактеристикиОбъявления(): void
+    {
+        $condition = self::addAttribute('condition', 'Состояние', 'select', ['Новое', 'Б/у'], 1);
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+
+        $form = Kernel::get('/classifieds/cabinet/new?category=' . rawurlencode(self::$categoryId));
+        self::assertSame(200, $form['status']);
+        self::assertStringContainsString('name="attrs[' . $condition . ']"', $form['body']);
+        self::assertStringContainsString('name="images[]"', $form['body']);
+
+        $saved = Kernel::post('/classifieds/cabinet/new', [
+            '_token' => $this->token($form['body']),
+            'title' => 'Пылесос',
+            'slug' => 'pylesos',
+            'category' => self::$categoryId,
+            'body' => 'Работает тихо, есть все насадки.',
+            'price' => '3200',
+            'location' => 'Москва',
+            'status' => 'PUBLISHED',
+            'attrs[' . $condition . ']' => 'Новое',
+        ]);
+
+        self::assertSame(302, $saved['status']);
+        $listing = one('SELECT id FROM ' . t('classifieds_listing') . ' WHERE slug = ?', ['pylesos']);
+        self::assertNotNull($listing);
+        self::assertSame('Новое', value(
+            'SELECT value_text FROM ' . t('classifieds_listing_attribute') . ' WHERE listing_id = ? AND attribute_id = ?',
+            [(string) $listing['id'], $condition]
+        ));
+
+        $page = Kernel::get('/classifieds/pylesos');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Состояние', $page['body']);
+        self::assertStringContainsString('Новое', $page['body']);
+
+        $edit = Kernel::get('/classifieds/cabinet/' . (string) $listing['id']);
+        self::assertSame(200, $edit['status']);
+        self::assertStringContainsString('value="Новое"', $edit['body']);
+    }
+
+    public function testАдминкаХарактеристикСоздаётПолеИНеУдаляетЗанятое(): void
+    {
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $page = Kernel::get('/classifieds/admin/attributes?category=' . rawurlencode(self::$categoryId));
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Характеристики', $page['body']);
+        self::assertStringContainsString('Техника', $page['body']);
+
+        $created = Kernel::post('/classifieds/admin/attributes', [
+            '_token' => $this->token($page['body']),
+            'op' => 'create',
+            'category' => self::$categoryId,
+            'title' => 'Состояние',
+            'key' => 'condition',
+            'kind' => 'select',
+            'unit' => '',
+            'options' => "Новое\nБ/у",
+            'filterable' => '1',
+        ]);
+
+        self::assertSame(302, $created['status']);
+        $attribute = one('SELECT id FROM ' . t('classifieds_attribute') . ' WHERE key_slug = ?', ['condition']);
+        self::assertNotNull($attribute);
+        $id = (string) $attribute['id'];
+
+        classifiedsReplaceListingAttributes(self::$publishedId, [
+            $id => ['value_text' => 'Новое', 'value_number' => null],
+        ]);
+
+        $blocked = Kernel::post('/classifieds/admin/attributes', [
+            '_token' => $this->token($page['body']),
+            'op' => 'delete',
+            'category' => self::$categoryId,
+            'id' => $id,
+        ]);
+        self::assertSame(302, $blocked['status']);
+        self::assertNotNull(one('SELECT id FROM ' . t('classifieds_attribute') . ' WHERE id = ?', [$id]));
+
+        classifiedsReplaceListingAttributes(self::$publishedId, []);
+        $deleted = Kernel::post('/classifieds/admin/attributes', [
+            '_token' => $this->token($page['body']),
+            'op' => 'delete',
+            'category' => self::$categoryId,
+            'id' => $id,
+        ]);
+        self::assertSame(302, $deleted['status']);
+        self::assertNull(one('SELECT id FROM ' . t('classifieds_attribute') . ' WHERE id = ?', [$id]));
     }
 }

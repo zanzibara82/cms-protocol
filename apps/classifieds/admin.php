@@ -9,11 +9,14 @@ declare(strict_types=1);
 const CLASSIFIEDS_NAV_PATHS = [
     '/classifieds/admin' => 'Обзор',
     '/classifieds/admin/categories' => 'Категории',
+    '/classifieds/admin/attributes' => 'Характеристики',
 ];
 
 const CLASSIFIEDS_NOTICE_TEXT = [
     'category_saved' => 'Категория сохранена.',
     'category_deleted' => 'Категория удалена.',
+    'attribute_saved' => 'Характеристика сохранена.',
+    'attribute_deleted' => 'Характеристика удалена.',
     'account_created' => 'Аккаунт создан — добро пожаловать на доску.',
     'listing_saved' => 'Объявление сохранено.',
     'listing_published' => 'Объявление опубликовано.',
@@ -67,6 +70,7 @@ function classifiedsAdminSummary(array $params = []): void
 {
     $counts = [
         'categories' => (int) value('SELECT COUNT(*) FROM ' . t('classifieds_category')),
+        'attributes' => (int) value('SELECT COUNT(*) FROM ' . t('classifieds_attribute')),
         'listings' => (int) value('SELECT COUNT(*) FROM ' . t('classifieds_listing')),
         'published' => (int) value('SELECT COUNT(*) FROM ' . t('classifieds_listing') . " WHERE status = 'PUBLISHED'"),
         'sellers' => (int) value('SELECT COUNT(*) FROM ' . t('user') . " WHERE role = 'seller'"),
@@ -87,6 +91,88 @@ function classifiedsAdminCategories(array $params = []): void
         'notice' => classifiedsAdminNotice(),
         'rows' => classifiedsCategoryFlatTree(),
     ], classifiedsAdminAlert()), ['title' => 'Категории — доска', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function classifiedsAdminAttributes(array $params = []): void
+{
+    $categoryId = mb_substr(trim((string) queryString('category', '')), 0, 26);
+    $category = $categoryId !== '' ? classifiedsCategoryById($categoryId) : null;
+
+    if ($category === null) {
+        $categoryId = '';
+    }
+
+    $own = $categoryId !== '' ? classifiedsAttributesOwn($categoryId) : [];
+    $inherited = [];
+
+    if ($categoryId !== '') {
+        foreach (classifiedsAttributesForCategory($categoryId) as $attribute) {
+            if ($attribute['category_id'] !== $categoryId) {
+                $inherited[] = $attribute;
+            }
+        }
+    }
+
+    render('classifieds/admin/attributes', array_merge([
+        'nav' => classifiedsAdminNav(requestPath()),
+        'notice' => classifiedsAdminNotice(),
+        'categories' => classifiedsCategoryFlatTree(),
+        'category' => $category,
+        'categoryId' => $categoryId,
+        'attributes' => $own,
+        'inherited' => $inherited,
+        'kinds' => CLASSIFIEDS_ATTRIBUTE_KINDS,
+    ], classifiedsAdminAlert()), ['title' => 'Характеристики — доска', 'noindex' => true]);
+}
+
+/**
+ * Действия с характеристиками: создать, сохранить, удалить. Категория приходит полем формы,
+ * но правка и удаление берут её из самой строки — подменить категорию в запросе нельзя.
+ *
+ * @param array<string, string> $params
+ */
+function classifiedsAttributeAction(array $params = []): void
+{
+    csrfCheck();
+    $op = postString('op');
+    $id = mb_substr(trim(postString('id')), 0, 26);
+    $categoryId = mb_substr(trim(postString('category')), 0, 26);
+    $back = '/classifieds/admin/attributes' . ($categoryId !== '' ? '?category=' . rawurlencode($categoryId) : '');
+    $result = ['ok' => false, 'error' => 'Неизвестное действие с характеристиками.', 'notice' => ''];
+
+    if ($op === 'create') {
+        $check = classifiedsValidateAttribute($_POST, $categoryId);
+
+        if ($check['errors'] === []) {
+            $result = classifiedsCreateAttribute($check['values']);
+        } else {
+            $result = ['ok' => false, 'error' => implode(' ', array_values($check['errors'])), 'notice' => ''];
+        }
+    }
+
+    if ($op === 'save' || $op === 'delete') {
+        $attribute = classifiedsAttributeById($id);
+
+        if ($attribute === null) {
+            $result = ['ok' => false, 'error' => 'Характеристики уже нет — обновите список.', 'notice' => ''];
+        } elseif ($op === 'delete') {
+            $result = classifiedsDeleteAttribute($id);
+        } else {
+            $currentCategory = (string) $attribute['category_id'];
+            $back = '/classifieds/admin/attributes?category=' . rawurlencode($currentCategory);
+            $check = classifiedsValidateAttribute($_POST, $currentCategory, $id);
+
+            if ($check['errors'] === []) {
+                $result = classifiedsUpdateAttribute($id, $check['values']);
+            } else {
+                $result = ['ok' => false, 'error' => implode(' ', array_values($check['errors'])), 'notice' => ''];
+            }
+        }
+    }
+
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, $back, $notice);
 }
 
 /**
