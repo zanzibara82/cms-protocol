@@ -41,8 +41,11 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // Объём обхода выверен по плану и таблице маршрутов, а не «больше нуля»: ко времени M5
     // было 57 вариантов из 44 строк таблицы метода GET, помеченных 44 из них. M6 добавляет
     // 4 маршрута (список и карточка Commerce API, список и правка webhooks) и 5 вариантов:
-    // всего 62 запроса, из них помеченных 49. Числа не подгоняются под прогон: любое
-    // расхождение плана с деревом краснит именем адреса, а не молчит.
+    // было 62 запроса, из них помеченных 49. C1 доски добавляет 9 маршрутов и 12 вариантов
+    // (витрина, категория с промахом, регистрация, кабинет, новая форма, чужая правка,
+    // карточка с промахом и черновиком, две админские страницы): всего 74, помеченных 57.
+    // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем
+    // адреса, а не молчит.
     //
     // Адресов вне таблицы четыре: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -52,13 +55,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 62;
-    private const MARKED_TOTAL = 49;
+    private const VARIANTS_TOTAL = 74;
+    private const MARKED_TOTAL = 57;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (62 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 61;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (74 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 73;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -165,6 +168,48 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'created_at' => utcStamp(nowUtc()),
             'updated_at' => utcStamp(nowUtc()),
         ]);
+
+        // Раздел «Доска объявлений» идёт в тот же обход: одна видимая категория, одно
+        // опубликованное объявление и черновик продавца. Объявления принадлежат отдельному
+        // продавцу, поэтому под редактором кабинет правки и черновик честно дают 404.
+        installApp('classifieds');
+        $sellerId = TestDb::seedUser('prodavec@obhod.school.dev', 'обход-продавца-1', 'seller');
+        $categoryId = newId();
+        insert('classifieds_category', [
+            'id' => $categoryId,
+            'parent_id' => null,
+            'slug' => 'obhod-tehnika',
+            'title' => 'Техника обхода',
+            'order_index' => 1,
+            'visible' => 1,
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+
+        foreach ([
+            ['id' => newId(), 'slug' => 'obhod-obyyavlenie', 'title' => 'Объявление обхода', 'status' => 'PUBLISHED'],
+            ['id' => newId(), 'slug' => 'obhod-chernovik', 'title' => 'Черновик обхода', 'status' => 'DRAFT'],
+        ] as $listing) {
+            insert('classifieds_listing', [
+                'id' => $listing['id'],
+                'owner_id' => $sellerId,
+                'category_id' => $categoryId,
+                'slug' => $listing['slug'],
+                'title' => $listing['title'],
+                'body' => 'Текст объявления для обхода.',
+                'price' => 1000.00,
+                'currency' => 'RUB',
+                'negotiable' => 0,
+                'location' => 'Москва',
+                'image' => null,
+                'status' => $listing['status'],
+                'seo_title' => null,
+                'seo_description' => null,
+                'noindex' => 0,
+                'created_at' => utcStamp(nowUtc()),
+                'updated_at' => utcStamp(nowUtc()),
+            ]);
+        }
 
         self::$tokens = self::buildTokens($items);
 
@@ -636,6 +681,41 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ['path' => '/commerce/admin/webhooks/{webhook}', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
+            // Доска объявлений: витрина и категория открыты, карточка опубликованного
+            // объявления открыта. Кабинет под редактором — не его экран: форма правки
+            // чужого объявления честно даёт 404, а сам кабинет помечен noindex.
+            'GET /classifieds' => [
+                ['path' => '/classifieds', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+            'GET /classifieds/c/{slug}' => [
+                ['path' => '/classifieds/c/{clscategory}', 'outcome' => self::OPEN, 'status' => 200],
+                ['path' => '/classifieds/c/net-takoy-kategorii', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /classifieds/register' => [
+                ['path' => '/classifieds/register', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/classifieds/cabinet'],
+            ],
+            'GET /classifieds/cabinet' => [
+                ['path' => '/classifieds/cabinet', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/cabinet/new' => [
+                ['path' => '/classifieds/cabinet/new', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/cabinet/{id}' => [
+                // Редактор вошёл в обход, но объявление принадлежит продавцу: экран не его.
+                ['path' => '/classifieds/cabinet/{clsid}', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /classifieds/{slug}' => [
+                ['path' => '/classifieds/{clsitem}', 'outcome' => self::OPEN, 'status' => 200],
+                ['path' => '/classifieds/net-takogo-obyavleniya', 'outcome' => self::MARKED, 'status' => 404],
+                ['path' => '/classifieds/{clsdraft}', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /classifieds/admin' => [
+                ['path' => '/classifieds/admin', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/admin/categories' => [
+                ['path' => '/classifieds/admin/categories', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
             // тот же помеченный экран, собранный ядром.
             'GET /broken' => [
@@ -827,6 +907,18 @@ final class NoIndexNoStoreSweepTest extends TestCase
 
         self::assertNotSame('', CommerceHttpSetup::$productId, 'Фикстура: CommerceHttpSetup не запомнил номер товара');
 
+        $classifiedsCategory = one('SELECT slug FROM ' . t('classifieds_category') . ' WHERE visible = ?', [1]);
+        self::assertIsArray($classifiedsCategory, 'Фикстура: видимой категории доски нет — обходу нечего открывать');
+
+        $classifiedsListing = one(
+            'SELECT id, slug FROM ' . t('classifieds_listing') . ' WHERE status = ? ORDER BY slug',
+            ['PUBLISHED']
+        );
+        self::assertIsArray($classifiedsListing, 'Фикстура: опубликованного объявления доски нет');
+
+        $classifiedsDraft = one('SELECT slug FROM ' . t('classifieds_listing') . ' WHERE status = ?', ['DRAFT']);
+        self::assertIsArray($classifiedsDraft, 'Фикстура: черновика доски нет — предпросмотр не проверить');
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
@@ -839,6 +931,11 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'shopcategory' => (string) $shopCategory['slug'],
             // Рубрика магазина: экран характеристик в админке.
             'cid' => (string) $shopCategory['id'],
+            // Доска: витрина, карточка, черновик и экран правки кабинета.
+            'clscategory' => (string) $classifiedsCategory['slug'],
+            'clsitem' => (string) $classifiedsListing['slug'],
+            'clsid' => (string) $classifiedsListing['id'],
+            'clsdraft' => (string) $classifiedsDraft['slug'],
         ] + self::buildDiscountTokens();
     }
 
