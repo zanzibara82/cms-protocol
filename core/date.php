@@ -75,6 +75,42 @@ function rfc2822Stamp(DateTimeImmutable $date): string
     return $date->setTimezone(new DateTimeZone('UTC'))->format('D, d M Y H:i:s') . ' +0000';
 }
 
+// Сдвиг момента на сутки: «вчера» в счётчиках значит вчерашний календарный день, а не
+// вчерашние 24 часа. Сдвиг идёт по UTC — московская шкала появляется на краях.
+function shiftDays(DateTimeImmutable $date, int $days): DateTimeImmutable
+{
+    $shifted = $date->modify(($days >= 0 ? '+' : '-') . abs($days) . ' days');
+
+    return $shifted instanceof DateTimeImmutable ? $shifted : $date;
+}
+
+// Сдвиг момента на секунды: окна приёма событий считают минуты, а не календарные дни.
+function shiftSeconds(DateTimeImmutable $date, int $seconds): DateTimeImmutable
+{
+    $shifted = $date->modify(($seconds >= 0 ? '+' : '-') . abs($seconds) . ' seconds');
+
+    return $shifted instanceof DateTimeImmutable ? $shifted : $date;
+}
+
+// Ключ календарного дня по московской шкале: счётчики разделов считают день по нему,
+// иначе ночные события попадали бы в соседние дни.
+function moscowDayKey(DateTimeImmutable $date): string
+{
+    return $date->setTimezone(moscowZone())->format('Y-m-d');
+}
+
+// Сдвиг календарного дня по московской шкале: ключ «2026-10-21» плюс сутки назад или вперёд.
+function shiftMoscowDay(string $day, int $days): string
+{
+    $parsed = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $day . ' 00:00:00', moscowZone());
+
+    if (!$parsed instanceof DateTimeImmutable) {
+        return $day;
+    }
+
+    return moscowDayKey(shiftDays($parsed, $days));
+}
+
 // Поле datetime-local приносит «2026-10-06T09:00» без пояса: время понимается как московское —
 // ровно то, о чём договорён контент-менеджер, назначая публикацию «на девять утра».
 function parseFormDateTime(string $raw): ?DateTimeImmutable

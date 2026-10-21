@@ -19,6 +19,9 @@ final class CsrfTest extends TestCase
     /** @var array<string, mixed> */
     private array $postBackup = [];
 
+    /** @var array<string, list<array{fn: callable, priority: int, kind: string, order: int}>> */
+    private array $hooksBackup = [];
+
     protected function setUp(): void
     {
         // Снимок суперглобальных до изменения: тест подменяет сессию, форму и адрес запроса,
@@ -28,12 +31,20 @@ final class CsrfTest extends TestCase
         $this->sessionBackup = isset($_SESSION) ? (array) $_SESSION : [];
         $this->postBackup = $_POST;
 
+        // Реестр подписок — тоже общее состояние процесса: чужие наборы снимают его hooksReset(),
+        // а набор со своей подпиской обязан вернуть реестр как было.
+        $registry = &hookRegistry();
+        $this->hooksBackup = $registry;
+
         $_SESSION = [];
         $_POST = [];
     }
 
     protected function tearDown(): void
     {
+        $registry = &hookRegistry();
+        $registry = $this->hooksBackup;
+
         $_SERVER = $this->serverBackup;
         $_SESSION = $this->sessionBackup;
         $_POST = $this->postBackup;
@@ -96,5 +107,49 @@ final class CsrfTest extends TestCase
         $this->expectOutputRegex('/Проверка формы не прошла/');
 
         csrfCheck();
+    }
+
+    // ── Публичный режим: машинный приёмник без сессии ────
+
+    // Публичный режим сверяет подпись через фильтр 'csrf_public_token': у приёмника нет
+    // сессии посетителя, и метка «запрос с нашего сайта» приезжает телом запроса.
+    public function testПубличныйРежимПринимаетПодписьРаздела(): void
+    {
+        addFilter('csrf_public_token', static fn (mixed $verified, mixed $token): bool => $token === 'подпись-раздела');
+        $_POST['_token'] = 'подпись-раздела';
+
+        csrfCheck('public');
+
+        self::assertArrayNotHasKey('csrf_token', $_SESSION, 'Машинный приёмник не заводит сессионный токен');
+    }
+
+    public function testПубличныйРежимОтвергаетЧужуюПодпись(): void
+    {
+        addFilter('csrf_public_token', static fn (mixed $verified, mixed $token): bool => $token === 'подпись-раздела');
+        $_SERVER['REQUEST_URI'] = '/seo/collect';
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+        $_POST['_token'] = 'подпись-чужого-раздела';
+
+        $this->expectException(ResponseFinished::class);
+        $this->expectExceptionMessage('403');
+        $this->expectOutputRegex('/Проверка запроса не прошла/');
+
+        csrfCheck('public');
+    }
+
+    // Режим без сессии не должен «на всякий случай» принять сессионный токен: подпись приёмника
+    // и метка формы — разные вещи, и смешивать их — значит открыть машинам чужую форму.
+    public function testПубличныйРежимНеПринимаетСессионныйТокен(): void
+    {
+        $token = csrfToken();
+        $_POST['_token'] = $token;
+        $_SERVER['REQUEST_URI'] = '/seo/collect';
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+
+        $this->expectException(ResponseFinished::class);
+        $this->expectExceptionMessage('403');
+        $this->expectOutputRegex('/Проверка запроса не прошла/');
+
+        csrfCheck('public');
     }
 }

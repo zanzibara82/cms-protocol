@@ -115,6 +115,15 @@ function dispatch(): void
         notFound();
     }
 
+    // Сессию поднимаем здесь, а не во фронт-контроллере: маршрут известен только на этом шаге,
+    // а машиночитаемые адреса помечены meta['sessionless'] => true — им сессия не нужна, и ответ
+    // без неё не несёт cookie. Так режим «без cookies» честен: счётчик не оставляет следов,
+    // а не просто не читает их. Сессионный режим поднимается до гейта приватных путей — гейт
+    // читает из неё номер версии, а /login — сразу после входа.
+    if (($match['meta']['sessionless'] ?? false) !== true) {
+        startSession();
+    }
+
     $permission = (string) ($match['meta']['permission'] ?? '');
     $private = ($match['meta']['private'] ?? false) === true || $permission !== '';
 

@@ -8,11 +8,17 @@ declare(strict_types=1);
 
 const SEO_NAV_PATHS = [
     '/seo/admin' => 'Метаданные',
+    '/seo/admin/stats' => 'Обзор',
+    '/seo/admin/pages' => 'Страницы',
+    '/seo/admin/sources' => 'Источники',
+    '/seo/admin/settings' => 'Настройки',
 ];
 
 const SEO_NOTICE_TEXT = [
     'meta_saved' => 'Метаданные сохранены.',
     'meta_deleted' => 'Метаданные удалены.',
+    'stats_saved' => 'Настройки сбора сохранены.',
+    'stats_purged' => 'Сырьё старше срока хранения удалено.',
 ];
 
 /**
@@ -21,12 +27,23 @@ const SEO_NOTICE_TEXT = [
  */
 function seoAdminNav(string $currentPath): string
 {
+    // Активной считается самая длинная подходящая вкладка: адрес «/seo/admin/stats» подходит
+    // и «Метаданным» (общий префикс), и «Обзору» — и открыт именно «Обзор». Без этого правила
+    // подсвечивались бы две вкладки сразу, и человек не понимал бы, где он.
+    $activeHref = '';
+
+    foreach (array_keys(SEO_NAV_PATHS) as $href) {
+        $matches = $currentPath === $href || str_starts_with($currentPath, $href . '/');
+
+        if ($matches && strlen($href) > strlen($activeHref)) {
+            $activeHref = $href;
+        }
+    }
+
     $items = '';
 
     foreach (SEO_NAV_PATHS as $href => $label) {
-        // Активной считается вкладка, чей адрес открыт: сам адрес и его продолжение
-        // («/seo/admin/123» — это всё ещё вкладка метаданных).
-        $active = $currentPath === $href || str_starts_with($currentPath, $href . '/');
+        $active = $href === $activeHref;
         $class = $active
             ? 'inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm font-medium text-cream'
             : 'inline-flex min-h-[44px] items-center rounded-lg px-3 py-2 text-sm font-medium text-ink/70 hover:bg-ink/5';
