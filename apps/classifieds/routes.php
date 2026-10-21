@@ -31,6 +31,7 @@ addRoute('GET', '/classifieds/cabinet/messages/{id}', 'classifiedsMessageThreadP
 addRoute('POST', '/classifieds/cabinet/messages/{id}', 'classifiedsMessageReplyAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/notifications', 'classifiedsNotificationsPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/cabinet/notifications', 'classifiedsNotificationsReadAction', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/cabinet/promotions', 'classifiedsPromotionsPage', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/new', 'classifiedsListingNewPage', ['app' => 'classifieds']);
 addRoute('POST', '/classifieds/cabinet/new', 'classifiedsListingSaveAction', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/cabinet/{id}', 'classifiedsListingEditPage', ['app' => 'classifieds']);
@@ -55,6 +56,7 @@ addRoute('GET', '/classifieds/admin/moderation', 'classifiedsAdminModeration', [
 addRoute('POST', '/classifieds/admin/moderation', 'classifiedsModerationAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/classifieds/admin/reports', 'classifiedsAdminReports', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/classifieds/admin/reports', 'classifiedsAdminReportAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/classifieds/admin/promotions', 'classifiedsAdminPromotionsPage', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 
 // Карта сайтов: только открытые категории и опубликованные объявления (C1 — базовый набор,
 // счётчики и приоритеты приедут вместе с SEO-этапом C6).

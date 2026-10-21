@@ -356,6 +356,16 @@ function commerceSetOrderStatus(string $orderId, string $status): array
     // доставки не имеет права изменить исход правки статуса.
     commerceWebhookEvent('order.status_changed', $orderId);
 
+    // Действие для разделов, продающих услуги через заказы магазина (доска C5):
+    // подписчик применяет оплату своих услуг или закрывает их при отмене. Сбой
+    // подписчика не имеет права изменить исход правки статуса, как и webhook:
+    // статус уже записан, поэтому падение подписчика ловится и пишется в журнал.
+    try {
+        doAction('commerce_order_status', $orderId, $status, $previous);
+    } catch (\Throwable $error) {
+        logWarn('commerce.order_status_action', ['orderId' => $orderId, 'reason' => $error->getMessage()]);
+    }
+
     return ['ok' => true, 'error' => '', 'notice' => 'order_updated'];
 }
 

@@ -19,3 +19,8 @@ require_once __DIR__ . '/notifications.php';
 require_once __DIR__ . '/reports.php';
 require_once __DIR__ . '/messages.php';
 require_once __DIR__ . '/moderation.php';
+require_once __DIR__ . '/promotions.php';
+
+// Доска покупает услуги заказами магазина: после оплаты (PAID) или отмены заказа
+// магазин вызывает хук, и строка продвижения применяется объявлению или закрывается.
+addAction('commerce_order_status', 'classifiedsPromotionOrderStatus');

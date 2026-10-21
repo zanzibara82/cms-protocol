@@ -106,7 +106,7 @@ final class ClassifiedsCabinetTest extends ClassifiedsDbTestCase
         self::assertContains($visible, $ids);
     }
 
-    public function testПубликацияСтавитСрокАПродлениеСдвигаетЕго(): void
+    public function testПубликацияСтавитСрокАЧерновикЕгоСнимает(): void
     {
         $sellerId = self::makeSeller();
         $categoryId = self::makeCategory('tehnika', 'Техника');
@@ -149,12 +149,9 @@ final class ClassifiedsCabinetTest extends ClassifiedsDbTestCase
         $afterDraft = classifiedsListingById($created['id']);
         self::assertNotNull($afterDraft);
         self::assertNull($afterDraft['expires_at']);
-
-        $extended = classifiedsListingExtend($created['id'], $sellerId, $base->modify('+42 days'));
-        self::assertFalse($extended['ok']);
     }
 
-    public function testПродлениеИКлонированиеПроверяютВладельца(): void
+    public function testКлонированиеПроверяетВладельца(): void
     {
         $sellerId = self::makeSeller();
         $otherId = self::makeSeller('other@example.ru');
@@ -172,12 +169,6 @@ final class ClassifiedsCabinetTest extends ClassifiedsDbTestCase
         classifiedsReplaceListingImages($listingId, ['/uploads/classifieds/one.jpg']);
 
         $moment = new \DateTimeImmutable('2026-10-01 09:00:00', new \DateTimeZone('UTC'));
-        $extended = classifiedsListingExtend($listingId, $sellerId, $moment);
-        self::assertTrue($extended['ok']);
-        $afterExtend = classifiedsListingById($listingId);
-        self::assertNotNull($afterExtend);
-        self::assertSame('2026-10-31 09:00:00', $afterExtend['expires_at']);
-        self::assertFalse(classifiedsListingExtend($listingId, $otherId, $moment)['ok']);
         self::assertFalse(classifiedsListingClone($listingId, $otherId, $moment)['ok']);
 
         $cloned = classifiedsListingClone($listingId, $sellerId, $moment);

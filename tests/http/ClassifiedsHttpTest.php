@@ -32,6 +32,7 @@ final class ClassifiedsHttpTest extends TestCase
         TestDb::reset();
         TestDb::clearTable('user');
         installApp('classifieds');
+        self::installCommerce();
 
         $moment = utcStamp(nowUtc());
         self::$categoryId = newId();
@@ -60,17 +61,60 @@ final class ClassifiedsHttpTest extends TestCase
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
-        foreach (['classifieds_notification', 'classifieds_report', 'classifieds_message', 'classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_promotion', 'classifieds_notification', 'classifieds_report', 'classifieds_message', 'classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
         run('DELETE FROM ' . t('app_installation') . " WHERE id = 'classifieds'");
         run('DELETE FROM ' . t('app_migration') . " WHERE app = 'classifieds'");
+        self::dropCommerce();
+    }
+
+    /**
+     * Магазин нужен доске C5: услуги продаются его заказами. Установка начинается с чистых
+     * таблиц и отметок — иначе раздел, оставшийся установленным без таблиц, отказал бы
+     * в установке, а экраны магазина отвечали бы ошибкой.
+     */
+    private static function installCommerce(): void
+    {
+        self::dropCommerce();
+
+        $result = installApp('commerce');
+
+        if (($result['ok'] ?? false) !== true) {
+            self::fail('Раздел «Магазин» не установился: ' . (string) ($result['error'] ?? ''));
+        }
+    }
+
+    /** Магазин уходит вместе с доской: таблицы и отметки установки. */
+    private static function dropCommerce(): void
+    {
+        foreach ([
+            'commerce_order_item',
+            'commerce_order',
+            'commerce_variant',
+            'commerce_product_attribute',
+            'commerce_attribute_choice',
+            'commerce_attribute',
+            'commerce_product_category',
+            'commerce_coupon',
+            'commerce_promo',
+            'commerce_supplier',
+            'commerce_webhook',
+            'commerce_product',
+            'commerce_category',
+        ] as $table) {
+            run('DROP TABLE IF EXISTS ' . t($table));
+        }
+
+        run('DELETE FROM ' . t('app_installation') . " WHERE id = 'commerce'");
+        run('DELETE FROM ' . t('app_migration') . " WHERE app = 'commerce'");
     }
 
     protected function setUp(): void
     {
         Kernel::freshCookies();
         run('DELETE FROM ' . t('classifieds_registration_attempt'));
+        run('DELETE FROM ' . t('classifieds_promotion'));
         run('DELETE FROM ' . t('classifieds_notification'));
         run('DELETE FROM ' . t('classifieds_report'));
         run('DELETE FROM ' . t('classifieds_message'));
@@ -80,6 +124,9 @@ final class ClassifiedsHttpTest extends TestCase
         run('DELETE FROM ' . t('classifieds_listing_image'));
         run('DELETE FROM ' . t('classifieds_attribute'));
         run('DELETE FROM ' . t('login_attempt'));
+        // Заказы прошлого теста не должны попасть в выборку нового.
+        run('DELETE FROM ' . t('commerce_order_item'));
+        run('DELETE FROM ' . t('commerce_order'));
         // Объявления, созданные прошлым тестом, не должны влиять на выдачу следующего.
         run('DELETE FROM ' . t('classifieds_listing') . ' WHERE id NOT IN (?, ?, ?)', [self::$publishedId, self::$draftId, self::$foreignId]);
         run('UPDATE ' . t('classifieds_listing') . " SET status = 'PUBLISHED', title = 'Кофемашина', expires_at = NULL, slug = 'kofemashina' WHERE id = ?", [self::$publishedId]);
@@ -714,7 +761,7 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertStringContainsString('Пока пусто', $empty['body']);
     }
 
-    public function testИстёкшееОбъявлениеСкрываетсяИПродлевается(): void
+    public function testИстёкшееОбъявлениеСкрываетсяИПродлеваетсяПослеОплаты(): void
     {
         run(
             'UPDATE ' . t('classifieds_listing') . ' SET expires_at = ? WHERE id = ?',
@@ -729,12 +776,45 @@ final class ClassifiedsHttpTest extends TestCase
         $cabinet = Kernel::get('/classifieds/cabinet');
         self::assertStringContainsString('Истекло', $cabinet['body']);
 
-        $extended = Kernel::post('/classifieds/cabinet/' . self::$publishedId . '/action', [
+        // Истёкшее объявление продлевается платной услугой: поднять и выделить его
+        // бессмысленно, пока срок публикации не восстановлен.
+        self::assertStringContainsString('Продлить', $cabinet['body']);
+        self::assertStringNotContainsString('Поднять', $cabinet['body']);
+        self::assertStringNotContainsString('Выделить', $cabinet['body']);
+
+        $ordered = Kernel::post('/classifieds/cabinet/' . self::$publishedId . '/action', [
             '_token' => $this->token($cabinet['body']),
             'op' => 'extend',
         ]);
-        self::assertSame(302, $extended['status']);
-        self::assertStringContainsString('notice=listing_extended', (string) ($extended['headers']['location'] ?? ''));
+        self::assertSame(302, $ordered['status']);
+        self::assertStringContainsString('notice=promotion_ordered', (string) ($ordered['headers']['location'] ?? ''));
+
+        // До оплаты услуга не работает: срок объявления не меняется. Владелец по прямой
+        // ссылке видит своё объявление и истёкшим (предпросмотр), поэтому судим о сроке.
+        $stillExpired = fromDb((string) value(
+            'SELECT expires_at FROM ' . t('classifieds_listing') . ' WHERE id = ?',
+            [self::$publishedId]
+        ));
+        self::assertNotNull($stillExpired);
+        self::assertLessThan(nowUtc(), $stillExpired);
+
+        $orderId = (string) value(
+            'SELECT id FROM ' . t('commerce_order') . " WHERE status = 'NEW' ORDER BY created_at DESC LIMIT 1"
+        );
+        self::assertNotSame('', $orderId);
+
+        // Оплату подтверждает админ магазина: после неё услуга применяется к объявлению.
+        Kernel::freshCookies();
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $orders = Kernel::get('/commerce/admin/orders');
+        self::assertSame(200, $orders['status']);
+        $paid = Kernel::post('/commerce/admin/orders', [
+            '_token' => $this->token($orders['body']),
+            'id' => $orderId,
+            'op' => 'paid',
+        ]);
+        self::assertSame(302, $paid['status']);
+        self::assertSame('PAID', (string) value('SELECT status FROM ' . t('commerce_order') . ' WHERE id = ?', [$orderId]));
 
         $expires = fromDb((string) value(
             'SELECT expires_at FROM ' . t('classifieds_listing') . ' WHERE id = ?',
@@ -744,6 +824,43 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertGreaterThan(nowUtc(), $expires);
         self::assertSame(200, Kernel::get('/classifieds/kofemashina')['status']);
         self::assertStringContainsString('/classifieds/kofemashina', Kernel::get('/sitemap.xml')['body']);
+
+        // Страница услуг продавца показывает заказ.
+        Kernel::freshCookies();
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $promotions = Kernel::get('/classifieds/cabinet/promotions');
+        self::assertSame(200, $promotions['status']);
+        self::assertStringContainsString('Продление', $promotions['body']);
+        self::assertStringContainsString('Кофемашина', $promotions['body']);
+    }
+
+    public function testКабинетПоказываетЦеныУслугИСписокЗаказов(): void
+    {
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $cabinet = Kernel::get('/classifieds/cabinet');
+        self::assertSame(200, $cabinet['status']);
+
+        // Цена услуги — цена товара магазина с фиксированным SKU: кабинет и заказ
+        // показывают одну и ту же сумму.
+        self::assertStringContainsString('Поднять (300,00 ₽)', $cabinet['body']);
+        self::assertStringContainsString('Выделить (800,00 ₽)', $cabinet['body']);
+        self::assertStringContainsString('Продлить (200,00 ₽)', $cabinet['body']);
+
+        $ordered = Kernel::post('/classifieds/cabinet/' . self::$publishedId . '/action', [
+            '_token' => $this->token($cabinet['body']),
+            'op' => 'bump',
+        ]);
+        self::assertSame(302, $ordered['status']);
+        self::assertStringContainsString('notice=promotion_ordered', (string) ($ordered['headers']['location'] ?? ''));
+
+        $promotions = Kernel::get('/classifieds/cabinet/promotions');
+        self::assertSame(200, $promotions['status']);
+        self::assertStringContainsString('Поднятие', $promotions['body']);
+        self::assertStringContainsString('Кофемашина', $promotions['body']);
+        self::assertStringContainsString('Ожидает оплаты', $promotions['body']);
+
+        // Заказ ждёт оплаты: объявление не поднято.
+        self::assertNull(classifiedsListingById(self::$publishedId)['boosted_at']);
     }
 
     public function testКлонированиеСоздаётЧерновикСАтрибутамиБезФотоИТолькоДляВладельца(): void

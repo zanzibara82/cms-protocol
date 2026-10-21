@@ -108,3 +108,34 @@ const CLASSIFIEDS_NOTIFICATION_KINDS = [
     'moderation' => 'Проверка объявления',
     'report' => 'Ответ на жалобу',
 ];
+
+// C5: платное продвижение. Цены правируются админом в магазине: каноническая цена услуги —
+// товар магазина с фиксированным SKU, кабинет читает её оттуда; константа — цена первого
+// автоматического создания товара. Продление через плату делает своей услугой и потому
+// заменяет бесплатное продление C3.
+const CLASSIFIEDS_PROMO_KINDS = [
+    'BUMP' => 'Поднятие',
+    'FEATURED' => 'Выделение',
+    'EXTEND' => 'Продление публикации',
+];
+const CLASSIFIEDS_PROMO_STATUSES = [
+    'NEW' => 'Ожидает оплаты',
+    'ACTIVE' => 'Применено',
+    'CANCELLED' => 'Отменено',
+];
+const CLASSIFIEDS_PROMO_SERVICE_SKU = [
+    'BUMP' => 'classifieds-bump',
+    'FEATURED' => 'classifieds-featured',
+    'EXTEND' => 'classifieds-extend',
+];
+const CLASSIFIEDS_PROMO_SERVICE_TITLES = [
+    'BUMP' => 'Поднятие объявления',
+    'FEATURED' => 'Выделение объявления',
+    'EXTEND' => 'Продление публикации объявления',
+];
+const CLASSIFIEDS_PROMO_FALLBACK_PRICES = [
+    'BUMP' => 300.00,
+    'FEATURED' => 800.00,
+    'EXTEND' => 200.00,
+];
+const CLASSIFIEDS_FEATURED_DAYS = 7;

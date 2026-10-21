@@ -12,6 +12,7 @@ const CLASSIFIEDS_NAV_PATHS = [
     '/classifieds/admin/attributes' => 'Характеристики',
     '/classifieds/admin/moderation' => 'Проверка',
     '/classifieds/admin/reports' => 'Жалобы',
+    '/classifieds/admin/promotions' => 'Продвижения',
 ];
 
 const CLASSIFIEDS_NOTICE_TEXT = [
@@ -25,11 +26,11 @@ const CLASSIFIEDS_NOTICE_TEXT = [
     'listing_published' => 'Объявление опубликовано.',
     'listing_hidden' => 'Объявление снято с публикации.',
     'listing_deleted' => 'Объявление удалено.',
-    'listing_extended' => 'Публикация продлена на 30 дней.',
     'listing_cloned' => 'Копия создана черновиком — добавьте фотографии и проверьте текст.',
     'profile_saved' => 'Профиль продавца сохранён.',
     'favorite_added' => 'Объявление в избранном.',
     'favorite_removed' => 'Объявление убрано из избранного.',
+    'promotion_ordered' => 'Заказ услуги создан — оплатите его в магазине, услуга включится после оплаты.',
     'report_sent' => 'Жалоба отправлена — редактор её рассмотрит.',
     'report_duplicate' => 'Жалоба на это объявление уже отправлена и ждёт рассмотрения.',
     'report_resolved' => 'Жалоба закрыта.',
@@ -319,4 +320,17 @@ function classifiedsAdminReportAction(array $params = []): void
         : classifiedsReportResolve($id, (string) $user['id']);
     $notice = (string) ($result['notice'] ?? '');
     finishAppAction($result, '/classifieds/admin/reports', $notice);
+}
+
+/** @param array<string, string> $params */
+function classifiedsAdminPromotionsPage(array $params = []): void
+{
+    render('classifieds/admin/promotions', array_merge([
+        'nav' => classifiedsAdminNav(requestPath()),
+        'notice' => classifiedsAdminNotice(),
+        'rows' => classifiedsAdminPromotions(),
+        'counts' => classifiedsPromotionCounts(),
+        'kinds' => CLASSIFIEDS_PROMO_KINDS,
+        'statuses' => CLASSIFIEDS_PROMO_STATUSES,
+    ], classifiedsAdminAlert()), ['title' => 'Продвижения — Доска', 'noindex' => true]);
 }

@@ -116,6 +116,7 @@ function classifiedsCabinetPage(array $params = []): void
         'favoriteCount' => classifiedsFavoriteCount((string) $user['id']),
         'messageUnread' => classifiedsUnreadMessages((string) $user['id']),
         'notificationUnread' => classifiedsUnreadNotifications((string) $user['id']),
+        'promotionServices' => classifiedsPromotionServices(),
     ], ['title' => 'Мои объявления — Доска', 'noindex' => true]);
 }
 
@@ -176,6 +177,17 @@ function classifiedsFavoriteRemoveAction(array $params = []): void
     $result = classifiedsFavoriteRemove((string) $user['id'], $listingId);
     $notice = (string) ($result['notice'] ?? '');
     finishAppAction($result, '/classifieds/cabinet/favorites', $notice);
+}
+
+/** @param array<string, string> $params */
+function classifiedsPromotionsPage(array $params = []): void
+{
+    $user = classifiedsRequireAccount();
+
+    render('classifieds/cabinet/promotions', [
+        'promotions' => classifiedsUserPromotions((string) $user['id']),
+        'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
+    ], ['title' => 'Услуги и заказы — Доска', 'noindex' => true]);
 }
 
 /** Адрес темы: объявление и собеседник. */
@@ -595,8 +607,9 @@ function classifiedsListingSaveAction(array $params = []): void
 }
 
 /**
- * Действия над своим объявлением: опубликовать, снять, удалить. Владение проверяет
- * setStatus/delete по owner_id — второй источник правды в кабинете не нужен.
+ * Действия над своим объявлением: опубликовать, снять, удалить, а также купить
+ * продвижение (bump/featured/extend). Владение проверяют setStatus/delete/create —
+ * второй источник правды в кабинете не нужен.
  *
  * @param array<string, string> $params
  */
@@ -610,9 +623,11 @@ function classifiedsListingAction(array $params = []): void
     $result = match ($op) {
         'publish' => classifiedsListingSetStatus($id, (string) $user['id'], 'PENDING_REVIEW'),
         'hide' => classifiedsListingSetStatus($id, (string) $user['id'], 'DRAFT'),
-        'extend' => classifiedsListingExtend($id, (string) $user['id']),
         'clone' => classifiedsListingClone($id, (string) $user['id']),
         'delete' => classifiedsListingDelete($id, (string) $user['id']),
+        'bump' => classifiedsPromotionCreate('BUMP', $id, $user),
+        'featured' => classifiedsPromotionCreate('FEATURED', $id, $user),
+        'extend' => classifiedsPromotionCreate('EXTEND', $id, $user),
         default => ['ok' => false, 'error' => 'Неизвестное действие с объявлением.', 'notice' => ''],
     };
 

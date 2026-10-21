@@ -17,6 +17,8 @@ $price = classifiedsPriceLabel(
 );
 $date = formatRuDate(fromDb((string) $listing['created_at']));
 $list = $view === 'list';
+$featuredUntil = fromDb((string) ($listing['featured_until'] ?? ''));
+$featured = $featuredUntil !== null && $featuredUntil > nowUtc();
 ?>
 <article class="<?= e($list ? 'flex h-full gap-4 rounded-xl border border-ink/10 bg-white p-3' : 'flex h-full flex-col overflow-hidden rounded-xl border border-ink/10 bg-white') ?>">
     <a class="block min-h-[44px] <?= e($list ? 'w-32 shrink-0 overflow-hidden rounded-lg bg-cream sm:w-48' : 'aspect-[4/3] bg-cream') ?>" href="<?= e($href) ?>">
@@ -31,6 +33,9 @@ $list = $view === 'list';
         <h3 class="font-medium">
             <a class="inline-flex min-h-[44px] items-center underline-offset-4 hover:underline" href="<?= e($href) ?>"><?= e((string) $listing['title']) ?></a>
         </h3>
+        <?php if ($featured): ?>
+            <p><span class="rounded bg-accent/20 px-2 py-0.5 text-xs font-medium">Выделено</span></p>
+        <?php endif; ?>
         <p class="mt-auto flex flex-wrap gap-x-3 text-sm text-ink/60">
             <?php if ((string) ($listing['location'] ?? '') !== ''): ?>
                 <span><?= e((string) $listing['location']) ?></span>

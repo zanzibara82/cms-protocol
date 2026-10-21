@@ -6,9 +6,10 @@ declare(strict_types=1);
 // Транзакции tx() здесь не требуются: правятся одиночные строки, а составные части
 // (изображения и характеристики) будут позже.
 
-/** Колонки карточки: без описания и служебных колонок — список и витрина ими не сыт. */
+/** Колонки карточки: без описания и служебных колонок — список и витрина ими не сыт.
+ *  C5: boosted_at ведёт сортировку лент, featured_until даёт бейдж «Выделено». */
 const CLASSIFIEDS_CARD_COLUMNS = 'l.id, l.slug, l.title, l.category_id, l.price, l.currency, l.negotiable,'
-    . ' l.location, l.image, l.status, l.expires_at, l.created_at';
+    . ' l.location, l.image, l.status, l.expires_at, l.boosted_at, l.featured_until, l.created_at';
 
 /** Полный набор: страница объявления и кабинет переживают описание, SEO и решение проверки. */
 const CLASSIFIEDS_FULL_COLUMNS = CLASSIFIEDS_CARD_COLUMNS . ', l.owner_id, l.body, l.seo_title,'
@@ -27,7 +28,7 @@ const CLASSIFIEDS_HOME_LIMIT = 12;
  * Приводит строку базы к договору шаблонов: NULL там, где пусто, и строгие типы.
  *
  * @param array<string, mixed> $row
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}
  */
 function classifiedsListingShape(array $row): array
 {
@@ -45,6 +46,8 @@ function classifiedsListingShape(array $row): array
         'image' => $row['image'] !== null && (string) $row['image'] !== '' ? (string) $row['image'] : null,
         'status' => (string) $row['status'],
         'expires_at' => $row['expires_at'] !== null && (string) $row['expires_at'] !== '' ? (string) $row['expires_at'] : null,
+        'boosted_at' => $row['boosted_at'] !== null && (string) $row['boosted_at'] !== '' ? (string) $row['boosted_at'] : null,
+        'featured_until' => $row['featured_until'] !== null && (string) $row['featured_until'] !== '' ? (string) $row['featured_until'] : null,
         'moderation_note' => $row['moderation_note'] !== null && (string) $row['moderation_note'] !== '' ? (string) $row['moderation_note'] : null,
         'submitted_at' => $row['submitted_at'] !== null && (string) $row['submitted_at'] !== '' ? (string) $row['submitted_at'] : null,
         'seo_title' => $row['seo_title'] !== null && (string) $row['seo_title'] !== '' ? (string) $row['seo_title'] : null,
@@ -55,7 +58,6 @@ function classifiedsListingShape(array $row): array
     ];
 }
 
-/** Объявление по id целиком: кабинет и страница работают по одной форме договора. */
 /**
  * Истёк ли срок публикации. NULL — бессрочная запись (старые объявления и черновики),
  * поэтому такие карточки не прячем. Сравнение идёт в UTC, как и хранение дат.
@@ -82,7 +84,11 @@ function classifiedsListingExpiresAt(array $listing): ?DateTimeImmutable
     return fromDb(isset($listing['expires_at']) ? (string) $listing['expires_at'] : null);
 }
 
-/** @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null */
+/**
+ * Объявление по id целиком: кабинет и страница работают по одной форме договора.
+ *
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
+ */
 function classifiedsListingById(string $id): ?array
 {
     $row = one('SELECT ' . CLASSIFIEDS_FULL_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l WHERE l.id = ?', [$id]);
@@ -113,7 +119,7 @@ function classifiedsPublishedListingWithCategory(string $slug): ?array
  * Объявление любого статуса по адресу — для предпросмотра и кабинета: владельцу
  * черновик виден по прямой ссылке, гостю адрес отвечает как несуществующий.
  *
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
  */
 function classifiedsListingAnyStatus(string $slug): ?array
 {
@@ -151,7 +157,7 @@ function classifiedsCategoryFeed(array $category, int $page): array
     $rows = all(
         'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l'
         . " WHERE l.category_id IN ({$marks}) AND l.status = 'PUBLISHED' AND " . CLASSIFIEDS_ACTIVE_SQL
-        . ' ORDER BY l.created_at DESC, l.id DESC'
+        . ' ORDER BY l.boosted_at DESC, l.created_at DESC, l.id DESC'
         . ' LIMIT ' . (string) CLASSIFIEDS_PER_PAGE . ' OFFSET ' . (string) $offset,
         $ids
     );
@@ -169,7 +175,7 @@ function classifiedsHomeFeed(): array
     return all(
         'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ' FROM ' . t('classifieds_listing') . ' l'
         . " WHERE l.status = 'PUBLISHED' AND " . CLASSIFIEDS_ACTIVE_SQL
-        . ' ORDER BY l.created_at DESC, l.id DESC'
+        . ' ORDER BY l.boosted_at DESC, l.created_at DESC, l.id DESC'
         . ' LIMIT ' . (string) CLASSIFIEDS_HOME_LIMIT
     );
 }
@@ -477,35 +483,6 @@ function classifiedsListingSetStatus(string $id, string $ownerId, string $status
             default => 'listing_hidden',
         },
     ];
-}
-
-/**
- * Продление публикации на новый срок. Продлевать можно только опубликованное объявление,
- * в том числе уже истёкшее: черновику сначала нужна публикация.
- *
- * @return array{ok: bool, error: string, notice: string}
- */
-function classifiedsListingExtend(string $id, string $ownerId, ?DateTimeImmutable $now = null): array
-{
-    $listing = classifiedsListingById($id);
-
-    if ($listing === null || (string) $listing['owner_id'] !== $ownerId) {
-        return ['ok' => false, 'error' => 'Объявление не найдено — возможно, оно уже удалено.', 'notice' => ''];
-    }
-
-    if ((string) $listing['status'] !== 'PUBLISHED') {
-        return ['ok' => false, 'error' => 'Продлить можно только опубликованное объявление.', 'notice' => ''];
-    }
-
-    $moment = $now ?? nowUtc();
-
-    run(
-        'UPDATE ' . t('classifieds_listing') . ' SET expires_at = ?, updated_at = ? WHERE id = ?',
-        [classifiedsListingNewExpiry($moment), utcStamp($moment), $id]
-    );
-    logInfo('classifieds.listing_extended', ['listingId' => $id]);
-
-    return ['ok' => true, 'error' => '', 'notice' => 'listing_extended'];
 }
 
 /**

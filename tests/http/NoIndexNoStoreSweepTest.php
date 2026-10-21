@@ -46,8 +46,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // карточка с промахом и черновиком, две админские страницы): всего 74, помеченных 57.
     // C3 добавляет профиль и избранное кабинета (помечены) и публичную страницу продавца
     // (открыта). C4 добавляет переписку и уведомления кабинета, форму жалобы и два экрана
-    // админки — все помечены: всего 85 вариантов, помеченных 67. Числа не подгоняются под
-    // прогон: любое расхождение плана с деревом краснит именем адреса, а не молчит.
+    // админки — все помечены: всего 85 вариантов, помеченных 67. C5 добавляет страницу услуг
+    // кабинета и реестр продвижений админки — оба помечены: всего 87 вариантов, помеченных 69.
+    // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
+    // а не молчит.
     //
     // Адресов вне таблицы четыре: у установщика два экрана, и в плане их три
     // строки. `/setup.php` и `/setup.php?step=db` — один и тот же экран шага 1 (`setupStep()` в
@@ -57,13 +59,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 85;
-    private const MARKED_TOTAL = 67;
+    private const VARIANTS_TOTAL = 87;
+    private const MARKED_TOTAL = 69;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (85 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 84;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (87 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 86;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -719,6 +721,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /classifieds/cabinet/notifications' => [
                 ['path' => '/classifieds/cabinet/notifications', 'outcome' => self::MARKED, 'status' => 200],
             ],
+            'GET /classifieds/cabinet/promotions' => [
+                ['path' => '/classifieds/cabinet/promotions', 'outcome' => self::MARKED, 'status' => 200],
+            ],
             'GET /classifieds/cabinet/new' => [
                 ['path' => '/classifieds/cabinet/new', 'outcome' => self::MARKED, 'status' => 200],
             ],
@@ -753,6 +758,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /classifieds/admin/reports' => [
                 ['path' => '/classifieds/admin/reports', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/admin/promotions' => [
+                ['path' => '/classifieds/admin/promotions', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
 

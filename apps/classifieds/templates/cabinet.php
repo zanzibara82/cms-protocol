@@ -11,6 +11,7 @@ declare(strict_types=1);
  * @var int $favoriteCount
  * @var int $messageUnread
  * @var int $notificationUnread
+ * @var array<string, array{kind: string, sku: string, title: string, price: float, currency: string, label: string}> $promotionServices
  */
 $rows = '';
 foreach ($listings as $listing) {
@@ -29,6 +30,12 @@ foreach ($listings as $listing) {
     $statusLabel = $expired && $published ? 'Истекло' : (CLASSIFIEDS_STATUS_LABELS[$statusValue] ?? 'Черновик');
     $statusClass = $published && !$expired ? 'bg-accent/15' : 'bg-ink/10';
     $status = '<span class="rounded ' . $statusClass . ' px-2 py-0.5 text-xs font-medium">' . e($statusLabel) . '</span>';
+    $featuredUntil = fromDb((string) ($listing['featured_until'] ?? ''));
+    $featuredActive = $featuredUntil !== null && $featuredUntil > nowUtc();
+    $featured = $featuredActive
+        ? '<span class="rounded bg-accent/20 px-2 py-0.5 text-xs font-medium">Выделено до '
+            . e(formatRuDate($featuredUntil)) . '</span>'
+        : '';
     $note = $statusValue === 'REJECTED' && (string) ($listing['moderation_note'] ?? '') !== ''
         ? '<p class="text-sm text-ink/60">Причина отказа: ' . e((string) $listing['moderation_note']) . '</p>'
         : '';
@@ -37,8 +44,30 @@ foreach ($listings as $listing) {
         . csrfField();
 
     if ($published) {
-        $form .= '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" name="op" value="hide">Скрыть</button>'
-            . '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" name="op" value="extend">Продлить</button>';
+        $form .= '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" name="op" value="hide">Скрыть</button>';
+
+        // Истёкшее объявление продлевается платной услугой: поднимать и выделять его
+        // бессмысленно, пока срок публикации не восстановлен.
+        $bump = $expired ? null : ($promotionServices['BUMP'] ?? null);
+
+        if ($bump !== null) {
+            $form .= '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5"'
+                . ' name="op" value="bump">Поднять (' . e((string) $bump['label']) . ')</button>';
+        }
+
+        $featuredService = ($expired || $featuredActive) ? null : ($promotionServices['FEATURED'] ?? null);
+
+        if ($featuredService !== null) {
+            $form .= '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5"'
+                . ' name="op" value="featured">Выделить (' . e((string) $featuredService['label']) . ')</button>';
+        }
+
+        $extend = $promotionServices['EXTEND'] ?? null;
+
+        if ($extend !== null) {
+            $form .= '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5"'
+                . ' name="op" value="extend">Продлить (' . e((string) $extend['label']) . ')</button>';
+        }
     } elseif ($statusValue !== 'PENDING_REVIEW') {
         $form .= '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-2 text-sm font-medium text-cream hover:bg-ink/90" name="op" value="publish">На проверку</button>';
     }
@@ -49,7 +78,7 @@ foreach ($listings as $listing) {
 
     $rows .= '<li class="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-ink/10 bg-white p-4">'
         . '<div class="min-w-0 space-y-1">'
-        . '<p class="flex flex-wrap items-center gap-2 font-medium">' . $status
+        . '<p class="flex flex-wrap items-center gap-2 font-medium">' . $status . $featured
         . '<a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-accent" href="' . e($href) . '">' . e((string) $listing['title']) . '</a></p>'
         . '<p class="text-sm text-ink/60 tabular-nums">' . e($price) . ($date !== '' ? ' · ' . e($date) : '')
         . ($expiry !== '' ? ' · ' . e($expiry) : '') . '</p>'
@@ -73,6 +102,8 @@ $content = '<section class="space-y-6">'
     . ' href="/classifieds/cabinet/profile">Профиль продавца</a>'
     . '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5"'
     . ' href="/classifieds/cabinet/favorites">Избранное (' . e((string) $favoriteCount) . ')</a>'
+    . '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5"'
+    . ' href="/classifieds/cabinet/promotions">Услуги и заказы</a>'
     . '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5"'
     . ' href="/classifieds/cabinet/messages">Сообщения (' . e((string) $messageUnread) . ')</a>'
     . '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5"'

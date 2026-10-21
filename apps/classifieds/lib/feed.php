@@ -152,7 +152,10 @@ function classifiedsListingFeed(array $options, int $page): array
     }
 
     $where = implode(' AND ', $parts);
-    $order = 'l.created_at DESC, l.id DESC';
+    // Сортировка по дате ведёт ленту и поднятыми объявлениями: платное «поднятие» обязано
+    // поднимать объявление в ленте, иначе услуга ничего не делает. Явные сортировки
+    // (цена, релевантность) остаются как выбрал человек.
+    $order = 'l.boosted_at DESC, l.created_at DESC, l.id DESC';
     $orderArgs = [];
 
     if ($sort === 'price_asc') {
