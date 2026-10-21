@@ -23,3 +23,4 @@ require dirname(__DIR__) . '/tests/TestDb.php';
 require_once dirname(__DIR__) . '/apps/news/lib/boot.php';
 require_once dirname(__DIR__) . '/apps/commerce/lib/boot.php';
 require_once dirname(__DIR__) . '/apps/classifieds/lib/boot.php';
+require_once dirname(__DIR__) . '/apps/seo/lib/boot.php';

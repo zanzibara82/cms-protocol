@@ -50,7 +50,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // кабинета и реестр продвижений админки — оба помечены: всего 87 вариантов, помеченных 69.
     // C6 добавляет JSON-выдачу доски (список и карточка, оба помечены) и экран вебхуков
     // доски (список и правка выбранного помечены, промах по идентификатору возвращает
-    // к списку) — всего 93 варианта, помеченных 74.
+    // к списку) — всего 93 варианта, помеченных 74. S1 раздела «SEO и статистика» добавляет
+    // справочник метаданных и экран правки выбранной строки (помечены, промах по
+    // идентификатору возвращает к справочнику) — всего 96 вариантов, помеченных 76.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -62,13 +64,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 93;
-    private const MARKED_TOTAL = 74;
+    private const VARIANTS_TOTAL = 96;
+    private const MARKED_TOTAL = 76;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
     // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (93 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 92;
+    private const MARKED_ON_NOT_INSTALLED = 95;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -229,6 +231,27 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'active' => 1,
             'last_state' => null,
             'last_at' => null,
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+
+        // Раздел «SEO и статистика» (S1) идёт в тот же обход: справочник метаданных и
+        // экран правки выбранной строки. Строка метаданных лежит на отдельном адресе,
+        // которого в сборке нет, — обход проверяет экраны раздела, а не содержимое правки.
+        installApp('seo');
+        $seoMetaId = newId();
+        insert('seo_meta', [
+            'id' => $seoMetaId,
+            'path' => '/obhod',
+            'title' => 'Страница обхода',
+            'description' => 'Описание страницы обхода.',
+            'canonical' => null,
+            'robots' => null,
+            'og_title' => null,
+            'og_description' => null,
+            'og_image' => null,
+            'noindex' => 0,
+            'in_sitemap' => 0,
             'created_at' => utcStamp(nowUtc()),
             'updated_at' => utcStamp(nowUtc()),
         ]);
@@ -805,6 +828,22 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ],
             ],
 
+            // Раздел «SEO и статистика» (S1): справочник метаданных и экран правки выбранной
+            // строки. Несуществующая запись возвращает человека к справочнику с причиной —
+            // так же, как экраны вебхуков.
+            'GET /seo/admin' => [
+                ['path' => '/seo/admin', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /seo/admin/{id}' => [
+                ['path' => '/seo/admin/{seometa}', 'outcome' => self::MARKED, 'status' => 200],
+                [
+                    'path' => '/seo/admin/net-takoy-stroki',
+                    'outcome' => self::REDIRECT,
+                    'status' => 302,
+                    'target' => '/seo/admin',
+                ],
+            ],
+
 
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
             // тот же помеченный экран, собранный ядром.
@@ -1014,6 +1053,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
         );
         self::assertIsArray($classifiedsWebhook, 'Фикстура: вебхука доски нет — экран правки недоступен');
 
+        $seoMeta = one('SELECT id FROM ' . t('seo_meta') . " WHERE path = '/obhod'");
+        self::assertIsArray($seoMeta, 'Фикстура: строки метаданных нет — экран правки недоступен');
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
@@ -1033,6 +1075,8 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'clsdraft' => (string) $classifiedsDraft['slug'],
             'clsowner' => (string) $classifiedsListing['owner_id'],
             'clswebhook' => (string) $classifiedsWebhook['id'],
+            // Метаданные: экран правки выбранной строки справочника.
+            'seometa' => (string) $seoMeta['id'],
         ] + self::buildDiscountTokens();
     }
 

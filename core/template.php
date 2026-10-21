@@ -68,13 +68,31 @@ function render(string $template, array $data = [], array $page = []): void
     $title = (string) ($page['title'] ?? (string) configValue('SITE_NAME', 'Сайт'));
     $description = (string) ($page['description'] ?? '');
     $noindex = (bool) ($page['noindex'] ?? false);
+    $robots = (string) ($page['robots'] ?? '');
+
+    // Фильтр page_meta — точка, где приложение правит страницу, не залезая в ядро: заголовок,
+    // описание, директивы robots и свой HTML в head. Ядро отдаёт свои значения основой —
+    // подписчик заменяет их своими, а не выдумывает страницу заново. Метку noindex снимать
+    // нельзя: с ней страница лишается запрета хранения, который ставит ветка $noindex ниже.
+    $meta = (array) applyFilters('page_meta', [
+        'title' => $title,
+        'description' => $description,
+        'noindex' => $noindex,
+        'robots' => $robots,
+        'head' => (string) ($page['head'] ?? ''),
+    ], $template, $data);
+
+    $title = (string) ($meta['title'] ?? $title);
+    $description = (string) ($meta['description'] ?? $description);
+    $noindex = (bool) ($meta['noindex'] ?? $noindex);
+    $robots = (string) ($meta['robots'] ?? $robots);
 
     ob_start();
     doAction('page_head');
     // Порядок: сначала вывод хука page_head, затем значение $page['head'] — читающий каскад видит их в этом порядке.
     // $page['head'] — сырой HTML по тому же правилу, что и вывод хука: его передаёт только первичный код
     // (ядро и приложения), никогда пользовательский ввод.
-    $head = (string) ob_get_clean() . (string) ($page['head'] ?? '');
+    $head = (string) ob_get_clean() . (string) ($meta['head'] ?? $page['head'] ?? '');
 
     ob_start();
     doAction('page_footer');

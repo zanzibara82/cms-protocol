@@ -8,6 +8,7 @@ declare(strict_types=1);
 /** @var string $head */
 /** @var string $footer */
 /** @var bool $noindex */
+/** @var string $robots */
 ?>
 <!doctype html>
 <html lang="ru">
@@ -18,8 +19,8 @@ declare(strict_types=1);
     <?php if ($description !== ''): ?>
         <meta name="description" content="<?= e($description) ?>">
     <?php endif; ?>
-    <?php if ($noindex): ?>
-        <meta name="robots" content="noindex, nofollow">
+    <?php if ($noindex || $robots !== ''): ?>
+        <meta name="robots" content="<?= e($robots !== '' ? $robots : 'noindex, nofollow') ?>">
     <?php endif; ?>
     <link rel="stylesheet" href="/assets/app.css">
     <link rel="icon" href="/assets/img/brand/favicon.png" type="image/png">
