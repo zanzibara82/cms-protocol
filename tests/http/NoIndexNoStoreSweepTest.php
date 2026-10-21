@@ -48,6 +48,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // (открыта). C4 добавляет переписку и уведомления кабинета, форму жалобы и два экрана
     // админки — все помечены: всего 85 вариантов, помеченных 67. C5 добавляет страницу услуг
     // кабинета и реестр продвижений админки — оба помечены: всего 87 вариантов, помеченных 69.
+    // C6 добавляет JSON-выдачу доски (список и карточка, оба помечены) и экран вебхуков
+    // доски (список и правка выбранного помечены, промах по идентификатору возвращает
+    // к списку) — всего 93 варианта, помеченных 74.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -59,13 +62,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 87;
-    private const MARKED_TOTAL = 69;
+    private const VARIANTS_TOTAL = 93;
+    private const MARKED_TOTAL = 74;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (87 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 86;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (93 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 92;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -215,8 +218,22 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ]);
         }
 
-        self::$tokens = self::buildTokens($items);
+        // Вебхук доски (C6) в обход: экран правки питается идентификатором фикстуры.
+        // Приёмник активен, но события в этом наборе не рождаются: объявления здесь не
+        // проверяются и переписки нет — наружный curl не звенит.
+        insert('classifieds_webhook', [
+            'id' => newId(),
+            'event' => 'listing.published',
+            'url' => 'https://obhod.school.dev/webhooks/nova-classifieds',
+            'secret' => 'obhod-secret-2026-long-enough-minus-need-40',
+            'active' => 1,
+            'last_state' => null,
+            'last_at' => null,
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
 
+        self::$tokens = self::buildTokens($items);
         // Отметка CMS_TEST_OMITTED_HANDLER поднимает в фикстуре маршрут с отсутствующим
         // обработчиком — тот же приём, что в ErrorScreenTest: экран 500 идёт мимо `render()`
         // и обязан попасть в этот же обход. Каталог фикстур передаётся серверу, чтобы таблица
@@ -699,6 +716,16 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /classifieds/search' => [
                 ['path' => '/classifieds/search', 'outcome' => self::MARKED, 'status' => 200],
             ],
+            // JSON-выдача доски C6: список и карточка объявления отвечают мимо render(),
+            // но посылают пару заголовков сами (X-Robots-Tag: noindex + Cache-Control:
+            // no-store) — исход тот же, что у помеченного экрана.
+            'GET /classifieds/api/listings' => [
+                ['path' => '/classifieds/api/listings', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/api/listings/{slug}' => [
+                ['path' => '/classifieds/api/listings/{clsitem}', 'outcome' => self::MARKED, 'status' => 200],
+                ['path' => '/classifieds/api/listings/net-takogo-obyavleniya', 'outcome' => self::MARKED, 'status' => 404],
+            ],
             'GET /classifieds/register' => [
                 ['path' => '/classifieds/register', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/classifieds/cabinet'],
             ],
@@ -761,6 +788,21 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /classifieds/admin/promotions' => [
                 ['path' => '/classifieds/admin/promotions', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            // Вебхуки доски (C6): список приёмников и экран правки выбранного по
+            // идентификатору. Несуществующий приёмник возвращает человека к списку
+            // с причиной — так же, как экран вебхуков магазина.
+            'GET /classifieds/admin/webhooks' => [
+                ['path' => '/classifieds/admin/webhooks', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /classifieds/admin/webhooks/{id}' => [
+                ['path' => '/classifieds/admin/webhooks/{clswebhook}', 'outcome' => self::MARKED, 'status' => 200],
+                [
+                    'path' => '/classifieds/admin/webhooks/net-takogo-vebhuka',
+                    'outcome' => self::REDIRECT,
+                    'status' => 302,
+                    'target' => '/classifieds/admin/webhooks',
+                ],
             ],
 
 
@@ -967,6 +1009,11 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $classifiedsDraft = one('SELECT slug FROM ' . t('classifieds_listing') . ' WHERE status = ?', ['DRAFT']);
         self::assertIsArray($classifiedsDraft, 'Фикстура: черновика доски нет — предпросмотр не проверить');
 
+        $classifiedsWebhook = one(
+            'SELECT id FROM ' . t('classifieds_webhook') . " WHERE url = 'https://obhod.school.dev/webhooks/nova-classifieds'"
+        );
+        self::assertIsArray($classifiedsWebhook, 'Фикстура: вебхука доски нет — экран правки недоступен');
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
@@ -985,6 +1032,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'clsid' => (string) $classifiedsListing['id'],
             'clsdraft' => (string) $classifiedsDraft['slug'],
             'clsowner' => (string) $classifiedsListing['owner_id'],
+            'clswebhook' => (string) $classifiedsWebhook['id'],
         ] + self::buildDiscountTokens();
     }
 

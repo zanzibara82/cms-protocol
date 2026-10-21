@@ -24,6 +24,7 @@ declare(strict_types=1);
  * @var string $contactLogin
  * @var string $reportHref
  * @var string $reportLogin
+ * @var string $viewsLabel
  */
 ?>
 <article class="space-y-6">
@@ -55,6 +56,9 @@ declare(strict_types=1);
             <?php endif; ?>
             <?php if ($dateLabel !== ''): ?>
                 <span><?= e($dateLabel) ?></span>
+            <?php endif; ?>
+            <?php if ($viewsLabel !== ''): ?>
+                <span><?= e($viewsLabel) ?></span>
             <?php endif; ?>
         </p>
     </header>

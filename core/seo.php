@@ -42,7 +42,7 @@ const ROBOTS_CORE_DISALLOW = [
  * Адреса карты сайта. Фильтр sitemap_urls (спецификация §5.4) позволяет разделу добавить свои,
  * не правя ядро; ядро при этом отбраковывает то, что раздел добавить не вправе.
  *
- * @return list<array{loc: string, lastmod?: string}>
+ * @return list<array{loc: string, lastmod?: string, priority?: float}>
  */
 function sitemapUrls(): array
 {
@@ -77,6 +77,17 @@ function sitemapUrls(): array
         $lastmod = $url['lastmod'] ?? null;
         if (is_string($lastmod) && $lastmod !== '') {
             $entry['lastmod'] = $lastmod;
+        }
+
+        // Приоритет от 0 до 1: значение вне диапазона или не число — метку не пишем,
+        // поисковик сам разберётся, что страница обычная.
+        $priority = $url['priority'] ?? null;
+        if (is_int($priority) || is_float($priority)) {
+            $value = (float) $priority;
+
+            if ($value >= 0.0 && $value <= 1.0) {
+                $entry['priority'] = $value;
+            }
         }
 
         $clean[] = $entry;
@@ -128,6 +139,9 @@ function sitemapXml(): string
         if (isset($url['lastmod'])) {
             $xml .= '    <lastmod>' . e((string) $url['lastmod']) . '</lastmod>' . "\n";
         }
+        if (isset($url['priority'])) {
+            $xml .= '    <priority>' . e(number_format((float) $url['priority'], 1, '.', '')) . '</priority>' . "\n";
+        }
         $xml .= "  </url>\n";
     }
 
@@ -152,4 +166,41 @@ function robotsLines(): array
 function robotsTxt(): string
 {
     return implode("\n", robotsLines()) . "\n";
+}
+
+/**
+ * Разметка Schema.org (JSON-LD) одним скриптом. Собирается в ядре, потому что формат
+ * одинаков для всех разделов, а раздел отдаёт только данные. JSON печатается с
+ * экранированием опасных символов (JSON_HEX_TAG и соседи): закрыть тег script
+ * пользовательским текстом нельзя.
+ *
+ * @param array<string, mixed> $data
+ */
+function jsonLdScript(array $data): string
+{
+    $json = json_encode(
+        $data,
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+    );
+
+    if (!is_string($json)) {
+        return '';
+    }
+
+    return '<script type="application/ld+json">' . $json . '</script>';
+}
+
+/**
+ * Несколько объектов разметки одним скриптом: так их и понимают поисковики — граф,
+ * а не набор отдельных блоков. Пустой список разметку не печатает.
+ *
+ * @param list<array<string, mixed>> $items
+ */
+function jsonLdGraphScript(array $items): string
+{
+    if ($items === []) {
+        return '';
+    }
+
+    return jsonLdScript(['@context' => 'https://schema.org', '@graph' => $items]);
 }

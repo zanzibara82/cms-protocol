@@ -40,7 +40,7 @@ function classifiedsRequireAccount(): array
 
 /** Форма объявления из строки базы: поля приводятся к тому же виду, что и при POST.
  * @param array<string, mixed> $listing
- * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, image: string, attrs: array<string, string>}
+ * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, views_public: int, image: string, attrs: array<string, string>}
  */
 function classifiedsFormFromListing(array $listing): array
 {
@@ -60,6 +60,7 @@ function classifiedsFormFromListing(array $listing): array
         'seo_title' => (string) ($listing['seo_title'] ?? ''),
         'seo_description' => (string) ($listing['seo_description'] ?? ''),
         'noindex' => $listing['noindex'] ? 1 : 0,
+        'views_public' => (int) ($listing['views_public'] ?? 1) === 1 ? 1 : 0,
         'image' => (string) ($listing['image'] ?? ''),
         'attrs' => classifiedsListingAttributeFormValues((string) $listing['id']),
     ];
@@ -70,7 +71,7 @@ function classifiedsFormFromListing(array $listing): array
  * мусором, и показывать человеку свою же опечатку честнее, чем молча стереть.
  *
  * @param array<string, mixed> $post
- * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, image: string, attrs: array<string, string>}
+ * @return array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, views_public: int, image: string, attrs: array<string, string>}
  */
 function classifiedsFormFromPost(array $post): array
 {
@@ -99,6 +100,7 @@ function classifiedsFormFromPost(array $post): array
         'seo_title' => trim((string) ($post['seo_title'] ?? '')),
         'seo_description' => trim((string) ($post['seo_description'] ?? '')),
         'noindex' => ($post['noindex'] ?? '') === '1' ? 1 : 0,
+        'views_public' => ($post['views_public'] ?? '') === '1' ? 1 : 0,
         'image' => '',
         'attrs' => $attrs,
     ];

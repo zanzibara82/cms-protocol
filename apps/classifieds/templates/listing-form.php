@@ -8,7 +8,7 @@ declare(strict_types=1);
  *
  * @var string $mode новый или правка
  * @var array<string, mixed>|null $listing
- * @var array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, image: string, attrs: array<string, string>} $form
+ * @var array{title: string, slug: string, category: string, body: string, price: string, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, views_public: int, image: string, attrs: array<string, string>} $form
  * @var array<string, string> $errors
  * @var list<array{id: string, parent_id: ?string, slug: string, title: string, order_index: int, visible: bool}> $categories
  * @var list<array{id: string, category_id: string, key_slug: string, title: string, kind: string, unit: string, options: list<string>, required: bool, filterable: bool, order_index: int}> $attributes
@@ -204,6 +204,11 @@ $content .= '<label class="block" for="body">'
     . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="noindex" value="1"'
     . ($form['noindex'] === 1 ? ' checked' : '') . '>'
     . '<span>Не индексировать в поисковиках</span>'
+    . '</label>'
+    . '<label class="flex min-h-[44px] items-center gap-3 text-sm">'
+    . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="views_public" value="1"'
+    . ($form['views_public'] === 1 ? ' checked' : '') . '>'
+    . '<span>Показывать счётчик просмотров</span>'
     . '</label>'
     . '</div>'
     . '<label class="block" for="image">'

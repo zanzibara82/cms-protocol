@@ -13,6 +13,7 @@ const CLASSIFIEDS_NAV_PATHS = [
     '/classifieds/admin/moderation' => 'Проверка',
     '/classifieds/admin/reports' => 'Жалобы',
     '/classifieds/admin/promotions' => 'Продвижения',
+    '/classifieds/admin/webhooks' => 'Вебхуки',
 ];
 
 const CLASSIFIEDS_NOTICE_TEXT = [
@@ -38,6 +39,8 @@ const CLASSIFIEDS_NOTICE_TEXT = [
     'moderation_rejected' => 'Объявление отклонено, продавцу отправлена причина.',
     'message_sent' => 'Сообщение отправлено.',
     'notifications_read' => 'Уведомления отмечены прочитанными.',
+    'webhook_saved' => 'Вебхук сохранён.',
+    'webhook_deleted' => 'Вебхук удалён.',
 ];
 
 /**
@@ -333,4 +336,94 @@ function classifiedsAdminPromotionsPage(array $params = []): void
         'kinds' => CLASSIFIEDS_PROMO_KINDS,
         'statuses' => CLASSIFIEDS_PROMO_STATUSES,
     ], classifiedsAdminAlert()), ['title' => 'Продвижения — Доска', 'noindex' => true]);
+}
+
+/**
+ * Идентификатор из адреса: обрезан по длине, как и всякий id в разделе.
+ *
+ * @param array<string, string> $params
+ */
+function classifiedsRouteId26(array $params): string
+{
+    return mb_substr(trim((string) ($params['id'] ?? '')), 0, 26);
+}
+
+/**
+ * Экран вебхуков: список приёмников и форма. По адресу /{id} открывается правка
+ * выбранного — список и форма на одном экране, как в магазине.
+ *
+ * @param array<string, string> $params
+ */
+function classifiedsAdminWebhooks(array $params = []): void
+{
+    $id = classifiedsRouteId26($params);
+    $webhook = $id !== '' ? classifiedsWebhook($id) : null;
+
+    if ($id !== '' && $webhook === null) {
+        finishAppAction(['ok' => false, 'error' => 'Вебхука уже нет — обновите список.'], '/classifieds/admin/webhooks', '');
+
+        return;
+    }
+
+    render('classifieds/admin/webhooks', array_merge([
+        'nav' => classifiedsAdminNav(requestPath()),
+        'notice' => classifiedsAdminNotice(),
+        'webhooks' => classifiedsWebhooksList(),
+        'mode' => $webhook !== null ? 'edit' : 'new',
+        'webhook' => $webhook,
+        'events' => CLASSIFIEDS_WEBHOOK_EVENTS,
+        'form' => [
+            'url' => $webhook !== null ? (string) $webhook['url'] : '',
+            'secret' => $webhook !== null ? (string) $webhook['secret'] : classifiedsWebhookSecretSuggest(),
+            'event' => $webhook !== null ? (string) $webhook['event'] : 'listing.published',
+            'active' => $webhook !== null ? (int) $webhook['active'] : 1,
+        ],
+        'errors' => [],
+    ], classifiedsAdminAlert()), ['title' => 'Вебхуки — Доска', 'noindex' => true]);
+}
+
+/**
+ * Действия с вебхуками: создать, сохранить, удалить. Событие берётся из полей формы,
+ * но правка и удаление смотрят в саму строку — подменить чужой адрес в запросе нельзя.
+ *
+ * @param array<string, string> $params
+ */
+function classifiedsWebhookAction(array $params = []): void
+{
+    csrfCheck();
+    $op = postString('op');
+    $id = classifiedsRouteId26($params);
+    $address = '/classifieds/admin/webhooks';
+    $result = ['ok' => false, 'error' => 'Неизвестное действие с вебхуком.', 'notice' => ''];
+
+    if ($op === 'create') {
+        $check = classifiedsValidateWebhook($_POST);
+
+        if ($check['errors'] === []) {
+            $result = classifiedsCreateWebhook($check['values']);
+        } else {
+            $result = ['ok' => false, 'error' => implode(' ', array_values($check['errors'])), 'notice' => ''];
+        }
+    }
+
+    if ($op === 'save' || $op === 'delete') {
+        $webhook = classifiedsWebhook($id);
+
+        if ($webhook === null) {
+            $result = ['ok' => false, 'error' => 'Вебхука уже нет — обновите список.', 'notice' => ''];
+        } elseif ($op === 'delete') {
+            $result = classifiedsDeleteWebhook($id);
+        } else {
+            $check = classifiedsValidateWebhook($_POST);
+
+            if ($check['errors'] === []) {
+                $result = classifiedsUpdateWebhook($id, $check['values']);
+            } else {
+                $result = ['ok' => false, 'error' => implode(' ', array_values($check['errors'])), 'notice' => ''];
+            }
+        }
+    }
+
+    $notice = (string) ($result['notice'] ?? '');
+    finishAppAction($result, $address, $notice);
 }

@@ -33,7 +33,8 @@ function classifiedsMessageSend(
     }
 
     $listing = one(
-        'SELECT id, owner_id, slug, title, status, expires_at FROM ' . t('classifieds_listing') . ' WHERE id = ?',
+        'SELECT id, owner_id, slug, title, status, expires_at, price, currency, category_id'
+        . ' FROM ' . t('classifieds_listing') . ' WHERE id = ?',
         [$listingId]
     );
 
@@ -87,6 +88,24 @@ function classifiedsMessageSend(
         $moment
     );
     logInfo('classifieds.message_sent', ['listingId' => $listingId, 'messageId' => $messageId]);
+
+    // Событие доски: продавец может принимать сообщения через своего приёмника.
+    // Событие — только когда письмо пришло продавцу: ответ покупателю в списке событий
+    // не значится. В теле — факты об объявлении и отправителе, без текста письма:
+    // текст лежит в кабинете, приёмник забирает его сам.
+    if ($recipientId === $ownerId) {
+        $sender = one('SELECT id, name FROM ' . t('user') . ' WHERE id = ?', [$senderId]);
+        classifiedsWebhookEvent('message.received', array_merge(
+            classifiedsWebhookListingData($listing),
+            [
+                'message_id' => $messageId,
+                'sender' => [
+                    'id' => $senderId,
+                    'name' => (string) ($sender['name'] ?? ''),
+                ],
+            ]
+        ));
+    }
 
     return ['ok' => true, 'error' => '', 'notice' => 'message_sent'];
 }

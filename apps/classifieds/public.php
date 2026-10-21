@@ -6,18 +6,6 @@ declare(strict_types=1);
 // Карточки и списки отдают шаблонам поля договора из lib/listings.php; суммы и даты
 // форматирует раздел, а не шаблон.
 
-/** Адрес категории на доске. */
-function classifiedsCategoryHref(string $slug): string
-{
-    return '/classifieds/c/' . rawurlencode($slug);
-}
-
-/** Адрес объявления на доске. */
-function classifiedsListingHref(string $slug): string
-{
-    return '/classifieds/' . rawurlencode($slug);
-}
-
 /**
  * Цена для карточки: без цены — «Договорная», с пометкой торга — хвост «· торг».
  */
@@ -51,14 +39,16 @@ function classifiedsDateLabel(?string $stamp): string
 function classifiedsCatalogPage(array $params = []): void
 {
     $categories = classifiedsCategoryVisible();
+    $home = classifiedsHomeFeed();
 
     render('classifieds/catalog', [
         'categories' => $categories,
-        'listings' => classifiedsHomeFeed(),
+        'listings' => $home,
         'notice' => (string) (noticeOfRequest(CLASSIFIEDS_NOTICE_TEXT) ?? ''),
     ], [
         'title' => 'Доска объявлений',
         'description' => 'Частные объявления города: купить, продать, сдать и найти.',
+        'head' => jsonLdGraphScript(classifiedsBoardJsonLd($home)),
     ]);
 }
 
@@ -181,6 +171,22 @@ function classifiedsListingPage(array $params = []): void
         && (string) $user['id'] !== (string) $listing['owner_id'];
     $contactLogin = $user === null ? '/login?next=' . rawurlencode($listingHref) : '';
 
+    // Счётчик просмотров: предпросмотр владельца и снятое с публикации объявление
+    // трафиком не считаются.
+    $viewsCount = (int) $listing['views_count'];
+
+    if (!$preview) {
+        $counted = classifiedsListingCountView($listing, $user);
+
+        if ($counted !== null) {
+            $viewsCount = $counted;
+        }
+    }
+
+    $viewsLabel = classifiedsViewsPublic($listing, $viewsCount, $user)
+        ? classifiedsViewsLabel($viewsCount)
+        : '';
+
     render('classifieds/listing', [
         'listing' => $listing,
         'priceLabel' => classifiedsPriceLabel($listing['price'], $listing['negotiable']),
@@ -202,10 +208,18 @@ function classifiedsListingPage(array $params = []): void
         'contactLogin' => $contactLogin,
         'reportHref' => $listingHref . '/report',
         'reportLogin' => $user === null ? '/login?next=' . rawurlencode($listingHref . '/report') : '',
+        'viewsLabel' => $viewsLabel,
     ], [
         'title' => (string) ($listing['seo_title'] ?? $listing['title']),
         'description' => (string) ($listing['seo_description'] ?? excerpt($listing['body'], 160)),
         'noindex' => $preview || $listing['noindex'] || $listing['status'] !== 'PUBLISHED',
+        // Разметка товара и крошек: поисковик должен понимать, что это за объявление
+        // и где оно в иерархии доски.
+        'head' => $preview ? '' : jsonLdGraphScript(classifiedsListingJsonLd($listing, [
+            'categoryTitle' => $categoryTitle,
+            'categoryHref' => $categorySlug !== '' ? classifiedsCategoryHref($categorySlug) : '',
+            'sellerName' => $seller === null ? '' : (string) $seller['name'],
+        ])),
     ]);
 }
 
@@ -389,15 +403,57 @@ function classifiedsReportAction(array $params = []): void
 
 /**
  * Адреса карты сайта: открытые категории и опубликованные объявления без noindex.
+ * Приоритет отвечает за то, что важнее поисковику: сама доска, потом категории,
+ * потом объявления. Дата изменения категории — это дата последней правки объявления
+ * внутри неё: своего времени изменения у категории нет.
  *
- * @return list<array{loc: string, lastmod?: string}>
+ * @return list<array{loc: string, lastmod?: string, priority?: float}>
  */
 function classifiedsSitemapUrls(): array
 {
-    $out = [['loc' => '/classifieds']];
+    $lastmod = all(
+        'SELECT category_id, MAX(updated_at) AS updated_at FROM ' . t('classifieds_listing')
+        . " WHERE status = 'PUBLISHED' AND noindex = 0"
+        . ' AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())'
+        . ' GROUP BY category_id'
+    );
+
+    $byCategory = [];
+    $newest = null;
+
+    foreach ($lastmod as $row) {
+        $updated = fromDb(is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null);
+
+        if ($updated === null) {
+            continue;
+        }
+
+        $byCategory[(string) $row['category_id']] = $updated;
+
+        if ($newest === null || $updated > $newest) {
+            $newest = $updated;
+        }
+    }
+
+    $out = [['loc' => '/classifieds', 'priority' => 0.9]];
+
+    if ($newest !== null) {
+        $out[0]['lastmod'] = substr(moscowIso($newest), 0, 10);
+    }
 
     foreach (classifiedsCategoryVisible() as $category) {
-        $out[] = ['loc' => classifiedsCategoryHref((string) $category['slug'])];
+        /** @var array{loc: string, lastmod?: string, priority?: float} $entry */
+        $entry = [
+            'loc' => classifiedsCategoryHref((string) $category['slug']),
+            'priority' => 0.7,
+        ];
+        $updated = $byCategory[(string) $category['id']] ?? null;
+
+        if ($updated !== null) {
+            $entry['lastmod'] = substr(moscowIso($updated), 0, 10);
+        }
+
+        $out[] = $entry;
     }
 
     $rows = all(
@@ -408,8 +464,8 @@ function classifiedsSitemapUrls(): array
     );
 
     foreach ($rows as $row) {
-        /** @var array{loc: string, lastmod?: string} $entry */
-        $entry = ['loc' => classifiedsListingHref((string) $row['slug'])];
+        /** @var array{loc: string, lastmod?: string, priority?: float} $entry */
+        $entry = ['loc' => classifiedsListingHref((string) $row['slug']), 'priority' => 0.6];
         $updated = fromDb(is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null);
 
         if ($updated !== null) {

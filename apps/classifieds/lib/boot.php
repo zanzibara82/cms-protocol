@@ -20,6 +20,9 @@ require_once __DIR__ . '/reports.php';
 require_once __DIR__ . '/messages.php';
 require_once __DIR__ . '/moderation.php';
 require_once __DIR__ . '/promotions.php';
+require_once __DIR__ . '/analytics.php';
+require_once __DIR__ . '/api.php';
+require_once __DIR__ . '/webhooks.php';
 
 // Доска покупает услуги заказами магазина: после оплаты (PAID) или отмены заказа
 // магазин вызывает хук, и строка продвижения применяется объявлению или закрывается.

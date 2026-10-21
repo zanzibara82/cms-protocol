@@ -39,6 +39,8 @@ foreach ($listings as $listing) {
     $note = $statusValue === 'REJECTED' && (string) ($listing['moderation_note'] ?? '') !== ''
         ? '<p class="text-sm text-ink/60">Причина отказа: ' . e((string) $listing['moderation_note']) . '</p>'
         : '';
+    // Свой счётчик продавец видит всегда, даже если показывать его гостям нельзя.
+    $views = classifiedsViewsLabel((int) ($listing['views_count'] ?? 0));
 
     $form = '<form class="inline-flex flex-wrap items-center gap-2" method="post" action="' . e('/classifieds/cabinet/' . rawurlencode($id) . '/action') . '">'
         . csrfField();
@@ -81,7 +83,7 @@ foreach ($listings as $listing) {
         . '<p class="flex flex-wrap items-center gap-2 font-medium">' . $status . $featured
         . '<a class="inline-flex min-h-[44px] items-center underline underline-offset-4 hover:text-accent" href="' . e($href) . '">' . e((string) $listing['title']) . '</a></p>'
         . '<p class="text-sm text-ink/60 tabular-nums">' . e($price) . ($date !== '' ? ' · ' . e($date) : '')
-        . ($expiry !== '' ? ' · ' . e($expiry) : '') . '</p>'
+        . ($expiry !== '' ? ' · ' . e($expiry) : '') . ($views !== '' ? ' · ' . e($views) : '') . '</p>'
         . $note
         . '</div>'
         . '<div class="flex flex-wrap items-end gap-2">'

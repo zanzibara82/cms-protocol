@@ -61,7 +61,7 @@ final class ClassifiedsHttpTest extends TestCase
     public static function tearDownAfterClass(): void
     {
         Kernel::stop();
-        foreach (['classifieds_promotion', 'classifieds_notification', 'classifieds_report', 'classifieds_message', 'classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
+        foreach (['classifieds_webhook', 'classifieds_promotion', 'classifieds_notification', 'classifieds_report', 'classifieds_message', 'classifieds_favorite', 'classifieds_seller_profile', 'classifieds_listing_attribute', 'classifieds_listing_image', 'classifieds_listing', 'classifieds_attribute', 'classifieds_category', 'classifieds_registration_attempt'] as $table) {
             run('DROP TABLE IF EXISTS ' . t($table));
         }
         run('DELETE FROM ' . t('app_installation') . " WHERE id = 'classifieds'");
@@ -123,6 +123,7 @@ final class ClassifiedsHttpTest extends TestCase
         run('DELETE FROM ' . t('classifieds_listing_attribute'));
         run('DELETE FROM ' . t('classifieds_listing_image'));
         run('DELETE FROM ' . t('classifieds_attribute'));
+        run('DELETE FROM ' . t('classifieds_webhook'));
         run('DELETE FROM ' . t('login_attempt'));
         // Заказы прошлого теста не должны попасть в выборку нового.
         run('DELETE FROM ' . t('commerce_order_item'));
@@ -200,6 +201,39 @@ final class ClassifiedsHttpTest extends TestCase
         return $matches[1] ?? '';
     }
 
+    /**
+     * Строка кабинета с объявлением: кусок списка вокруг заголовка. Нужен, чтобы проверить
+     * счётчик именно своего объявления, а не любого числа со страницы.
+     */
+    private static function listingRow(string $body, string $title): string
+    {
+        $position = strpos($body, $title);
+
+        if ($position === false) {
+            return '';
+        }
+
+        $start = strrpos(substr($body, 0, $position), '<li');
+        $end = strpos($body, '</li>', $position);
+
+        if ($start === false || $end === false) {
+            return '';
+        }
+
+        return substr($body, $start, $end - $start);
+    }
+
+    /** Разметка Schema.org со страницы: разобранный JSON-LD.
+     * @return array<string, mixed>
+     */
+    private static function jsonLd(string $body): array
+    {
+        preg_match('#<script type="application/ld\+json">(.*?)</script>#s', $body, $matches);
+        $decoded = json_decode((string) ($matches[1] ?? ''), true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
     /** @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>} */
     private function login(string $email, string $password): array
     {
@@ -232,6 +266,148 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertStringContainsString('Кофемашина', $page['body']);
         self::assertStringContainsString('1 500', $page['body']);
         self::assertStringContainsString('Москва', $page['body']);
+    }
+
+    public function testСчётчикПросмотровСчитаетсяИПоказывается(): void
+    {
+        $listingId = self::addListing(self::$sellerId, 'schyotchik', 'Объявление со счётчиком', 'PUBLISHED');
+
+        $page = Kernel::get('/classifieds/schyotchik');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('1 просмотр', $page['body']);
+        self::assertSame(1, (int) value('SELECT views_count FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$listingId]));
+
+        $page = Kernel::get('/classifieds/schyotchik');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('2 просмотра', $page['body']);
+        self::assertSame(2, (int) value('SELECT views_count FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$listingId]));
+
+        // Свой просмотр владелец не засчитывает: счётчик он видит, но не накручивает.
+        Kernel::freshCookies();
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $page = Kernel::get('/classifieds/schyotchik');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('2 просмотра', $page['body']);
+        self::assertSame(2, (int) value('SELECT views_count FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$listingId]));
+    }
+
+    public function testСчётчикСкрытГостямНоВиденВладельцуВКабинете(): void
+    {
+        $listingId = self::addListing(self::$sellerId, 'skryty-schyotchik', 'Объявление со скрытым счётчиком', 'PUBLISHED');
+        run('UPDATE ' . t('classifieds_listing') . ' SET views_public = 0 WHERE id = ?', [$listingId]);
+
+        $page = Kernel::get('/classifieds/skryty-schyotchik');
+        self::assertSame(200, $page['status']);
+        self::assertStringNotContainsString('просмотр', $page['body']);
+        self::assertSame(1, (int) value('SELECT views_count FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$listingId]));
+
+        Kernel::freshCookies();
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $cabinet = Kernel::get('/classifieds/cabinet');
+        self::assertSame(200, $cabinet['status']);
+
+        $row = self::listingRow($cabinet['body'], 'Объявление со скрытым счётчиком');
+        self::assertStringContainsString('1 просмотр', $row);
+    }
+
+    public function testРазметкаОбъявленияОтдаётТоварИКрошки(): void
+    {
+        $page = Kernel::get('/classifieds/kofemashina');
+
+        self::assertSame(200, $page['status']);
+
+        $json = self::jsonLd($page['body']);
+        self::assertSame('https://schema.org', $json['@context'] ?? '');
+
+        $graph = is_array($json['@graph'] ?? null) ? $json['@graph'] : [];
+        $product = null;
+        $crumbs = null;
+
+        foreach ($graph as $node) {
+            if (($node['@type'] ?? '') === 'Product') {
+                $product = $node;
+            }
+
+            if (($node['@type'] ?? '') === 'BreadcrumbList') {
+                $crumbs = $node;
+            }
+        }
+
+        self::assertIsArray($product);
+        self::assertSame('Кофемашина', $product['name'] ?? '');
+        self::assertSame(1500.0, (float) ($product['offers']['price'] ?? 0));
+        self::assertSame('RUB', $product['offers']['priceCurrency'] ?? '');
+
+        self::assertIsArray($crumbs);
+        self::assertCount(3, $crumbs['itemListElement'] ?? []);
+        self::assertSame('Доска объявлений', $crumbs['itemListElement'][0]['name'] ?? '');
+        self::assertSame('Техника', $crumbs['itemListElement'][1]['name'] ?? '');
+    }
+
+    public function testГлавнаяДоскиОтдаётРазметкуСайта(): void
+    {
+        $page = Kernel::get('/classifieds');
+
+        self::assertSame(200, $page['status']);
+
+        $json = self::jsonLd($page['body']);
+        $types = [];
+
+        foreach (is_array($json['@graph'] ?? null) ? $json['@graph'] : [] as $node) {
+            $types[] = (string) ($node['@type'] ?? '');
+        }
+
+        self::assertContains('WebSite', $types);
+        self::assertContains('Organization', $types);
+        self::assertContains('ItemList', $types);
+    }
+
+    public function testJsonВыдачаОтдаётСписокИКарточкуОбъявления(): void
+    {
+        $list = Kernel::get('/classifieds/api/listings');
+
+        self::assertSame(200, $list['status']);
+        self::assertSame('application/json; charset=utf-8', $list['headers']['content-type'] ?? '');
+        self::assertSame('noindex', $list['headers']['x-robots-tag'] ?? '');
+        self::assertSame('no-store', $list['headers']['cache-control'] ?? '');
+
+        $decoded = json_decode($list['body'], true);
+        self::assertIsArray($decoded);
+        self::assertArrayHasKey('items', $decoded);
+        self::assertArrayHasKey('next_after', $decoded);
+        self::assertNotEmpty($decoded['items']);
+
+        $card = Kernel::get('/classifieds/api/listings/kofemashina');
+        self::assertSame(200, $card['status']);
+
+        $item = json_decode($card['body'], true);
+        self::assertIsArray($item);
+        self::assertSame('Кофемашина', $item['title'] ?? '');
+        self::assertSame(1500.0, (float) ($item['price'] ?? 0));
+        self::assertSame('RUB', $item['currency'] ?? '');
+        self::assertArrayHasKey('attributes', $item);
+        self::assertArrayHasKey('body', $item);
+
+        $missing = Kernel::get('/classifieds/api/listings/net-takogo-obyavleniya');
+        self::assertSame(404, $missing['status']);
+        self::assertSame('noindex', $missing['headers']['x-robots-tag'] ?? '');
+    }
+
+    public function testJsonВыдачаНеПоказываетЧерновикИЗакрытоеОбъявление(): void
+    {
+        $list = Kernel::get('/classifieds/api/listings');
+
+        $decoded = json_decode($list['body'], true);
+        self::assertIsArray($decoded);
+
+        $slugs = [];
+
+        foreach ($decoded['items'] as $item) {
+            $slugs[] = (string) ($item['slug'] ?? '');
+        }
+
+        self::assertNotContains('chernovik', $slugs);
+        self::assertContains('kofemashina', $slugs);
     }
 
     public function testСкрытаяКатегорияНеОткрывается(): void
@@ -486,6 +662,16 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertStringContainsString('/classifieds/kofemashina', $page['body']);
         self::assertStringContainsString('/classifieds/c/tehnika', $page['body']);
         self::assertStringNotContainsString('/classifieds/chernovik', $page['body']);
+    }
+
+    public function testКартаСайтаПроставляетПриоритетИДату(): void
+    {
+        $page = Kernel::get('/sitemap.xml');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('<priority>0.9</priority>', $page['body']);
+        self::assertStringContainsString('<priority>0.6</priority>', $page['body']);
+        self::assertMatchesRegularExpression('#<lastmod>\d{4}-\d{2}-\d{2}</lastmod>#', $page['body']);
     }
 
     public function testПоискНаходитОбъявлениеИВсегдаЗакрытОтИндексации(): void
@@ -1073,5 +1259,87 @@ final class ClassifiedsHttpTest extends TestCase
             'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND kind = ?',
             [self::$otherId, 'report']
         ));
+    }
+
+    public function testЭкранВебхуковТолькоДляРедактора(): void
+    {
+        $guest = Kernel::get('/classifieds/admin/webhooks');
+        self::assertSame(302, $guest['status']);
+        self::assertStringContainsString(
+            '/login?next=%2Fclassifieds%2Fadmin%2Fwebhooks',
+            (string) ($guest['headers']['location'] ?? '')
+        );
+
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $page = Kernel::get('/classifieds/admin/webhooks');
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Вебхуки', $page['body']);
+        self::assertStringContainsString('name="url"', $page['body']);
+        self::assertStringContainsString('name="event"', $page['body']);
+        self::assertStringContainsString('noindex', $page['body']);
+    }
+
+    public function testВебхукСоздаётсяПравитсяИУдаляется(): void
+    {
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $page = Kernel::get('/classifieds/admin/webhooks');
+
+        $created = Kernel::post('/classifieds/admin/webhooks', [
+            '_token' => $this->token($page['body']),
+            'op' => 'create',
+            'event' => 'listing.published',
+            'url' => 'https://приёмник.рф/board',
+            'secret' => 'secret-20-symbols-xyz',
+            'active' => '1',
+        ]);
+        self::assertSame(302, $created['status']);
+
+        $id = (string) value('SELECT id FROM ' . t('classifieds_webhook'));
+        self::assertNotSame('', $id, 'Приёмник обязан появиться в таблице после сохранения');
+        self::assertSame('listing.published', (string) value('SELECT event FROM ' . t('classifieds_webhook') . ' WHERE id = ?', [$id]));
+
+        $list = Kernel::get('/classifieds/admin/webhooks');
+        self::assertStringContainsString('https://приёмник.рф/board', $list['body']);
+        self::assertStringContainsString('Объявление опубликовано', $list['body']);
+
+        $edit = Kernel::get('/classifieds/admin/webhooks/' . rawurlencode($id));
+        self::assertSame(200, $edit['status']);
+        self::assertStringContainsString('https://приёмник.рф/board', $edit['body']);
+
+        $saved = Kernel::post('/classifieds/admin/webhooks/' . rawurlencode($id), [
+            '_token' => $this->token($edit['body']),
+            'op' => 'save',
+            'event' => 'message.received',
+            'url' => 'https://приёмник.рф/сообщения',
+            'secret' => 'secret-20-symbols-xyz',
+        ]);
+        self::assertSame(302, $saved['status']);
+        self::assertSame('message.received', (string) value('SELECT event FROM ' . t('classifieds_webhook') . ' WHERE id = ?', [$id]));
+
+        $deleted = Kernel::post('/classifieds/admin/webhooks/' . rawurlencode($id), [
+            '_token' => $this->token($edit['body']),
+            'op' => 'delete',
+        ]);
+        self::assertSame(302, $deleted['status']);
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('classifieds_webhook')));
+    }
+
+    public function testОтказСекретаЧитаетсяНаЭкранеВебхуков(): void
+    {
+        $this->login(self::EDITOR_EMAIL, self::EDITOR_PASSWORD);
+        $page = Kernel::get('/classifieds/admin/webhooks');
+
+        $refused = Kernel::post('/classifieds/admin/webhooks', [
+            '_token' => $this->token($page['body']),
+            'op' => 'create',
+            'event' => 'listing.published',
+            'url' => 'https://приёмник.рф/board',
+            'secret' => 'короткий',
+        ]);
+        self::assertSame(302, $refused['status']);
+
+        $after = Kernel::get('/classifieds/admin/webhooks');
+        self::assertStringContainsString('Секрет не короче', $after['body']);
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('classifieds_webhook')));
     }
 }

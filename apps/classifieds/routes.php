@@ -16,6 +16,11 @@ addRoute('GET', '/classifieds', 'classifiedsCatalogPage', ['app' => 'classifieds
 addRoute('GET', '/classifieds/c/{slug}', 'classifiedsCategoryPage', ['app' => 'classifieds']);
 addRoute('GET', '/classifieds/search', 'classifiedsSearchPage', ['app' => 'classifieds']);
 
+// JSON-выдача доски (C6): список объявлений и карточка объявления. Адреса стоят до
+// /classifieds/{slug}, иначе объявление съело бы вложенные адреса.
+addRoute('GET', '/classifieds/api/listings', 'classifiedsApiListingsPage', ['app' => 'classifieds']);
+addRoute('GET', '/classifieds/api/listings/{slug}', 'classifiedsApiListingPage', ['app' => 'classifieds']);
+
 // Кабинет продавца. Гейта маршрута нет намеренно: ядро пускает в приватные пути только
 // роли admin/editor, а продавец — своя роль seller. Поэтому вход проверяет обработчик:
 // аноним получает редирект на штатный /login с глубинной ссылкой.
@@ -57,6 +62,12 @@ addRoute('POST', '/classifieds/admin/moderation', 'classifiedsModerationAction',
 addRoute('GET', '/classifieds/admin/reports', 'classifiedsAdminReports', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/classifieds/admin/reports', 'classifiedsAdminReportAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/classifieds/admin/promotions', 'classifiedsAdminPromotionsPage', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+
+// Вебхуки доски (C6): список приёмников и правка выбранного по идентификатору.
+addRoute('GET', '/classifieds/admin/webhooks', 'classifiedsAdminWebhooks', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/classifieds/admin/webhooks/{id}', 'classifiedsAdminWebhooks', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/classifieds/admin/webhooks', 'classifiedsWebhookAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/classifieds/admin/webhooks/{id}', 'classifiedsWebhookAction', ['app' => 'classifieds', 'private' => true, 'permission' => 'login']);
 
 // Карта сайтов: только открытые категории и опубликованные объявления (C1 — базовый набор,
 // счётчики и приоритеты приедут вместе с SEO-этапом C6).

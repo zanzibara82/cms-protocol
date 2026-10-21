@@ -101,6 +101,12 @@ function classifiedsModerationDecide(
         'moderatorId' => $moderatorId,
     ]);
 
+    // Событие доски: подписчику важно знать, что объявление вышло или было отклонено.
+    classifiedsWebhookEvent(
+        $approved ? 'listing.published' : 'listing.rejected',
+        classifiedsWebhookListingData($listing)
+    );
+
     return [
         'ok' => true,
         'error' => '',

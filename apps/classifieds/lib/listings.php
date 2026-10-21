@@ -13,7 +13,8 @@ const CLASSIFIEDS_CARD_COLUMNS = 'l.id, l.slug, l.title, l.category_id, l.price,
 
 /** Полный набор: страница объявления и кабинет переживают описание, SEO и решение проверки. */
 const CLASSIFIEDS_FULL_COLUMNS = CLASSIFIEDS_CARD_COLUMNS . ', l.owner_id, l.body, l.seo_title,'
-    . ' l.seo_description, l.noindex, l.moderation_note, l.submitted_at, l.updated_at';
+    . ' l.seo_description, l.noindex, l.moderation_note, l.submitted_at, l.views_count, l.views_public,'
+    . ' l.last_viewed_at, l.updated_at';
 
 /** Страница каталога: строк на лист. */
 /** Публичная запись видна, пока срок не истёк; NULL оставлен для старых строк. */
@@ -28,7 +29,7 @@ const CLASSIFIEDS_HOME_LIMIT = 12;
  * Приводит строку базы к договору шаблонов: NULL там, где пусто, и строгие типы.
  *
  * @param array<string, mixed> $row
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, views_count: int, views_public: bool, last_viewed_at: ?string, created_at: string, updated_at: string}
  */
 function classifiedsListingShape(array $row): array
 {
@@ -53,6 +54,9 @@ function classifiedsListingShape(array $row): array
         'seo_title' => $row['seo_title'] !== null && (string) $row['seo_title'] !== '' ? (string) $row['seo_title'] : null,
         'seo_description' => $row['seo_description'] !== null && (string) $row['seo_description'] !== '' ? (string) $row['seo_description'] : null,
         'noindex' => (int) $row['noindex'] === 1,
+        'views_count' => (int) $row['views_count'],
+        'views_public' => (int) $row['views_public'] === 1,
+        'last_viewed_at' => $row['last_viewed_at'] !== null && (string) $row['last_viewed_at'] !== '' ? (string) $row['last_viewed_at'] : null,
         'created_at' => (string) $row['created_at'],
         'updated_at' => (string) $row['updated_at'],
     ];
@@ -87,7 +91,7 @@ function classifiedsListingExpiresAt(array $listing): ?DateTimeImmutable
 /**
  * Объявление по id целиком: кабинет и страница работают по одной форме договора.
  *
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, views_count: int, views_public: bool, last_viewed_at: ?string, created_at: string, updated_at: string}|null
  */
 function classifiedsListingById(string $id): ?array
 {
@@ -119,7 +123,7 @@ function classifiedsPublishedListingWithCategory(string $slug): ?array
  * Объявление любого статуса по адресу — для предпросмотра и кабинета: владельцу
  * черновик виден по прямой ссылке, гостю адрес отвечает как несуществующий.
  *
- * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, created_at: string, updated_at: string}|null
+ * @return array{id: string, owner_id: string, category_id: string, slug: string, title: string, body: string, price: ?float, currency: string, negotiable: bool, location: ?string, image: ?string, status: string, expires_at: ?string, boosted_at: ?string, featured_until: ?string, moderation_note: ?string, submitted_at: ?string, seo_title: ?string, seo_description: ?string, noindex: bool, views_count: int, views_public: bool, last_viewed_at: ?string, created_at: string, updated_at: string}|null
  */
 function classifiedsListingAnyStatus(string $slug): ?array
 {
@@ -188,7 +192,7 @@ function classifiedsHomeFeed(): array
 function classifiedsOwnerListings(string $ownerId): array
 {
     return all(
-        'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ', l.moderation_note, l.submitted_at'
+        'SELECT ' . CLASSIFIEDS_CARD_COLUMNS . ', l.moderation_note, l.submitted_at, l.views_count, l.views_public'
         . ' FROM ' . t('classifieds_listing') . ' l'
         . ' WHERE l.owner_id = ?'
         . ' ORDER BY l.created_at DESC, l.id DESC',
@@ -218,7 +222,7 @@ function classifiedsListingSlugTaken(string $slug, string $exceptId = ''): bool
  *
  * @param array<string, string> $post
  * @param string $exceptId объявление, которое правим: своя ссылка не считается занятой
- * @return array{errors: array<string, string>, values: array{title: string, slug: string, category: string, body: string, price: string, price_float: ?float, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int}}
+ * @return array{errors: array<string, string>, values: array{title: string, slug: string, category: string, body: string, price: string, price_float: ?float, negotiable: int, location: string, status: string, seo_title: string, seo_description: string, noindex: int, views_public: int}}
  */
 function classifiedsValidateListing(array $post, string $exceptId = ''): array
 {
@@ -235,6 +239,8 @@ function classifiedsValidateListing(array $post, string $exceptId = ''): array
     $seoTitle = trim((string) ($post['seo_title'] ?? ''));
     $seoDescription = trim((string) ($post['seo_description'] ?? ''));
     $noindex = ($post['noindex'] ?? '') === '1' ? 1 : 0;
+    // Показывать ли счётчик просмотров гостям: решает владелец, по умолнию показываем.
+    $viewsPublic = ($post['views_public'] ?? '') === '1' ? 1 : 0;
 
     if ($title === '') {
         $errors['title'] = 'Заголовок пустой — напишите, о чём объявление.';
@@ -306,6 +312,7 @@ function classifiedsValidateListing(array $post, string $exceptId = ''): array
             'seo_title' => $seoTitle,
             'seo_description' => $seoDescription,
             'noindex' => $noindex,
+            'views_public' => $viewsPublic,
         ],
     ];
 }
@@ -350,6 +357,7 @@ function classifiedsCreateListing(string $ownerId, array $values, ?DateTimeImmut
             'seo_title' => (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
             'seo_description' => (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
             'noindex' => (int) $values['noindex'],
+            'views_public' => (int) ($values['views_public'] ?? 1),
             'created_at' => utcStamp($moment),
             'updated_at' => utcStamp($moment),
         ]);
@@ -411,7 +419,7 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
     run(
         'UPDATE ' . t('classifieds_listing')
         . ' SET category_id = ?, slug = ?, title = ?, body = ?, price = ?, negotiable = ?, location = ?,' .
-        ' image = ?, status = ?, expires_at = ?, moderation_note = ?, submitted_at = ?, seo_title = ?, seo_description = ?, noindex = ?, updated_at = ? WHERE id = ?',
+        ' image = ?, status = ?, expires_at = ?, moderation_note = ?, submitted_at = ?, seo_title = ?, seo_description = ?, noindex = ?, views_public = ?, updated_at = ? WHERE id = ?',
         [
             (string) $values['category'],
             $slug,
@@ -428,6 +436,7 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
             (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
             (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
             (int) $values['noindex'],
+            (int) ($values['views_public'] ?? 1),
             utcStamp($moment),
             $id,
         ]
@@ -442,6 +451,21 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
     }
 
     return ['ok' => true, 'error' => '', 'notice' => 'listing_saved'];
+}
+
+/**
+ * Адрес категории на доске. Живёт в lib-слое: адрес строят и контроллер, и разметка
+ * для поисковиков, и JSON-выдача — им нужен один и тот же путь.
+ */
+function classifiedsCategoryHref(string $slug): string
+{
+    return '/classifieds/c/' . rawurlencode($slug);
+}
+
+/** Адрес объявления на доске. */
+function classifiedsListingHref(string $slug): string
+{
+    return '/classifieds/' . rawurlencode($slug);
 }
 
 /**
@@ -473,6 +497,12 @@ function classifiedsListingSetStatus(string $id, string $ownerId, string $status
         [$status, $expiresAt, $note, $submittedAt, utcStamp($moment), $id]
     );
     logInfo('classifieds.listing_status', ['listingId' => $id, 'status' => $status]);
+
+    // Событие доски: снятие с публикации — тоже событие, о нём подписчик узнаёт из
+    // приёмника, а не из витрины, где объявления просто исчезают.
+    if ($status === 'DRAFT' && (string) $listing['status'] === 'PUBLISHED') {
+        classifiedsWebhookEvent('listing.hidden', classifiedsWebhookListingData($listing));
+    }
 
     return [
         'ok' => true,
@@ -547,6 +577,8 @@ function classifiedsListingClone(string $id, string $ownerId, ?DateTimeImmutable
             'seo_title' => $listing['seo_title'],
             'seo_description' => $listing['seo_description'],
             'noindex' => $listing['noindex'] ? 1 : 0,
+            // Счётчик у копии свой (с нуля), а показывать ли его гостям — как в оригинале.
+            'views_public' => $listing['views_public'] ? 1 : 0,
             'created_at' => utcStamp($moment),
             'updated_at' => utcStamp($moment),
         ]);
