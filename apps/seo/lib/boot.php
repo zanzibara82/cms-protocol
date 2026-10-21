@@ -8,6 +8,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/meta.php';
 require_once __DIR__ . '/stats.php';
 require_once __DIR__ . '/collector.php';
+require_once __DIR__ . '/monitor.php';
+require_once __DIR__ . '/audit.php';
+require_once __DIR__ . '/schema.php';
 
 // Метаданные правят собранную страницу: заголовок, описание, канонический адрес и закрытие
 // адреса от индексации.
@@ -23,3 +26,10 @@ addFilter('sitemap_urls', 'seoMetaSitemapUrls');
 // Сверка подписи машинного запроса: сессионной метки у счётчика нет и быть не может — cookie
 // не используются, — поэтому приёмник сверяет подпись раздела, а подпись лежит в разметке.
 addFilter('csrf_public_token', 'seoCollectorTokenFilter');
+
+// Журнал 404 и правила редиректов: ядро спрашивает приложение, что ответить на несуществующий
+// адрес. Раздел отвечает либо переходом (если правило заведено), либо записью в журнал.
+addFilter('not_found', 'seoMonitorNotFound');
+
+// Разметка Schema.org печатается в голове той страницы, адрес которой заведён в справочнике.
+addFilter('page_meta', 'seoSchemaPageMeta');

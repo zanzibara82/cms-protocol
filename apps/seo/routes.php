@@ -8,6 +8,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/lib/boot.php';
 require_once __DIR__ . '/admin.php';
 require_once __DIR__ . '/admin-stats.php';
+require_once __DIR__ . '/admin-monitor.php';
+require_once __DIR__ . '/admin-audit.php';
+require_once __DIR__ . '/admin-schema.php';
 
 // Экран метаданных: справочник адресов и форма. Адрес /{id} открывает правку выбранной
 // записи; POST на тот же адрес сохраняет её или удаляет.
@@ -16,9 +19,9 @@ addRoute('GET', '/seo/admin/{id}', 'seoAdminPage', ['app' => 'seo', 'private' =>
 addRoute('POST', '/seo/admin', 'seoAdminAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/seo/admin/{id}', 'seoAdminAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 
-// Экраны статистики: обзор, страницы, источники и настройки сбора. Адреса статические и
-// объявлены раньше параметрического /seo/admin/{id} — иначе «статистика» была бы адресом
-// записи метаданных.
+// Экраны статистики: обзор, страницы, источники и настройки сбора. Адреса статические, и ядро
+// перебирает их раньше параметрических (core/router.php:75) — иначе «статистика» была бы
+// адресом записи метаданных.
 addRoute('GET', '/seo/admin/stats', 'seoStatsOverviewPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/seo/admin/pages', 'seoStatsPagesPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/seo/admin/sources', 'seoStatsSourcesPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
@@ -27,6 +30,21 @@ addRoute('GET', '/seo/admin/settings', 'seoStatsSettingsPage', ['app' => 'seo', 
 // Действия настроек: сохранить сбор и очистить сырьё старше срока хранения. Оба действия
 // идут на один адрес и различаются полем op — так их видит и человек в адресной строке.
 addRoute('POST', '/seo/admin/settings', 'seoStatsSettingsAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+
+// Мониторинг и аудит (S3). Статические адреса перебираются ядром раньше параметрических
+// (core/router.php:75), а «/seo/admin/schema/{id}» не попадает в «/seo/admin/{id}»:
+// сегмент параметра слеша не содержит, а в адресе их два.
+addRoute('GET', '/seo/admin/errors', 'seoMonitorPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/seo/admin/audit', 'seoAuditPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/seo/admin/schema', 'seoSchemaPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/seo/admin/schema/{id}', 'seoSchemaPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+
+// Действия мониторинга, аудита и разметки. Все формы идут на свои адреса и различаются
+// полем op — так их видит и человек в адресной строке.
+addRoute('POST', '/seo/admin/errors', 'seoMonitorAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/seo/admin/audit', 'seoAuditAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/seo/admin/schema', 'seoSchemaAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/seo/admin/schema/{id}', 'seoSchemaAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 
 // Приёмник событий счётчика. Адрес открыт мимо входа: его зовёт страница посетителя, у
 // которого нет ни входа, ни сессии. Подпись раздела проверяется внутри обработчика. Метка

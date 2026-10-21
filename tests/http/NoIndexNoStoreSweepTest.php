@@ -54,7 +54,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // справочник метаданных и экран правки выбранной строки (помечены, промах по
     // идентификатору возвращает к справочнику) — всего 96 вариантов, помеченных 76.
     // S2 добавляет четыре экрана статистики (обзор, страницы, источники, настройки) — все
-    // помечены: отчёты раздела в выдачу попадать не должны. Всего 100 вариантов, помеченных 80.
+    // помечены: отчёты раздела в выдачу попадать не должны. S3 добавляет журнал 404 с правилами
+    // перехода, экран аудита и два адреса справочника разметки (сам справочник и правка выбранной
+    // строки; промах по идентификатору возвращает к справочнику) — все помечены: всего
+    // 105 вариантов, помеченных 84.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -66,13 +69,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 100;
-    private const MARKED_TOTAL = 80;
+    private const VARIANTS_TOTAL = 105;
+    private const MARKED_TOTAL = 84;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (93 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 99;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (105 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 104;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -254,6 +257,23 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'og_image' => null,
             'noindex' => 0,
             'in_sitemap' => 0,
+            'created_at' => utcStamp(nowUtc()),
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+
+        // Разметка (S3) — тоже в обход: справочник разметки и экран правки выбранной строки.
+        // Строка разметки лежит на отдельном адресе, которого в сборке нет, — обход проверяет
+        // экраны раздела, а не содержимое разметки.
+        insert('seo_schema', [
+            'id' => newId(),
+            'path' => '/obhod-razmetka',
+            'schema_type' => 'WebPage',
+            'name' => 'Страница обхода с разметкой',
+            'description' => 'Описание страницы обхода с разметкой.',
+            'image' => null,
+            'author' => null,
+            'date_published' => null,
+            'date_modified' => null,
             'created_at' => utcStamp(nowUtc()),
             'updated_at' => utcStamp(nowUtc()),
         ]);
@@ -859,6 +879,28 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /seo/admin/settings' => [
                 ['path' => '/seo/admin/settings', 'outcome' => self::MARKED, 'status' => 200],
             ],
+            // Экраны S3: журнал 404 с правилами перехода, проверка метаданных и справочник
+            // разметки. Все помечены: это внутренние отчёты раздела, попадать в выдачу они не
+            // должны. Несуществующая разметка возвращает человека к справочнику с причиной —
+            // так же, как экран метаданных.
+            'GET /seo/admin/errors' => [
+                ['path' => '/seo/admin/errors', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /seo/admin/audit' => [
+                ['path' => '/seo/admin/audit', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /seo/admin/schema' => [
+                ['path' => '/seo/admin/schema', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /seo/admin/schema/{id}' => [
+                ['path' => '/seo/admin/schema/{seoschema}', 'outcome' => self::MARKED, 'status' => 200],
+                [
+                    'path' => '/seo/admin/schema/net-takoy-stroki',
+                    'outcome' => self::REDIRECT,
+                    'status' => 302,
+                    'target' => '/seo/admin/schema',
+                ],
+            ],
 
 
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
@@ -1072,6 +1114,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $seoMeta = one('SELECT id FROM ' . t('seo_meta') . " WHERE path = '/obhod'");
         self::assertIsArray($seoMeta, 'Фикстура: строки метаданных нет — экран правки недоступен');
 
+        $seoSchema = one('SELECT id FROM ' . t('seo_schema') . " WHERE path = '/obhod-razmetka'");
+        self::assertIsArray($seoSchema, 'Фикстура: строки разметки нет — экран правки недоступен');
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
@@ -1093,6 +1138,8 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'clswebhook' => (string) $classifiedsWebhook['id'],
             // Метаданные: экран правки выбранной строки справочника.
             'seometa' => (string) $seoMeta['id'],
+            // Разметка: экран правки выбранной строки справочника.
+            'seoschema' => (string) $seoSchema['id'],
         ] + self::buildDiscountTokens();
     }
 

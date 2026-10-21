@@ -46,6 +46,20 @@ function redirectWithNotice(string $to, string $notice): never
 
 function notFound(string $message = ''): never
 {
+    // Приложение может ответить редиректом вместо страницы «страницы нет»: адрес бывшей
+    // страницы живёт в таблице редиректов раздела, и человек пришёл по старой ссылке.
+    // Решение принимает приложение (фильтр not_found), а код ответа и заголовок Location
+    // ставит ядро — единственное место, где они задаются. Пустой ответ фильтра означает
+    // «редиректа нет», и страница 404 печатается как прежде.
+    $handled = applyFilters('not_found', null, requestPath());
+    if (is_array($handled)) {
+        $target = trim((string) ($handled['url'] ?? ''));
+
+        if ($target !== '') {
+            redirect($target, (int) ($handled['status'] ?? 301));
+        }
+    }
+
     if (!headers_sent()) {
         http_response_code(404);
     }

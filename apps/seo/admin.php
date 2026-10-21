@@ -11,6 +11,9 @@ const SEO_NAV_PATHS = [
     '/seo/admin/stats' => 'Обзор',
     '/seo/admin/pages' => 'Страницы',
     '/seo/admin/sources' => 'Источники',
+    '/seo/admin/errors' => '404 и редиректы',
+    '/seo/admin/audit' => 'Аудит',
+    '/seo/admin/schema' => 'Разметка',
     '/seo/admin/settings' => 'Настройки',
 ];
 
@@ -19,6 +22,12 @@ const SEO_NOTICE_TEXT = [
     'meta_deleted' => 'Метаданные удалены.',
     'stats_saved' => 'Настройки сбора сохранены.',
     'stats_purged' => 'Сырьё старше срока хранения удалено.',
+    'redirect_saved' => 'Правило перехода сохранено.',
+    'redirect_deleted' => 'Правило перехода удалено.',
+    'errors_cleared' => 'Журнал 404 очищен.',
+    'audit_done' => 'Проверка выполнена, находки пересчитаны.',
+    'schema_saved' => 'Разметка сохранена.',
+    'schema_deleted' => 'Разметка удалена.',
 ];
 
 /**
