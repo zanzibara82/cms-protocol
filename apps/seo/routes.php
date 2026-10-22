@@ -12,6 +12,9 @@ require_once __DIR__ . '/admin-monitor.php';
 require_once __DIR__ . '/admin-audit.php';
 require_once __DIR__ . '/admin-schema.php';
 require_once __DIR__ . '/admin-search.php';
+require_once __DIR__ . '/admin-conversions.php';
+require_once __DIR__ . '/admin-content.php';
+require_once __DIR__ . '/admin-funnels.php';
 
 // Экран метаданных: справочник адресов и форма. Адрес /{id} открывает правку выбранной
 // записи; POST на тот же адрес сохраняет её или удаляет.
@@ -57,6 +60,14 @@ addRoute('POST', '/seo/admin/search/source', 'seoSearchSourceAction', ['app' => 
 // Возврат из поисковика: сюда приходит код. Право — «вход»: без входа в админку и подпись
 // состояния не помогут, а код утекать не должен никому.
 addRoute('GET', '/seo/admin/search/callback', 'seoSearchCallback', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+
+// Конверсии, контентная аналитика и воронки (S5). Отчёты считаются системой: цифры в них —
+// то, что зафиксировали посещения и цели, а не вручную набраный текст.
+addRoute('GET', '/seo/admin/conversions', 'seoConversionsPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/seo/admin/conversions', 'seoConversionsAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/seo/admin/content', 'seoContentPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/seo/admin/funnels', 'seoFunnelsPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/seo/admin/funnels', 'seoFunnelsAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 
 // Приёмник событий счётчика. Адрес открыт мимо входа: его зовёт страница посетителя, у
 // которого нет ни входа, ни сессии. Подпись раздела проверяется внутри обработчика. Метка

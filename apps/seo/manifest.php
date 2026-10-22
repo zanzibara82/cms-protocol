@@ -9,7 +9,7 @@ declare(strict_types=1);
 return [
     'id' => 'seo',
     'title' => 'SEO и статистика',
-    'version' => '1.3.0',
+    'version' => '1.4.0',
     'requiresCore' => '1.1.0',
     'privatePaths' => ['/seo/admin'],
     'sql' => __DIR__ . '/sql',

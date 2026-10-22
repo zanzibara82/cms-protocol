@@ -541,6 +541,15 @@ function seoStatsStoreEvents(array $events, string $visitorId): array
         );
 
         seoStatsAggregate($day, $hour, $prepared['path'], $session['source'], $session['isNew']);
+        seoStatsRecordConversion(
+            $session['id'],
+            $visitor,
+            $prepared['path'],
+            $session['source'],
+            $prepared['device'],
+            $stamp,
+            $day
+        );
         $accepted++;
     }
 

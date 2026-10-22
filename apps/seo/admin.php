@@ -13,6 +13,9 @@ const SEO_NAV_PATHS = [
     '/seo/admin/sources' => 'Источники',
     '/seo/admin/search' => 'Поиск',
     '/seo/admin/search/source' => 'Источник поиска',
+    '/seo/admin/conversions' => 'Конверсии',
+    '/seo/admin/content' => 'Контент',
+    '/seo/admin/funnels' => 'Воронки',
     '/seo/admin/errors' => '404 и редиректы',
     '/seo/admin/audit' => 'Аудит',
     '/seo/admin/schema' => 'Разметка',
@@ -34,6 +37,15 @@ const SEO_NOTICE_TEXT = [
     'search_connected' => 'Источник подключён: токен получен.',
     'search_disconnected' => 'Источник отключён, токены удалены.',
     'search_imported' => 'Данные источника импортированы.',
+    'goal_created' => 'Цель создана.',
+    'goal_enabled' => 'Цель включена.',
+    'goal_disabled' => 'Цель выключена.',
+    'goal_deleted' => 'Цель удалена.',
+    'funnel_created' => 'Воронка создана.',
+    'funnel_enabled' => 'Воронка включена.',
+    'funnel_disabled' => 'Воронка выключена.',
+    'funnel_deleted' => 'Воронка удалена.',
+    'step_created' => 'Шаг воронки добавлен.',
 ];
 
 /**

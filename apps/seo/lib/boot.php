@@ -12,6 +12,7 @@ require_once __DIR__ . '/monitor.php';
 require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/search.php';
+require_once __DIR__ . '/goals.php';
 
 // Метаданные правят собранную страницу: заголовок, описание, канонический адрес и закрытие
 // адреса от индексации.
