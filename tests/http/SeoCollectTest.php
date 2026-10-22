@@ -168,6 +168,27 @@ final class SeoCollectTest extends TestCase
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []));
     }
 
+    public function testСлишкомБольшоеТелоОтвергаетсяДоРазбора(): void
+    {
+        $response = self::collect([
+            '_token' => seoCollectToken(),
+            'payload' => str_repeat('a', SEO_STATS_MAX_PAYLOAD + 1),
+        ]);
+
+        self::assertSame(413, $response['status'], 'Тело сверх предела разбирать нельзя: разбор способен исчерпать память, а нехватка памяти ведёт к аварийному выходу движка (CVE-2026-109618, CVE-2026-109619)');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []), 'Тело сверх предела не пишет событий');
+    }
+
+    public function testТелоВПределеПринимается(): void
+    {
+        $response = self::collect([
+            '_token' => seoCollectToken(),
+            'payload' => self::payload([['p' => '/news']]),
+        ]);
+
+        self::assertSame(204, $response['status'], 'Предел не должен отрезать обычную пачку событий');
+    }
+
     public function testСобытиеБезАдресаНеЗаписывается(): void
     {
         $response = self::collect([

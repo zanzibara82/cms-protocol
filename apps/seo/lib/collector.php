@@ -41,7 +41,24 @@ function seoCollectorAccept(array $params = []): void
         respond(204, '', ['Cache-Control' => 'no-store']);
     }
 
-    $payload = seoStatsParsePayload(postString('payload'));
+    $raw = postString('payload');
+
+    // Предел тела: пачка событий от нашего скрипта — это килобайты, а тело больше предела мы
+    // не разбираем вовсе. Причина не в аккуратности: разбор тела в несколько мегабайт
+    // способен исчерпать память процесса, а нехватка памяти в PHP ведёт к аварийному выходу
+    // движка — тот самый путь, который закрывает обновление безопасности 21 октября 2026 года
+    // (CVE-2026-109618, CVE-2026-109619: повреждение состояния движка при аварийном выходе,
+    // заявлена возможность удалённого выполнения кода без аутентификации). Тело приёмника
+    // не проходит аутентификацию: подпись сверяется, но кто именно прислал тело, неизвестно.
+    if (strlen($raw) > SEO_STATS_MAX_PAYLOAD) {
+        logWarn('seo.collect.oversized', ['bytes' => strlen($raw), 'ip' => clientIp()]);
+        respond(413, 'Слишком большой запрос приёмника статистики.', [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
+    $payload = seoStatsParsePayload($raw);
 
     if ($payload === null) {
         logWarn('seo.collect.malformed', ['path' => requestPath(), 'ip' => clientIp()]);

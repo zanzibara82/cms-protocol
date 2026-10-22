@@ -153,6 +153,37 @@ final class DeploySafetyTest extends TestCase
         );
     }
 
+    public function testСписокБезопасныхВерсийPhpОдинВЯдреИВЗонде(): void
+    {
+        $core = $this->read('core/version.php');
+        $probe = $this->read('scripts/hosting-probe.php');
+
+        // Ядро и зонд называют безопасные версии по отдельности: зонд на хостинг едет один, без
+        // ядра, и сверить их некому. Списки обязаны совпадать — иначе администратор на хостинге
+        // увидит одно, а сайт считает другим. Сверяются пары «ветка → версия», а не отдельные
+        // подстроки: версия 8.3.36 встречается в тексте и как значение списка, и в пояснении,
+        // и совпадение такой подстроки ничего не доказывает.
+        preg_match_all("/'(8\.\d)' => (null|'8\.\d+\.\d+')/", $core, $matches, PREG_SET_ORDER);
+
+        self::assertNotEmpty($matches, 'ядро обязано называть безопасные версии PHP: без списка плашка в админке была бы пустой');
+
+        foreach ($matches as $entry) {
+            $branch = (string) $entry[1];
+            $version = (string) $entry[2];
+
+            self::assertStringContainsString(
+                "'" . $branch . "' => " . $version,
+                $this->withoutCommentLines($probe),
+                'зонд обязан называть ту же безопасную версию ветки ' . $branch . ', что и ядро'
+            );
+        }
+
+        // Номера уязвимостей обязаны быть названы: версия без названия дыры ничего не объясняет
+        // ни администратору, ни тому, кто разбирает инцидент.
+        self::assertStringContainsString('CVE-2026-109618', $probe);
+        self::assertStringContainsString('CVE-2026-109619', $probe);
+    }
+
     public function testЗапаснаяРаскладкаЗакрываетСлужебноеДоПереписывания(): void
     {
         $htaccess = $this->read('.htaccess');

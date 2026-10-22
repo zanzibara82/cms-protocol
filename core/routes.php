@@ -120,6 +120,12 @@ function coreAdminSummary(array $params = []): void
         'adminEmail' => getOption('admin_email'),
         'users' => (int) value('SELECT COUNT(*) FROM ' . t('user')),
         'apps' => $apps,
+        // Версия движка на хостинге: обновление безопасности 21 октября 2026 года
+        // (CVE-2026-109618, CVE-2026-109619) администратор должен видеть сразу, а не в
+        // журнале ошибок. Список безопасных версий живёт в core/version.php.
+        'phpVersion' => PHP_VERSION,
+        'phpState' => corePhpSecurityState(),
+        'phpHint' => corePhpSecurityHint(),
     ], ['title' => 'Сводка — админка', 'noindex' => true]);
 }
 
