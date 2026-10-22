@@ -11,6 +11,8 @@ const SEO_NAV_PATHS = [
     '/seo/admin/stats' => 'Обзор',
     '/seo/admin/pages' => 'Страницы',
     '/seo/admin/sources' => 'Источники',
+    '/seo/admin/search' => 'Поиск',
+    '/seo/admin/search/source' => 'Источник поиска',
     '/seo/admin/errors' => '404 и редиректы',
     '/seo/admin/audit' => 'Аудит',
     '/seo/admin/schema' => 'Разметка',
@@ -28,6 +30,10 @@ const SEO_NOTICE_TEXT = [
     'audit_done' => 'Проверка выполнена, находки пересчитаны.',
     'schema_saved' => 'Разметка сохранена.',
     'schema_deleted' => 'Разметка удалена.',
+    'search_saved' => 'Настройки источника сохранены.',
+    'search_connected' => 'Источник подключён: токен получен.',
+    'search_disconnected' => 'Источник отключён, токены удалены.',
+    'search_imported' => 'Данные источника импортированы.',
 ];
 
 /**

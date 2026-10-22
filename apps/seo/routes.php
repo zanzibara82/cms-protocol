@@ -11,6 +11,7 @@ require_once __DIR__ . '/admin-stats.php';
 require_once __DIR__ . '/admin-monitor.php';
 require_once __DIR__ . '/admin-audit.php';
 require_once __DIR__ . '/admin-schema.php';
+require_once __DIR__ . '/admin-search.php';
 
 // Экран метаданных: справочник адресов и форма. Адрес /{id} открывает правку выбранной
 // записи; POST на тот же адрес сохраняет её или удаляет.
@@ -45,6 +46,17 @@ addRoute('POST', '/seo/admin/errors', 'seoMonitorAction', ['app' => 'seo', 'priv
 addRoute('POST', '/seo/admin/audit', 'seoAuditAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/seo/admin/schema', 'seoSchemaAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/seo/admin/schema/{id}', 'seoSchemaAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+
+// Поисковая аналитика (S4). Экран данных доступен любому, кто вошёл в админку, а экран
+// подключения — только администратору: там лежит клиентский секрет (право «управлять»).
+addRoute('GET', '/seo/admin/search', 'seoSearchPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/seo/admin/search', 'seoSearchAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/seo/admin/search/source', 'seoSearchSourcePage', ['app' => 'seo', 'private' => true, 'permission' => 'manage']);
+addRoute('POST', '/seo/admin/search/source', 'seoSearchSourceAction', ['app' => 'seo', 'private' => true, 'permission' => 'manage']);
+
+// Возврат из поисковика: сюда приходит код. Право — «вход»: без входа в админку и подпись
+// состояния не помогут, а код утекать не должен никому.
+addRoute('GET', '/seo/admin/search/callback', 'seoSearchCallback', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 
 // Приёмник событий счётчика. Адрес открыт мимо входа: его зовёт страница посетителя, у
 // которого нет ни входа, ни сессии. Подпись раздела проверяется внутри обработчика. Метка

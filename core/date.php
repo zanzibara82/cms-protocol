@@ -111,6 +111,50 @@ function shiftMoscowDay(string $day, int $days): string
     return moscowDayKey(shiftDays($parsed, $days));
 }
 
+// Ключ календарного дня по UTC: поисковые отчёты считают дни по шкале источника, а не по
+// московской, иначе ночные данные уезжали бы в соседний день.
+function utcDayKey(DateTimeImmutable $date): string
+{
+    return $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d');
+}
+
+// Разбор календарного дня «ГГГГ-ММ-ДД» в UTC. null — дата не понята: календарность
+// проверяется, чтобы 2026-02-31 не превратился в март.
+function parseUtcDay(string $raw): ?DateTimeImmutable
+{
+    $value = trim($raw);
+
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+        return null;
+    }
+
+    [$y, $m, $d] = array_map('intval', explode('-', $value));
+
+    if (!checkdate($m, $d, $y)) {
+        return null;
+    }
+
+    $parsed = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $value . ' 00:00:00', new DateTimeZone('UTC'));
+
+    if (!$parsed instanceof DateTimeImmutable || $parsed->format('Y-m-d') !== $value) {
+        return null;
+    }
+
+    return $parsed;
+}
+
+// Секунды момента: сравнение сроков и подписей состояния идёт по числам, а не по строкам.
+function utcTimestamp(DateTimeImmutable $date): int
+{
+    return $date->getTimestamp();
+}
+
+// Штамп по секундам: метка «когда был импорт» хранится числом, а читается как дата.
+function utcStampFromTimestamp(int $timestamp): string
+{
+    return utcStamp(new DateTimeImmutable('@' . $timestamp));
+}
+
 // Поле datetime-local приносит «2026-10-06T09:00» без пояса: время понимается как московское —
 // ровно то, о чём договорён контент-менеджер, назначая публикацию «на девять утра».
 function parseFormDateTime(string $raw): ?DateTimeImmutable

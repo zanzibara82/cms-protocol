@@ -13,3 +13,9 @@ declare(strict_types=1);
 if (getOption(SEO_STATS_OPTION_SECRET, '') === '') {
     setOption(SEO_STATS_OPTION_SECRET, bin2hex(random_bytes(32)));
 }
+
+// Ключ подписи состояния входа в поисковик: им подписывается переход «от источника», и без
+// него подделать код можно было бы одной ссылкой. Создаётся один раз при установке.
+if (getOption(SEO_SEARCH_OPTION_SECRET, '') === '') {
+    setOption(SEO_SEARCH_OPTION_SECRET, bin2hex(random_bytes(32)));
+}
