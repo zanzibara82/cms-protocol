@@ -420,6 +420,92 @@ final class SeoSearchTest extends TestCase
         self::assertSame('новый-токен', (string) $fresh['access_token']);
     }
 
+    public function testАдресВходаСобранПоПравиламИсточника(): void
+    {
+        self::connectGoogleSource();
+
+        $url = seoSearchAuthorizeUrl();
+
+        self::assertStringStartsWith('https://accounts.google.com/o/oauth2/v2/auth?', $url);
+        self::assertStringContainsString('client_id=' . rawurlencode('клиент'), $url);
+        self::assertStringContainsString('scope=' . rawurlencode(SEO_SEARCH_SCOPE), $url);
+        self::assertStringContainsString('access_type=offline', $url);
+        self::assertStringContainsString('response_type=code', $url);
+
+        // Подпись состояния едет вместе со ссылкой и должна проходить проверку: иначе возврат
+        // из источника отвергли бы как чужой.
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $state = (string) ($query['state'] ?? '');
+
+        self::assertNotSame('', $state, 'Подпись состояния обязана ехать вместе со ссылкой');
+        self::assertTrue(seoSearchStateValid($state));
+    }
+
+    public function testБезКлиентаВходаНет(): void
+    {
+        seoSearchSaveSettings([
+            'provider' => SEO_SEARCH_PROVIDER_GOOGLE,
+            'site' => 'https://example.com/',
+            'client_id' => '',
+            'client_secret' => 'секрет',
+            'redirect' => '',
+        ]);
+
+        self::assertSame('', seoSearchAuthorizeUrl(), 'Без идентификатора клиента ссылка для входа бессмысленна');
+    }
+
+    public function testКодМеняетсяНаТокен(): void
+    {
+        self::connectGoogleSource();
+
+        addFilter('seo_search_http', static fn (mixed $value, string $method, string $url, array $options): array => [
+            'status' => 200,
+            'body' => (string) json_encode([
+                'access_token' => 'выданный-токен',
+                'refresh_token' => 'выданный-refresh',
+                'expires_in' => 3600,
+                'scope' => SEO_SEARCH_SCOPE,
+            ]),
+            'error' => '',
+        ]);
+
+        $exchanged = seoSearchExchange('код-источника');
+
+        self::assertTrue($exchanged['ok'], (string) $exchanged['error']);
+        self::assertSame('выданный-токен', (string) $exchanged['tokens']['access_token']);
+
+        seoSearchStoreTokens($exchanged['tokens']);
+
+        $connection = seoSearchConnection();
+
+        self::assertNotNull($connection);
+        self::assertSame('выданный-токен', (string) $connection['access_token']);
+        self::assertSame('выданный-refresh', (string) $connection['refresh_token']);
+        self::assertSame(SEO_SEARCH_SCOPE, (string) $connection['scope']);
+        self::assertNotNull(fromDb((string) $connection['expires_at']), 'Срок действия токена обязан быть датой, а не пустотой');
+    }
+
+    public function testОтказИсточникаПриОбменеНеВыдаётсяЗаТокен(): void
+    {
+        self::connectGoogleSource();
+
+        addFilter('seo_search_http', static fn (mixed $value, string $method, string $url, array $options): array => [
+            'status' => 400,
+            'body' => '',
+            'error' => '',
+        ]);
+
+        $exchanged = seoSearchExchange('неверный-код');
+
+        self::assertFalse($exchanged['ok']);
+        self::assertSame([], $exchanged['tokens']);
+
+        $connection = seoSearchConnection();
+
+        self::assertNotNull($connection);
+        self::assertSame('токен', (string) $connection['access_token'], 'Отказ источника не должен трогать уже выданный токен');
+    }
+
     public function testТранспортПускаетТолькоHttps(): void
     {
         $response = seoSearchHttp('POST', 'http://example.com/', ['body' => 'x']);
