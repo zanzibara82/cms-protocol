@@ -20,7 +20,7 @@ function seoFunnelsPage(array $params = []): void
     $report = null;
 
     if ($selectedId !== '') {
-        $row = one('SELECT * FROM ' . t('seo_funnel') . ' WHERE id = ?', [$selectedId]);
+        $row = one('SELECT id, name, enabled, created_at FROM ' . t('seo_funnel') . ' WHERE id = ?', [$selectedId]);
         if ($row !== null) {
             $funnel = [
                 'id' => (string) $row['id'],

@@ -23,7 +23,7 @@ function optionsAll(): array
     }
 
     $loaded = [];
-    foreach (all('SELECT option_name, option_value FROM ' . t('option') . ' WHERE autoload = 1') as $row) {
+    foreach (all('SELECT option_name, option_value FROM ' . t('option') . ' WHERE autoload = 1 LIMIT 1000') as $row) {
         $loaded[(string) $row['option_name']] = $row['option_value'] === null ? null : (string) $row['option_value'];
     }
 

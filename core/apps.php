@@ -94,7 +94,7 @@ function appManifest(string $id): ?array
 function appInstallations(): array
 {
     $out = [];
-    foreach (all('SELECT id, enabled, installed_at, version FROM ' . t('app_installation')) as $row) {
+    foreach (all('SELECT id, enabled, installed_at, version FROM ' . t('app_installation') . ' LIMIT 100') as $row) {
         $out[(string) $row['id']] = $row;
     }
 

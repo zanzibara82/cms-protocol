@@ -42,7 +42,7 @@ function categoryIdOf(string $slug): string
 /** @return list<array{slug: string, title: string}> */
 function visibleCategories(): array
 {
-    $rows = all('SELECT slug, title FROM ' . t('news_category') . ' WHERE visible = 1 ORDER BY order_index, title');
+    $rows = all('SELECT slug, title FROM ' . t('news_category') . ' WHERE visible = 1 ORDER BY order_index, title LIMIT 500');
     $out = [];
     foreach ($rows as $row) {
         $out[] = ['slug' => (string) $row['slug'], 'title' => (string) $row['title']];
@@ -56,7 +56,7 @@ function visibleCategories(): array
 /** @return list<array{id: string, title: string, visible: bool}> */
 function categoryOptions(): array
 {
-    $rows = all('SELECT id, title, visible FROM ' . t('news_category') . ' ORDER BY order_index, title');
+    $rows = all('SELECT id, title, visible FROM ' . t('news_category') . ' ORDER BY order_index, title LIMIT 500');
     $out = [];
     foreach ($rows as $row) {
         $out[] = ['id' => (string) $row['id'], 'title' => (string) $row['title'], 'visible' => (bool) $row['visible']];
@@ -298,7 +298,7 @@ function deleteCategory(string $id): array
 /** @return array{ok: bool, notice: string, error: string} */
 function moveCategory(string $id, string $direction): array
 {
-    $rows = all('SELECT id FROM ' . t('news_category') . ' ORDER BY order_index, title');
+    $rows = all('SELECT id FROM ' . t('news_category') . ' ORDER BY order_index, title LIMIT 500');
     $ids = array_map(static fn (array $row): string => (string) $row['id'], $rows);
     $index = array_search($id, $ids, true);
 
@@ -353,7 +353,7 @@ function findTag(string $slug): ?array
 /** @return list<array{id: string, slug: string, label: string}> */
 function visibleTags(): array
 {
-    $rows = all('SELECT id, slug, label FROM ' . t('news_tag') . ' ORDER BY label');
+    $rows = all('SELECT id, slug, label FROM ' . t('news_tag') . ' ORDER BY label LIMIT 500');
     $out = [];
     foreach ($rows as $row) {
         $out[] = ['id' => (string) $row['id'], 'slug' => (string) $row['slug'], 'label' => (string) $row['label']];
@@ -365,7 +365,7 @@ function visibleTags(): array
 /** @return list<array{slug: string, label: string}> */
 function tagOptions(): array
 {
-    $rows = all('SELECT slug, label FROM ' . t('news_tag') . ' ORDER BY label');
+    $rows = all('SELECT slug, label FROM ' . t('news_tag') . ' ORDER BY label LIMIT 500');
     $out = [];
     foreach ($rows as $row) {
         $out[] = ['slug' => (string) $row['slug'], 'label' => (string) $row['label']];

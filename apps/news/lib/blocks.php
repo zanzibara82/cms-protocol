@@ -444,7 +444,7 @@ function moveBlock(string $id, string $direction): array
 {
     // Одна выборка отвечает и за «блок есть», и за его соседей: отдельный `one()` за идентификатором
     // добавил бы второй вопрос базе о том же состоянии.
-    $rows = all('SELECT id, zone, visible FROM ' . t('news_block') . ' ORDER BY order_index, title');
+    $rows = all('SELECT id, zone, visible FROM ' . t('news_block') . ' ORDER BY order_index, title LIMIT 500');
 
     $zone = '';
 

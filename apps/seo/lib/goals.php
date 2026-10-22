@@ -228,7 +228,7 @@ function seoStatsRecordConversion(
     string $stamp,
     string $day
 ): void {
-    $goals = all('SELECT * FROM ' . t('seo_goal') . ' WHERE enabled = 1');
+    $goals = all('SELECT id, name, type, pattern, match_type, source, device, enabled, created_at, updated_at FROM ' . t('seo_goal') . ' WHERE enabled = 1 LIMIT 1000');
 
     foreach ($goals as $goal) {
         if (!seoGoalMatch($goal, $path, $source, $device)) {
