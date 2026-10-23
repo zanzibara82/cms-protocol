@@ -140,6 +140,15 @@ final class NewsPublicTest extends TestCase
         self::assertStringContainsString('Второй вечер', $page['body']);
         self::assertStringNotContainsString('Невидимая заметка', $page['body'], 'черновика в ленте нет');
         self::assertStringNotContainsString('Заметка про будущее', $page['body'], 'материала с ненаступившим сроком нет');
+
+        preg_match_all('~<article\b[^>]*>.*?</article>~s', $page['body'], $articles);
+        $cards = array_values(array_filter($articles[0], static fn (string $article): bool => str_contains($article, 'href="/news/vecher-vstrechi"')));
+        self::assertCount(1, $cards, 'в ленте одна карточка с точным адресом материала');
+        self::assertMatchesRegularExpression(
+            '~<a\b[^>]*\shref="/news/c/zhizn-shkoly"[^>]*>\s*Жизнь\s+школы\s*</a>~u',
+            $cards[0],
+            'видимая рубрика имеет ссылку внутри карточки материала'
+        );
     }
 
     public function testЛентаНесётПревьюРаздела(): void

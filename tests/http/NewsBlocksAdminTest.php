@@ -303,8 +303,7 @@ final class NewsBlocksAdminTest extends TestCase
     {
         $this->login();
 
-        // Зона главной открывается одной заводской строкой: её присутствие и есть предмет проверки —
-        // счётчик, который её не считает, даёт семь строк вместо предела и остаётся незамеченным.
+        // Заводская строка занимает одно место зоны, поэтому через форму добавляем ещё пять.
         self::assertSame(1, $this->countZone('home'), 'до заполнения в зоне главной одна заводская строка');
 
         for ($n = 1; $n <= NEWS_BLOCK_PER_ZONE - 1; $n++) {
@@ -321,12 +320,12 @@ final class NewsBlocksAdminTest extends TestCase
         $response = $this->send(NEWS_ADMIN_BLOCKS_PATH, ['op' => 'create', 'zone' => 'home', 'kind' => 'list', 'title' => 'Шестой лишних', 'take' => '3']);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('В зоне уже 6 блоков', $this->failureBody($response));
         self::assertSame(
             NEWS_BLOCK_PER_ZONE,
             $this->countZone('home'),
             'отказ не оставил в зоне седьмой строки — предел держится по факту таблицы'
         );
+        self::assertStringContainsString('В зоне уже 6 блоков', $this->failureBody($response));
     }
 
     public function testПодделанныеПоляОтказываютсяСвоимТекстом(): void
