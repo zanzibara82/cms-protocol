@@ -120,13 +120,14 @@ final class LoginLimitTest extends TestCase
         self::assertSame($before, $after, 'Попытка по заведомо неизвестному адресу не пишется в журнал');
     }
 
-    // Вторая половина границы из находки рецензии М7-1а: код отсекает строго больше порога, поэтому
-    // адрес длиной ровно LOGIN_EMAIL_MAX обязан дойти до обычной ветки отказа — с тем же общим
-    // текстом и с записью попытки в журнал, как любой другой неизвестный адрес.
+    // Вторая половина границы из находки рецензии М7-1а: код отсекает строго больше порога, но
+    // граница проходит обычной веткой после нормализации, поэтому адрес, который длиннее порога
+    // только до срезания краевых пробелов и смены регистра, обязан дойти до записи попытки.
     public function testАдресРовноНаГраницеПорогаДоходитДоОбычнойВетки(): void
     {
-        $email = str_repeat('a', LOGIN_EMAIL_MAX - 11) . '@school.dev';
-        self::assertSame(LOGIN_EMAIL_MAX, mb_strlen($email), 'Замер собран: адрес ровно на границе порога');
+        $email = '  ' . str_repeat('A', LOGIN_EMAIL_MAX - 11) . '@School.Dev  ';
+        self::assertGreaterThan(LOGIN_EMAIL_MAX, strlen($email), 'Сырой адрес обязан быть длиннее порога, иначе порядок нормализации и замера не закрепляется');
+        self::assertSame(LOGIN_EMAIL_MAX, mb_strlen(mb_strtolower(trim($email))), 'Замер собран: нормализованный адрес ровно на границе порога');
 
         $before = (int) value('SELECT COUNT(*) FROM ' . t('login_attempt'), []);
         $result = attemptLogin($email, 'любой-пароль');
@@ -148,7 +149,7 @@ final class LoginLimitTest extends TestCase
 
         self::assertTrue($result['ok'], 'Регистр и краевые пробелы не мешают входу');
         self::assertSame('redaktor@school.dev', $result['user']['email']);
-        self::assertFalse($clean['ok'] === false);
+        self::assertTrue($clean['ok'], 'Чистый адрес входит так же, как адрес с краевыми пробелами и в другом регистре');
         self::assertSame('redaktor@school.dev', $clean['user']['email']);
     }
 

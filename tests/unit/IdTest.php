@@ -34,11 +34,28 @@ final class IdTest extends TestCase
 
     public function testПорядокСтрокСовпадаетПорядкомСоздания(): void
     {
+        // Время занимает первые десять символов, поэтому порядок строк проверяется окном между
+        // двумя замерами, а не паузой: сон делает проверку плавающей.
+        $before = (int) floor(microtime(true) * 1000);
         $first = newId();
-        // Время в base32 занимает первые 10 символов: через 2 миллисекунды префикс обязан вырасти.
-        usleep(2000);
         $second = newId();
+        $after = (int) floor(microtime(true) * 1000);
 
-        self::assertLessThan($second, $first, 'Строки должны сортироваться по времени создания');
+        $firstPrefix = substr($first, 0, ID_TIME_LENGTH);
+        $secondPrefix = substr($second, 0, ID_TIME_LENGTH);
+
+        self::assertGreaterThanOrEqual(encodeTime($before), $firstPrefix, 'Префикс первого идентификатора раньше левого края окна');
+        self::assertLessThanOrEqual(encodeTime($after), $firstPrefix, 'Префикс первого идентификатора позже правого края окна');
+        self::assertGreaterThanOrEqual(encodeTime($before), $secondPrefix, 'Префикс второго идентификатора раньше левого края окна');
+        self::assertLessThanOrEqual(encodeTime($after), $secondPrefix, 'Префикс второго идентификатора позже правого края окна');
+
+        // Пять подряд идущих миллисекунд, начиная с $before, обязаны давать строго растущие
+        // строки: это закрепляет совпадение порядка строк с порядком времени и ловит перестановку
+        // букв в ID_ALPHABET.
+        for ($ms = $before; $ms < $before + 4; $ms++) {
+            self::assertLessThan(encodeTime($ms + 1), encodeTime($ms), 'Кодирование времени не растёт на миллисекунде ' . $ms);
+        }
+
+        self::assertLessThanOrEqual($secondPrefix, $firstPrefix, 'Строки должны сортироваться по времени создания');
     }
 }

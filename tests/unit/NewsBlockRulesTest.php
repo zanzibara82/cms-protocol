@@ -54,9 +54,13 @@ final class NewsBlockRulesTest extends TestCase
 
     public function testНазваниеБлокаПоПределу(): void
     {
+        // Минимальная длина считается по схлопнутой строке (collapseSpace в blocks.php:24),
+        // поэтому значения границы собраны из букв, без пробелов.
         self::assertNotSame('', checkBlockFields('home', 'list', 'к', 4)['error'], 'Одного символа мало: минимум два');
+        self::assertSame('', checkBlockFields('home', 'list', str_repeat('а', 2), 4)['error'], 'Заголовок из двух символов — нижняя граница предела — отклонён');
         self::assertSame('', checkBlockFields('home', 'list', 'Кот', 4)['error']);
         self::assertNotSame('', checkBlockFields('home', 'list', '', 4)['error']);
+        self::assertSame('', checkBlockFields('home', 'list', str_repeat('а', 120), 4)['error'], 'Заголовок из ста двадцати символов — верхняя граница — отклонён');
         self::assertNotSame('', checkBlockFields('home', 'list', str_repeat('а', 121), 4)['error']);
     }
 
@@ -68,6 +72,14 @@ final class NewsBlockRulesTest extends TestCase
         self::assertNotSame('', checkBlockFields('home', 'list', 'Заголовок', -5)['error']);
         self::assertNotSame('', checkBlockFields('home', 'list', 'Заголовок', 999)['error']);
         self::assertNotSame('', checkBlockFields('home', 'list', 'Заголовок', NEWS_PER_PAGE + 1)['error']);
+
+        $one = checkBlockFields('home', 'list', 'Заголовок', 1);
+        self::assertSame('', $one['error'], 'Один материал — нижняя граница — отклонён');
+        self::assertSame(1, $one['take'], 'Один материал — нижняя граница — принят не своим числом');
+
+        $page = checkBlockFields('home', 'list', 'Заголовок', NEWS_PER_PAGE);
+        self::assertSame('', $page['error'], 'Ровно предел страницы — верхняя граница — отклонён');
+        self::assertSame(NEWS_PER_PAGE, $page['take'], 'Ровно предел страницы — верхняя граница — принята не своим числом');
 
         $ok = checkBlockFields('home', 'list', 'Заголовок', 5);
         self::assertSame('', $ok['error']);

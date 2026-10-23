@@ -229,6 +229,19 @@ final class SetupConfigTest extends TestCase
         }
     }
 
+    public function testПользовательБазыНаГраницеСтаДевяностаСимволов(): void
+    {
+        $pass = setupValidateDb($this->formValues(['db_user' => str_repeat('a', 190)]));
+        self::assertArrayNotHasKey('db_user', $pass, 'Пользователь базы в 190 символов отклонён');
+
+        $fail = setupValidateDb($this->formValues(['db_user' => str_repeat('a', 191)]));
+        self::assertSame(
+            'Имя пользователя — не длиннее 190 символов.',
+            $fail['db_user'] ?? '',
+            'Пользователь базы в 191 символ принят'
+        );
+    }
+
     public function testАдресСайтаЧужойСхемыОтклоняется(): void
     {
         $fail = setupValidateDb($this->formValues(['site_url' => 'ftp://example.com']));
