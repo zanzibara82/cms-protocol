@@ -10,15 +10,19 @@ use PHPUnit\Framework\TestCase;
 // Экран блоков проверяется запросами к живому серверу: ключ уведомления в адресе возврата, текст
 // плашки после него, состояние строки в базе и разметка трёх зон существуют только в ответе.
 //
-// Каждый тест действует блоком, который создал сам, а tearDown() возвращает таблице состав релиза —
-// две заводские строки. Иначе следующий метод застал бы чужие правки и падение показывало бы не своё.
+// Каждый тест действует блоком, который создал сам, а tearDown() убирает из таблицы строки,
+// добавленные тестом: набор строк возвращается к составу релиза — двум заводским. Иначе следующий
+// метод застал бы чужие правки и падение показывало бы не своё. Содержимое двух заводских строк
+// tearDown() не восстанавливает и не обещает этого: сегодня их ни один тест успешно не правит,
+// а тест, который начнёт править, обязан вернуть правку сам.
 final class NewsBlocksAdminTest extends TestCase
 {
     private const EDITOR_EMAIL = 'bloki@school.dev';
     private const EDITOR_PASSWORD = 'верный-пароль';
     private const EDITOR = ['id' => 'redaktor-3', 'email' => 'bloki@school.dev'];
 
-    // Заводские строки третьего релиза: тот состав таблицы, к которому возвращается каждый тест.
+    // Заводские строки третьего релиза: тот набор строк, к которому tearDown() возвращает таблицу.
+    // Их поля тесты не меняют — удаляются только строки, добавленные самим тестом.
     private const FACTORY_IDS = ['newsblk-home', 'newsblk-article'];
 
     public static function setUpBeforeClass(): void
@@ -298,15 +302,31 @@ final class NewsBlocksAdminTest extends TestCase
     public function testСедьмойБлокВЗонеОтказывается(): void
     {
         $this->login();
-        // Зона главной держит одну заводскую строку: ещё пять заполняют предел, шестая — отказ.
-        for ($n = 1; $n <= NEWS_BLOCK_PER_ZONE; $n++) {
-            $this->create('home', 'list', 'Заполнение ' . $n, '3');
+
+        // Зона главной открывается одной заводской строкой: её присутствие и есть предмет проверки —
+        // счётчик, который её не считает, даёт семь строк вместо предела и остаётся незамеченным.
+        self::assertSame(1, $this->countZone('home'), 'до заполнения в зоне главной одна заводская строка');
+
+        for ($n = 1; $n <= NEWS_BLOCK_PER_ZONE - 1; $n++) {
+            $response = $this->create('home', 'list', 'Заполнение ' . $n, '3');
+            self::assertSame('created', $this->noticeOf($response), 'заход ' . $n . ' обязан добавить блок, а не отказать');
         }
+
+        self::assertSame(
+            NEWS_BLOCK_PER_ZONE,
+            $this->countZone('home'),
+            'пять заходов плюс заводская строка заполняют предел — ровно ' . NEWS_BLOCK_PER_ZONE
+        );
 
         $response = $this->send(NEWS_ADMIN_BLOCKS_PATH, ['op' => 'create', 'zone' => 'home', 'kind' => 'list', 'title' => 'Шестой лишних', 'take' => '3']);
 
         self::assertSame(302, $response['status']);
         self::assertStringContainsString('В зоне уже 6 блоков', $this->failureBody($response));
+        self::assertSame(
+            NEWS_BLOCK_PER_ZONE,
+            $this->countZone('home'),
+            'отказ не оставил в зоне седьмой строки — предел держится по факту таблицы'
+        );
     }
 
     public function testПодделанныеПоляОтказываютсяСвоимТекстом(): void
@@ -557,5 +577,21 @@ final class NewsBlocksAdminTest extends TestCase
         self::assertNotNull($row);
 
         return (int) $row['order'];
+    }
+
+    /**
+     * Сколько строк лежит в зоне физически — счётчик таблицы, а не текст отказа.
+     */
+    private function countZone(string $zone): int
+    {
+        $count = 0;
+
+        foreach (adminBlockRows() as $row) {
+            if ((string) $row['zone'] === $zone) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 }
