@@ -16,6 +16,8 @@ const SEO_NAV_PATHS = [
     '/seo/admin/conversions' => 'Конверсии',
     '/seo/admin/content' => 'Контент',
     '/seo/admin/funnels' => 'Воронки',
+    '/seo/admin/export' => 'Экспорт',
+    '/seo/admin/api' => 'API-ключи',
     '/seo/admin/errors' => '404 и редиректы',
     '/seo/admin/audit' => 'Аудит',
     '/seo/admin/schema' => 'Разметка',
@@ -46,6 +48,7 @@ const SEO_NOTICE_TEXT = [
     'funnel_disabled' => 'Воронка выключена.',
     'funnel_deleted' => 'Воронка удалена.',
     'step_created' => 'Шаг воронки добавлен.',
+    'api_key_revoked' => 'Ключ отозван. Обращения с ним будут получать отказ 401.',
 ];
 
 /**

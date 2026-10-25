@@ -136,11 +136,14 @@ final class SeoStatsTest extends TestCase
 
     public function testПодписьРазделаЖивётСутки(): void
     {
-        $today = seoCollectToken();
-        $yesterday = seoCollectTokenFor(shiftMoscowDay(seoStatsDayKey(nowUtc()), 1));
+        $today = seoStatsDayKey(nowUtc());
+        $token = seoCollectToken();
+        $yesterday = seoCollectTokenFor(shiftMoscowDay($today, -1));
+        $tomorrow = seoCollectTokenFor(shiftMoscowDay($today, 1));
 
-        self::assertTrue(seoCollectorTokenValid($today), 'Подпись сегодняшней сборки обязана приниматься');
+        self::assertTrue(seoCollectorTokenValid($token), 'Подпись сегодняшней сборки обязана приниматься');
         self::assertTrue(seoCollectorTokenValid($yesterday), 'Страница из вчерашнего кэша приходит позже — вчерашняя подпись тоже принимается');
+        self::assertFalse(seoCollectorTokenValid($tomorrow), 'Завтрашняя подпись не принимается: окно смотрит назад, а не вперёд');
         self::assertFalse(seoCollectorTokenValid('чужая-подпись'), 'Чужая подпись обязана отвергаться');
         self::assertFalse(seoCollectorTokenValid(''), 'Пустой токен — не подпись');
     }
@@ -312,6 +315,47 @@ final class SeoStatsTest extends TestCase
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []));
     }
 
+    public function testСобытиеНеРазбираетсяОтбрасывается(): void
+    {
+        $result = seoStatsStoreEvents([['p' => ''], self::event(['p' => '/news'])], 'visitor-0001');
+
+        self::assertSame(1, $result['accepted']);
+        self::assertSame(1, $result['rejected'], 'Неразобранное событие не плюсуется к принятым');
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []));
+    }
+
+    /**
+     * Пакетный приём (S6): сессия читается один раз на пачку, а не под каждым событием.
+     * Проверяются следствия: сессия одна, просмотры сессии совпадают с числом принятых,
+     * «выходом» становится последний адрес пачки, а агрегаты дня и часа сходятся с числом
+     * событий.
+     */
+    public function testПачкаСобытийЛожитсяОднойСессией(): void
+    {
+        $result = seoStatsStoreEvents([
+            self::event(['p' => '/news']),
+            self::event(['p' => '/about', 'r' => 'https://vk.com/']),
+            self::event(['p' => '/contact']),
+        ], 'visitor-0001');
+        self::assertSame(3, $result['accepted']);
+        self::assertSame(0, $result['rejected']);
+
+        self::assertSame(3, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []));
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('seo_session'), []), 'Пачка приходит от одного посетителя одним штампом — сессия одна');
+
+        $session = one('SELECT views, landing_path, last_path, source FROM ' . t('seo_session'), []);
+        self::assertIsArray($session);
+        self::assertSame(3, (int) $session['views']);
+        self::assertSame('/news', (string) $session['landing_path'], 'Входом остаётся первое событие пачки');
+        self::assertSame('/contact', (string) $session['last_path'], 'Выходом становится последнее событие пачки');
+
+        $day = seoStatsDayKey(nowUtc());
+        self::assertSame(SEO_SOURCE_DIRECT, (string) $session['source'], 'Источник сессии от первого события пачки, а не от последнего');
+        self::assertSame(3, (int) value('SELECT SUM(views) FROM ' . t('seo_stat_day') . ' WHERE day = ?', [$day]));
+        self::assertSame(1, (int) value('SELECT SUM(sessions) FROM ' . t('seo_stat_day') . ' WHERE day = ?', [$day]), 'Одна пачка — одна сессия в агрегате');
+        self::assertSame(3, (int) value('SELECT SUM(views) FROM ' . t('seo_stat_hour') . ' WHERE day = ?', [$day]));
+    }
+
     // ── Чтение ─────────────────────────────────────────────
 
     public function testСводкаЧитаетАгрегаты(): void
@@ -472,5 +516,95 @@ final class SeoStatsTest extends TestCase
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []));
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_session'), []));
         self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('seo_stat_day'), []), 'Счётчики за прошлые дни не исчезают вместе с сырьём');
+    }
+
+    public function testОчисткаНеТрогаетСвежиеСобытия(): void
+    {
+        $old = shiftMoscowDay(seoStatsDayKey(nowUtc()), -120);
+
+        insert('seo_visit', [
+            'id' => newId(),
+            'session_id' => newId(),
+            'visitor_id' => 'подпись-старого-посетителя',
+            'path' => '/old',
+            'source' => SEO_SOURCE_DIRECT,
+            'referrer_host' => null,
+            'utm_source' => null,
+            'utm_medium' => null,
+            'utm_campaign' => null,
+            'device' => 'desktop',
+            'day' => $old,
+            'hour' => 10,
+            'created_at' => utcStamp(nowUtc()),
+        ]);
+        insert('seo_session', [
+            'id' => newId(),
+            'visitor_id' => 'подпись-старого-посетителя',
+            'source' => SEO_SOURCE_DIRECT,
+            'landing_path' => '/old',
+            'last_path' => '/old',
+            'views' => 1,
+            'started_at' => utcStamp(nowUtc()),
+            'last_seen_at' => utcStamp(nowUtc()),
+            'day' => $old,
+        ]);
+
+        seoStatsStoreEvents([self::event(['p' => '/fresh'])], 'visitor-0001');
+
+        $preview = seoStatsPurgePreview(90);
+        self::assertSame(1, $preview['visits'], 'Срок хранения отсекает старое, а не свежее');
+        self::assertSame(1, $preview['sessions']);
+
+        seoStatsPurge(90);
+
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE day = ?', [$old]));
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE path = ?', ['/fresh']), 'Свежий визит переживает очистку');
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('seo_session'), []), 'Свежая сессия переживает очистку');
+    }
+
+    // ── Границы периода ────────────────────────────────────
+
+    public function testПериодСмотритНазадИПрошлоеОкноСоседствует(): void
+    {
+        seoStatsStoreEvents([self::event(['p' => '/today'])], 'visitor-0001');
+
+        foreach (SEO_STATS_PERIODS as $days) {
+            $period = seoStatsPeriod($days);
+
+            self::assertLessThanOrEqual($period['to'], $period['from'], 'Период начинается в прошлом, а не в будущем');
+            self::assertSame(shiftMoscowDay($period['to'], -($days - 1)), $period['from'], 'Начало периода — сегодня минус (дней − 1)');
+            self::assertSame(shiftMoscowDay($period['from'], -1), $period['previousTo'], 'Прошлое окно кончается накануне начала текущего');
+            self::assertSame(shiftMoscowDay($period['previousTo'], -($days - 1)), $period['previousFrom']);
+
+            self::assertSame(1, seoStatsSummary($period['from'], $period['to'])['views'], 'Сегодняшнее событие попадает в свой период');
+            self::assertSame(0, seoStatsSummary($period['previousFrom'], $period['previousTo'])['views'], 'В прошлое окно оно не протекает');
+        }
+    }
+
+    // ── Пакетная вставка ───────────────────────────────────
+
+    public function testДублиАдресаВПачкеНакапливаются(): void
+    {
+        $result = seoStatsStoreEvents([
+            self::event(['p' => '/news']),
+            self::event(['p' => '/news']),
+            self::event(['p' => '/about']),
+        ], 'visitor-0001');
+
+        self::assertSame(3, $result['accepted']);
+
+        $day = seoStatsDayKey(nowUtc());
+        $news = one('SELECT views, sessions FROM ' . t('seo_stat_day') . ' WHERE day = ? AND path = ?', [$day, '/news']);
+        self::assertIsArray($news);
+        self::assertSame(2, (int) $news['views'], 'Два просмотра одного пути в пачке складываются, а не затирают друг друга');
+        self::assertSame(1, (int) $news['sessions'], 'Сессия приписывается строке один раз');
+
+        $about = one('SELECT views, sessions FROM ' . t('seo_stat_day') . ' WHERE day = ? AND path = ?', [$day, '/about']);
+        self::assertIsArray($about);
+        self::assertSame(1, (int) $about['views']);
+        self::assertSame(0, (int) $about['sessions'], 'Второй путь той же сессии входом не считается');
+
+        self::assertSame(3, (int) value('SELECT SUM(views) FROM ' . t('seo_stat_hour') . ' WHERE day = ?', [$day]));
+        self::assertSame(1, (int) value('SELECT SUM(sessions) FROM ' . t('seo_stat_hour') . ' WHERE day = ?', [$day]));
     }
 }

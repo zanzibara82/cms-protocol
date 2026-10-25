@@ -15,6 +15,8 @@ require_once __DIR__ . '/admin-search.php';
 require_once __DIR__ . '/admin-conversions.php';
 require_once __DIR__ . '/admin-content.php';
 require_once __DIR__ . '/admin-funnels.php';
+require_once __DIR__ . '/admin-export.php';
+require_once __DIR__ . '/admin-api.php';
 
 // Экран метаданных: справочник адресов и форма. Адрес /{id} открывает правку выбранной
 // записи; POST на тот же адрес сохраняет её или удаляет.
@@ -68,6 +70,23 @@ addRoute('POST', '/seo/admin/conversions', 'seoConversionsAction', ['app' => 'se
 addRoute('GET', '/seo/admin/content', 'seoContentPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/seo/admin/funnels', 'seoFunnelsPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/seo/admin/funnels', 'seoFunnelsAction', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+
+// Экспорт отчётов (S6). Экран живёт в навигации, файл скачивается отдельным маршрутом:
+// неверные аргументы на скачивании возвращают человека на экран, а не отдают что попало.
+addRoute('GET', '/seo/admin/export', 'seoExportPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/seo/admin/export/download', 'seoExportDownloadPage', ['app' => 'seo', 'private' => true, 'permission' => 'login']);
+
+// API-ключи машинного чтения (S6). Управление закрыто редакторам: ключи дают доступ к
+// отчётам, поэтому распоряжаются ими на уровне «управлять», как источником поисковика.
+addRoute('GET', '/seo/admin/api', 'seoApiKeysPage', ['app' => 'seo', 'private' => true, 'permission' => 'manage']);
+addRoute('POST', '/seo/admin/api', 'seoApiKeysAction', ['app' => 'seo', 'private' => true, 'permission' => 'manage']);
+
+// Машинное API (S6). Ключ приходит в заголовке Authorization, сессия не участвует: машина не
+// входит в админку. Адреса метки sessionless — без cookie ядра, ответы не кэшируются и не
+// индексируются (заголовки ставит respond внутри обработчика). Разрез выбирается из белого
+// списка SEO_API_V1_REPORTS: адрес вне списка отвечает 404 в JSON, а не перенаправлением,
+// потому что у машины нет экрана входа, куда её можно было бы вернуть.
+addRoute('GET', '/seo/api/v1/{report}', 'seoApiV1Page', ['app' => 'seo', 'sessionless' => true]);
 
 // Приёмник событий счётчика. Адрес открыт мимо входа: его зовёт страница посетителя, у
 // которого нет ни входа, ни сессии. Подпись раздела проверяется внутри обработчика. Метка

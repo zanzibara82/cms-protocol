@@ -217,7 +217,11 @@ function seoGoalDelete(string $id): array
  * страницы не плодит повторов. Агрегат по дню увеличивается только когда строка реально
  * вставлена.
  *
+ * Список целей можно передать готовым (пакетный приём читает цели один раз на пачку, S6),
+ * тогда обращения к базе не выполняются повторно под каждым событием.
+ *
  * @param string $sessionId
+ * @param list<array<string, mixed>>|null $goals цели с включённым флагом
  */
 function seoStatsRecordConversion(
     string $sessionId,
@@ -226,9 +230,12 @@ function seoStatsRecordConversion(
     string $source,
     string $device,
     string $stamp,
-    string $day
+    string $day,
+    ?array $goals = null
 ): void {
-    $goals = all('SELECT id, name, type, pattern, match_type, source, device, enabled, created_at, updated_at FROM ' . t('seo_goal') . ' WHERE enabled = 1 LIMIT 1000');
+    if ($goals === null) {
+        $goals = seoStatsEnabledGoals();
+    }
 
     foreach ($goals as $goal) {
         if (!seoGoalMatch($goal, $path, $source, $device)) {

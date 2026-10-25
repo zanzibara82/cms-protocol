@@ -198,7 +198,7 @@ function seoCollectorTokenValid(string $token): bool
     }
 
     $today = seoCollectTokenFor(seoStatsDayKey(nowUtc()));
-    $yesterday = seoCollectTokenFor(shiftMoscowDay(seoStatsDayKey(nowUtc()), 1));
+    $yesterday = seoCollectTokenFor(shiftMoscowDay(seoStatsDayKey(nowUtc()), -1));
 
     return hash_equals($today, $given) || hash_equals($yesterday, $given);
 }
@@ -474,6 +474,12 @@ function seoStatsEvent(array $event): ?array
  * Приём пачки событий: каждое событие ложится в сырьё и пополняет агрегаты. Ответ — числа
  * принятого и отброшенного: они же показываются в журнале, когда счётчик вдруг пустеет.
  *
+ * Производительность (S6, спецификация §16): обращения к базе идут пакетами, а не по событию.
+ * Сессия визитора читается один раз на пачку — она заведомо одна (события приходят от одного
+ * посетителя, а сессия не меняется на середине), визиты вставляются одним многострочным
+ * INSERT, агрегаты дня и часа пополняются одним запросом с GROUP-парами разреза, расширения
+ * сессии вырождаются в один UPDATE, а список целей конверсий читается один раз на пачку.
+ *
  * @param list<array<string, mixed>> $events
  * @return array{accepted: int, rejected: int}
  */
@@ -495,84 +501,109 @@ function seoStatsStoreEvents(array $events, string $visitorId): array
     $local = moscowIso($moment);
     $day = substr($local, 0, 10);
     $hour = (int) substr($local, 11, 2);
-    $accepted = 0;
+
+    $prepared = [];
     $rejected = 0;
 
     foreach ($events as $event) {
-        $prepared = seoStatsEvent(is_array($event) ? $event : []);
+        $eventRow = seoStatsEvent(is_array($event) ? $event : []);
 
-        if ($prepared === null) {
+        if ($eventRow === null) {
             $rejected++;
+        } else {
+            $prepared[] = $eventRow;
+        }
+    }
 
-            continue;
+    if ($prepared === []) {
+        return ['accepted' => 0, 'rejected' => $rejected];
+    }
+
+    $session = seoStatsSessionForBatch($visitor, $prepared[0], $stamp, $day, $settings['timeout']);
+
+    $visits = [];
+    $dayRows = [];
+    $hourRows = [];
+    $opensSession = $session['isNew'];
+
+    foreach ($prepared as $preparedEvent) {
+        $path = $preparedEvent['path'];
+        $source = $session['source'];
+        // Сессия в пачке одна, поэтому «новая сессия» засчитывается ровно одному просмотру —
+        // первому. Плюс под каждым событием удвоил бы счётчик сессий на пачке из трёх страниц.
+        $sessions = $opensSession ? 1 : 0;
+        $opensSession = false;
+
+        $visits[] = [
+            $session['id'],
+            $visitor,
+            $path,
+            $source,
+            $preparedEvent['referrer'] !== '' ? $preparedEvent['referrer'] : null,
+            $preparedEvent['utmSource'] !== '' ? $preparedEvent['utmSource'] : null,
+            $preparedEvent['utmMedium'] !== '' ? $preparedEvent['utmMedium'] : null,
+            $preparedEvent['utmCampaign'] !== '' ? $preparedEvent['utmCampaign'] : null,
+            $preparedEvent['device'],
+            $day,
+            $hour,
+            $stamp,
+        ];
+
+        // Разрез копится счётчиком: два просмотра одного адреса в одной пачке дают две строки
+        // в сырье и два просмотра в агрегате, а не одну перезаписанную.
+        $dayKey = $path . '|' . $source;
+
+        if (!isset($dayRows[$dayKey])) {
+            $dayRows[$dayKey] = ['day' => $day, 'path' => $path, 'source' => $source, 'views' => 0, 'sessions' => 0];
         }
 
-        $session = seoStatsSession(
-            $visitor,
-            $prepared['path'],
-            $prepared['utmSource'],
-            $prepared['utmMedium'],
-            $prepared['utmCampaign'],
-            $prepared['referrer'],
-            $stamp,
-            $day,
-            $settings['timeout']
-        );
+        $dayRows[$dayKey]['views']++;
+        $dayRows[$dayKey]['sessions'] += $sessions;
 
-        insert('seo_visit', [
-            'id' => newId(),
-            'session_id' => $session['id'],
-            'visitor_id' => $visitor,
-            'path' => $prepared['path'],
-            'source' => $session['source'],
-            'referrer_host' => $prepared['referrer'] !== '' ? $prepared['referrer'] : null,
-            'utm_source' => $prepared['utmSource'] !== '' ? $prepared['utmSource'] : null,
-            'utm_medium' => $prepared['utmMedium'] !== '' ? $prepared['utmMedium'] : null,
-            'utm_campaign' => $prepared['utmCampaign'] !== '' ? $prepared['utmCampaign'] : null,
-            'device' => $prepared['device'],
-            'day' => $day,
-            'hour' => $hour,
-            'created_at' => $stamp,
-        ]);
+        if (!isset($hourRows[$source])) {
+            $hourRows[$source] = ['day' => $day, 'hour' => $hour, 'source' => $source, 'views' => 0, 'sessions' => 0];
+        }
 
-        run(
-            'UPDATE ' . t('seo_session') . ' SET views = views + 1, last_seen_at = ?, last_path = ? WHERE id = ?',
-            [$stamp, $prepared['path'], $session['id']]
-        );
+        $hourRows[$source]['views']++;
+        $hourRows[$source]['sessions'] += $sessions;
+    }
 
-        seoStatsAggregate($day, $hour, $prepared['path'], $session['source'], $session['isNew']);
+    seoStatsInsertVisits(array_map(
+        static fn (array $visit): array => [newId(), ...$visit],
+        $visits
+    ));
+    seoStatsExtendSession($session['id'], $stamp, (string) $prepared[count($prepared) - 1]['path'], count($prepared));
+    seoStatsAggregateUpsert('seo_stat_day', 'day, path, source', 'views, sessions', $dayRows);
+    seoStatsAggregateUpsert('seo_stat_hour', 'day, hour, source', 'views, sessions', $hourRows);
+
+    $goals = seoStatsEnabledGoals();
+
+    foreach ($prepared as $preparedEvent) {
         seoStatsRecordConversion(
             $session['id'],
             $visitor,
-            $prepared['path'],
+            $preparedEvent['path'],
             $session['source'],
-            $prepared['device'],
+            $preparedEvent['device'],
             $stamp,
-            $day
+            $day,
+            $goals
         );
-        $accepted++;
     }
 
-    return ['accepted' => $accepted, 'rejected' => $rejected];
+    return ['accepted' => count($prepared), 'rejected' => $rejected];
 }
 
 /**
- * Сессия посетителя: окно бездействия или новая сессия. Источник сессии не меняется на
- * середине: внутренний переход по своему сайту не делает посетителя «прямым».
+ * Сессия для пачки событий: окно бездействия или новая сессия. Сессия в пачке заведомо одна:
+ * события приходят от одного посетителя одним штампом, и внутренний переход по своему сайту
+ * не делает посетителя «прямым».
  *
+ * @param array{path: string, referrer: string, utmSource: string, utmMedium: string, utmCampaign: string, device: string} $first первое событие пачки
  * @return array{id: string, source: string, isNew: bool}
  */
-function seoStatsSession(
-    string $visitor,
-    string $path,
-    string $utmSource,
-    string $utmMedium,
-    string $utmCampaign,
-    string $referrer,
-    string $stamp,
-    string $day,
-    int $timeoutMinutes
-): array {
+function seoStatsSessionForBatch(string $visitor, array $first, string $stamp, string $day, int $timeoutMinutes): array
+{
     $row = one(
         'SELECT id, source, last_seen_at FROM ' . t('seo_session') . ' WHERE visitor_id = ? ORDER BY last_seen_at DESC LIMIT 1',
         [$visitor]
@@ -590,15 +621,15 @@ function seoStatsSession(
         }
     }
 
-    $source = seoSourceClassify($utmSource, $utmMedium, $utmCampaign, $referrer);
+    $source = seoSourceClassify($first['utmSource'], $first['utmMedium'], $first['utmCampaign'], $first['referrer']);
     $id = newId();
 
     insert('seo_session', [
         'id' => $id,
         'visitor_id' => $visitor,
         'source' => $source,
-        'landing_path' => $path,
-        'last_path' => $path,
+        'landing_path' => $first['path'],
+        'last_path' => $first['path'],
         // Счётчик просмотров сессии пополняет приём события: сама сессия просмотра не даёт,
         // иначе первая страница считалась бы дважды.
         'views' => 0,
@@ -611,24 +642,94 @@ function seoStatsSession(
 }
 
 /**
- * Агрегаты: день с разрезом по адресу и источнику, час — по источнику. Число сессий
- * прибавляется только у первой страницы сессии.
+ * Многострочная вставка визитов: одна строка VALUES на событие. Пачка ограничена пределом
+ * тела, поэтому число заполнителей в самом длинном составном запросе заведомо двузначное.
+ *
+ * @param list<list<string|int|null>> $visits колонки в порядке запроса
  */
-function seoStatsAggregate(string $day, int $hour, string $path, string $source, bool $isNewSession): void
+function seoStatsInsertVisits(array $visits): void
 {
-    $sessions = $isNewSession ? 1 : 0;
+    if ($visits === []) {
+        return;
+    }
+
+    $values = [];
+    $args = [];
+
+    foreach ($visits as $visit) {
+        $values[] = '(' . implode(', ', array_fill(0, count($visit), '?')) . ')';
+        $args = [...$args, ...$visit];
+    }
 
     run(
-        'INSERT INTO ' . t('seo_stat_day') . ' (day, path, source, views, sessions) VALUES (?, ?, ?, 1, ?)'
-        . ' ON DUPLICATE KEY UPDATE views = views + 1, sessions = sessions + VALUES(sessions)',
-        [$day, $path, $source, $sessions]
+        'INSERT INTO ' . t('seo_visit')
+        . ' (id, session_id, visitor_id, path, source, referrer_host, utm_source, utm_medium, utm_campaign, device, day, hour, created_at)'
+        . ' VALUES ' . implode(', ', $values),
+        $args
     );
+}
+
+/**
+ * Расширение сессии одним UPDATE на пачку: просмотров столько, сколько событий, а «выходом»
+ * становится адрес последнего события пачки — ровно то, что давал почешучный UPDATE.
+ */
+function seoStatsExtendSession(string $sessionId, string $stamp, string $lastPath, int $views): void
+{
+    run(
+        'UPDATE ' . t('seo_session') . ' SET views = views + ?, last_seen_at = ?, last_path = ? WHERE id = ?',
+        [$views, $stamp, $lastPath, $sessionId]
+    );
+}
+
+/**
+ * Пополнение агрегатов одним многострочным INSERT … ON DUPLICATE KEY UPDATE (S6). Разрезы
+ * дня и часа различаются колонками, а сам запрос читает их из аргументов; число уникальных
+ * пар разреза не больше числа событий пачки, поэтому составной список остаётся коротким.
+ *
+ * @param string $table имя без префикса (seo_stat_day, seo_stat_hour)
+ * @param string $columns перечень ключевых колонок
+ * @param string $countColumns перечень счётчиков
+ * @param array<string, array<string, string|int>> $rows ключ разреза => строка агрегата
+ */
+function seoStatsAggregateUpsert(string $table, string $columns, string $countColumns, array $rows): void
+{
+    if ($rows === []) {
+        return;
+    }
+
+    $first = (array) reset($rows);
+    $keys = array_keys($first);
+    $columnList = $columns . ', ' . $countColumns;
+
+    $values = [];
+    $args = [];
+
+    foreach ($rows as $row) {
+        $values[] = '(' . implode(', ', array_fill(0, count($keys), '?')) . ')';
+        foreach ($keys as $key) {
+            $args[] = $row[$key];
+        }
+    }
+
+    $updates = 'views = views + VALUES(views), sessions = sessions + VALUES(sessions)';
 
     run(
-        'INSERT INTO ' . t('seo_stat_hour') . ' (day, hour, source, views, sessions) VALUES (?, ?, ?, 1, ?)'
-        . ' ON DUPLICATE KEY UPDATE views = views + 1, sessions = sessions + VALUES(sessions)',
-        [$day, $hour, $source, $sessions]
+        'INSERT INTO ' . t($table) . ' (' . $columnList . ') VALUES ' . implode(', ', $values)
+        . ' ON DUPLICATE KEY UPDATE ' . $updates,
+        $args
     );
+}
+
+/**
+ * Цели, задействованные конверсиями: список читается один раз на пачку, а не под каждым
+ * событием. Поведение сверки неожиданным не соделается: та же проверка цели, что и раньше.
+ *
+ * @return list<array<string, mixed>>
+ */
+function seoStatsEnabledGoals(): array
+{
+    /** @var list<array<string, mixed>> */
+    return all('SELECT id, name, type, pattern, match_type, source, device, enabled, created_at, updated_at FROM ' . t('seo_goal') . ' WHERE enabled = 1 LIMIT 1000');
 }
 
 /**
@@ -657,16 +758,19 @@ function seoStatsDayKey(\DateTimeImmutable $moment): string
 
 /**
  * Период и предыдущий период такой же длины: «сейчас против тогда» — единственное сравнение,
- * которое что-то значит.
+ * которое что-то значит. Оба окна смотрят назад: «30 дней» заканчивается сегодня и начинается
+ * 29 дней назад, а прошлый период — следующий отрезок той же длины до него. Сдвиг вперёд дал бы
+ * окно, у которого начало позже конца: такой запрос не находит ничего, и панель молча
+ * показывала бы нули на живом счётчике.
  *
  * @return array{from: string, to: string, previousFrom: string, previousTo: string, days: int}
  */
 function seoStatsPeriod(int $days): array
 {
     $to = moscowDayKey(nowUtc());
-    $from = moscowDayKey(shiftDays(nowUtc(), $days - 1));
-    $previousTo = moscowDayKey(shiftDays(nowUtc(), $days));
-    $previousFrom = moscowDayKey(shiftDays(nowUtc(), 2 * $days - 1));
+    $from = moscowDayKey(shiftDays(nowUtc(), -($days - 1)));
+    $previousTo = moscowDayKey(shiftDays(nowUtc(), -$days));
+    $previousFrom = moscowDayKey(shiftDays(nowUtc(), -(2 * $days - 1)));
 
     return [
         'from' => $from,
@@ -897,13 +1001,14 @@ function seoStatsHourly(string $from, string $to): array
 
 /**
  * Что именно удалит очистка: столько событий и столько сессий старше срока хранения. Человек
- * должен видеть объём до нажатия, а не после.
+ * должен видеть объём до нажатия, а не после. Граница смотрит назад: «срок 90 дней» оставляет
+ * всё, что случилось позже 90 дней назад, и только старое удаляет.
  *
  * @return array{visits: int, sessions: int}
  */
 function seoStatsPurgePreview(int $retentionDays): array
 {
-    $limit = moscowDayKey(shiftDays(nowUtc(), $retentionDays));
+    $limit = moscowDayKey(shiftDays(nowUtc(), -$retentionDays));
 
     return [
         'visits' => (int) value('SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE day < ?', [$limit]),
@@ -925,7 +1030,7 @@ function seoStatsSourceLabel(string $source): string
  */
 function seoStatsPurge(int $days): int
 {
-    $limit = moscowDayKey(shiftDays(nowUtc(), $days));
+    $limit = moscowDayKey(shiftDays(nowUtc(), -$days));
     $visits = run('DELETE FROM ' . t('seo_visit') . ' WHERE day < ?', [$limit]);
     $sessions = run('DELETE FROM ' . t('seo_session') . ' WHERE day < ?', [$limit]);
 
