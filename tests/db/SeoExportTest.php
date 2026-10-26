@@ -144,6 +144,50 @@ final class SeoExportTest extends TestCase
         self::assertSame('/about', $social['rows'][0][0]);
     }
 
+    public function testОтчётИсточниковПринимаетИсточник(): void
+    {
+        seoStatsStoreEvents([self::event(['p' => '/news'])], 'visitor-0001');
+        seoStatsStoreEvents([self::event(['p' => '/about', 'r' => 'https://vk.com/'])], 'visitor-0002');
+
+        $all = seoExportReport('sources', SEO_STATS_DEFAULT_PERIOD, '');
+        $social = seoExportReport('sources', SEO_STATS_DEFAULT_PERIOD, SEO_SOURCE_SOCIAL);
+
+        self::assertIsArray($all);
+        self::assertIsArray($social);
+        self::assertCount(2, $all['rows']);
+        self::assertCount(1, $social['rows'], 'Фильтр по источнику урезает и сам отчёт источников');
+        self::assertSame('Соцсети', $social['rows'][0][0]);
+    }
+
+    public function testОтчётКампанийПринимаетИсточник(): void
+    {
+        seoStatsStoreEvents(
+            [self::event(['p' => '/news', 'u' => ['s' => 'vk', 'm' => 'social', 'c' => 'promo']])],
+            'visitor-0001'
+        );
+        seoStatsStoreEvents(
+            [self::event(['p' => '/news', 'u' => ['s' => 'yandex', 'm' => 'cpc', 'c' => 'search']])],
+            'visitor-0002'
+        );
+
+        $all = seoExportReport('campaigns', SEO_STATS_DEFAULT_PERIOD, '');
+        $social = seoExportReport('campaigns', SEO_STATS_DEFAULT_PERIOD, SEO_SOURCE_SOCIAL);
+
+        self::assertIsArray($all);
+        self::assertIsArray($social);
+        self::assertCount(2, $all['rows']);
+        self::assertCount(1, $social['rows'], 'Кампании режутся по классифицированному источнику визита');
+        self::assertSame('promo', $social['rows'][0][2]);
+    }
+
+    public function testЦелиНеПринимаютИсточник(): void
+    {
+        self::assertNull(
+            seoExportReport('goals', SEO_STATS_DEFAULT_PERIOD, SEO_SOURCE_SOCIAL),
+            'У конверсии нет источника: отказ, а не общий список под чужой подписью'
+        );
+    }
+
     public function testОтчётЦелейЧитаетКонверсии(): void
     {
         $created = seoGoalCreate(['name' => 'Заявка', 'pattern' => '/contact', 'type' => SEO_GOAL_TYPE_PAGE_VIEW, 'match_type' => SEO_GOAL_MATCH_PREFIX]);
@@ -184,6 +228,48 @@ final class SeoExportTest extends TestCase
         ]);
 
         self::assertStringContainsString('"/news?q=""кавычка"""', $csv, 'Кавычка внутри поля удваивается, иначе таблица распадается');
+    }
+
+    public function testCsvОбезвреживаетФормулыВЯчейках(): void
+    {
+        $dangerous = ['=1+1', '+1', '-1', '@SUM(1)', "\t=1+1", "\r=1+1"];
+
+        $csv = seoExportCsv([
+            'title' => 'Проверка',
+            'columns' => ['Значение'],
+            'rows' => array_map(static fn (string $value): array => [$value], $dangerous),
+        ]);
+
+        $lines = explode("\r\n", trim($csv, "\xEF\xBB\xBF\r\n"));
+        array_shift($lines);
+
+        self::assertCount(count($dangerous), $lines);
+
+        foreach ($lines as $index => $line) {
+            $fields = str_getcsv($line, ';', '"', '\\');
+
+            self::assertSame(
+                "'" . $dangerous[$index],
+                $fields[0] ?? '',
+                'Значение, начинающееся с формулы, уходит текстом: Excel иначе исполнит его'
+            );
+        }
+    }
+
+    public function testCsvНеОтдаётФормулуИзМеткиПосетителя(): void
+    {
+        seoStatsStoreEvents([
+            self::event(['p' => '/news', 'u' => ['s' => '=1+1', 'm' => 'social', 'c' => '=HYPERLINK("http://evil")']]),
+        ], 'visitor-0001');
+
+        $report = seoExportReport('campaigns', SEO_STATS_DEFAULT_PERIOD, '');
+        self::assertIsArray($report);
+
+        $lines = explode("\r\n", trim(seoExportCsv($report), "\xEF\xBB\xBF\r\n"));
+        $fields = str_getcsv($lines[1] ?? '', ';', '"', '\\');
+
+        self::assertSame("'=1+1", $fields[0] ?? '', 'Метка UTM приходит от посетителя и не может стать формулой в файле администратора');
+        self::assertSame("'=HYPERLINK(\"http://evil\")", $fields[2] ?? '');
     }
 
     public function testИмяФайлаНесётВидИДатуПоМоскве(): void

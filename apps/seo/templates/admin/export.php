@@ -37,6 +37,15 @@ foreach (SEO_STATS_PERIODS as $days) {
         . '>' . e((string) ($days === SEO_STATS_DEFAULT_PERIOD ? (string) $days . ' (по умолчанию)' : (string) $days)) . '</option>';
 }
 
+$sourceField = in_array($filter['kind'], SEO_EXPORT_SOURCE_KINDS, true)
+    ? '<label class="block" for="export_source">'
+        . '<span class="text-sm text-ink/60">Источник</span>'
+        . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_source" name="source">'
+        . '<option value=""' . ($filter['source'] === '' ? ' selected' : '') . '>Все источники</option>'
+        . $sourceOptions
+        . '</select></label>'
+    : '<p class="text-sm text-ink/60">Этот отчёт не делится по источнику.</p>';
+
 $filterForm = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6" method="get" action="' . e($filter['base']) . '">'
     . '<label class="block" for="export_kind">'
     . '<span class="text-sm text-ink/60">Отчёт</span>'
@@ -48,12 +57,7 @@ $filterForm = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p
     . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_days" name="days">'
     . $periodOptions
     . '</select></label>'
-    . '<label class="block" for="export_source">'
-    . '<span class="text-sm text-ink/60">Источник</span>'
-    . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_source" name="source">'
-    . '<option value=""' . ($filter['source'] === '' ? ' selected' : '') . '>Все источники</option>'
-    . $sourceOptions
-    . '</select></label>'
+    . $sourceField
     . '<div class="mt-1">'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-5 py-2 text-sm font-medium text-cream hover:bg-ink/90"'
     . ' type="submit">Обновить предпросмотр</button>'

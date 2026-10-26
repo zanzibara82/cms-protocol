@@ -128,12 +128,22 @@ final class SeoExportAdminTest extends TestCase
     public function testВыбранныеФильтрыПомечаются(): void
     {
         $this->login();
-        $page = Kernel::get(self::SCREEN_PATH . '?kind=goals&days=90&source=organic');
+        $page = Kernel::get(self::SCREEN_PATH . '?kind=campaigns&days=90&source=organic');
 
         self::assertSame(200, $page['status']);
-        self::assertStringContainsString('value="goals" selected', $page['body']);
+        self::assertStringContainsString('value="campaigns" selected', $page['body']);
         self::assertStringContainsString('value="90" selected', $page['body']);
         self::assertStringContainsString('value="organic" selected', $page['body']);
+    }
+
+    public function testОтчётБезИсточникаПрячетВыбор(): void
+    {
+        $this->login();
+        $page = Kernel::get(self::SCREEN_PATH . '?kind=goals&source=organic');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringNotContainsString('name="source"', $page['body'], 'У целей нет источника: выбор, который ничего не фильтрует, не показывается');
+        self::assertStringContainsString('не делится по источнику', $page['body']);
     }
 
     public function testНеизвестныйВидБерётПервыйПоСписку(): void
@@ -225,5 +235,14 @@ final class SeoExportAdminTest extends TestCase
             self::assertSame(302, $file['status'], 'Файл с чужим периодом или видом не отдаётся: ' . http_build_query($query));
             self::assertStringContainsString(self::SCREEN_PATH, $file['headers']['location']);
         }
+    }
+
+    public function testСкачиваниеЦелейСИсточникомВозвращаетНаЭкран(): void
+    {
+        $this->login();
+        $file = $this->download(['kind' => 'goals', 'days' => '30', 'source' => SEO_SOURCE_SOCIAL]);
+
+        self::assertSame(302, $file['status'], 'Общий список целей под подписью фильтра был бы ложью');
+        self::assertStringContainsString(self::SCREEN_PATH, $file['headers']['location']);
     }
 }

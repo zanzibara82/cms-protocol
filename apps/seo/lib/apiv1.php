@@ -25,6 +25,10 @@ const SEO_API_V1_REPORTS = [
     'goals' => 'Цели и конверсии',
 ];
 
+// Разрезы, принимающие фильтр по источнику. У конверсии источника нет: подпись «фильтр
+// применён» на общем списке целей была бы ложью, поэтому такой запрос отвергается.
+const SEO_API_V1_SOURCE_REPORTS = ['summary', 'pages', 'sources'];
+
 /**
  * Ответ машины в JSON: один набор заголовков на все коды — запрет индексирования и кэша
  * держится и на ошибке, иначе 401 бы кэшировался и вытеснял ответ с кодом.
@@ -111,6 +115,10 @@ function seoApiV1Page(array $params = []): never
         seoApiV1Respond(400, ['error' => 'Неизвестный источник']);
     }
 
+    if ($source !== '' && !in_array($report, SEO_API_V1_SOURCE_REPORTS, true)) {
+        seoApiV1Respond(400, ['error' => 'Этот отчёт не фильтруется по источнику']);
+    }
+
     $range = seoStatsPeriod($days);
     $from = $range['from'];
     $to = $range['to'];
@@ -118,8 +126,8 @@ function seoApiV1Page(array $params = []): never
     $payload = match ($report) {
         'summary' => seoStatsSummary($from, $to, $source),
         'pages' => seoStatsPages($from, $to, $source),
-        'sources' => seoStatsSources($from, $to),
-        default => array_map(
+        'sources' => seoStatsSources($from, $to, $source),
+        'goals' => array_map(
             static fn (array $row): array => [
                 'name' => (string) $row['name'],
                 'conversions' => (int) $row['conversions'],

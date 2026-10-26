@@ -212,6 +212,31 @@ final class SeoApiV1Test extends TestCase
         self::assertSame(200, $known['status'], 'Известный источник — законный разрез');
     }
 
+    public function testИсточникФильтруетСводкуИИсточники(): void
+    {
+        $this->seedVisit('/news', 'visitor-api-6');
+        $this->seedVisit('/about', 'visitor-api-7', 'https://vk.com/ok');
+
+        $summary = $this->json($this->askWithKey('/seo/api/v1/summary?source=' . SEO_SOURCE_SOCIAL));
+
+        self::assertSame(1, (int) $summary['items']['views'], 'Сводка по источнику считает только его');
+        self::assertSame(SEO_SOURCE_SOCIAL, $summary['source']);
+
+        $sources = $this->json($this->askWithKey('/seo/api/v1/sources?source=' . SEO_SOURCE_SOCIAL))['items'];
+
+        self::assertIsArray($sources);
+        self::assertCount(1, $sources, 'Ответ «Источники» не вправе нести каналы, которых фильтр не просил');
+        self::assertSame('Соцсети', (string) $sources[0]['label']);
+    }
+
+    public function testОтчётЦелейСИсточникомОтвергается(): void
+    {
+        $response = $this->askWithKey('/seo/api/v1/goals?source=' . SEO_SOURCE_SOCIAL);
+
+        self::assertSame(400, $response['status'], 'У конверсии нет источника: отказ, а не общий список под подписью фильтра');
+        self::assertStringContainsString('не фильтруется', $response['body']);
+    }
+
     // ── Отзыв ключа ────────────────────────────────────────
 
     public function testОтозванныйКлючБольшеНеОтвечает(): void

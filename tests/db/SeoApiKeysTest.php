@@ -127,6 +127,32 @@ final class SeoApiKeysTest extends TestCase
         self::assertSame(SEO_API_KEY_MAX, (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key'), []));
     }
 
+    public function testОтзывОсвобождаетМестоВПределе(): void
+    {
+        $created = [];
+
+        for ($i = 0; $i < SEO_API_KEY_MAX; $i++) {
+            $key = seoApiKeyCreate('Ключ ' . ($i + 1));
+            self::assertTrue($key['ok'], $key['error']);
+            $created[] = $key;
+        }
+
+        self::assertFalse(seoApiKeyCreate('Лишний ключ')['ok']);
+
+        $revoked = seoApiKeyRevoke($created[0]['id']);
+        self::assertTrue($revoked['ok'], $revoked['error']);
+
+        $again = seoApiKeyCreate('После отзыва');
+
+        self::assertTrue($again['ok'], 'Отозванный ключ не занимает место: сообщение предлагает отозвать один и завести новый');
+        self::assertSame(
+            SEO_API_KEY_MAX,
+            (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key') . ' WHERE revoked_at IS NULL', []),
+            'Действующих ключей ровно предел, история отзыва осталась отдельной строкой'
+        );
+        self::assertSame(SEO_API_KEY_MAX + 1, (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key'), []));
+    }
+
     // ── Аутентификация ─────────────────────────────────────
 
     public function testЗаголовокBearerПускаетИОтмечаетИспользование(): void

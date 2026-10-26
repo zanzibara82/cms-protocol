@@ -171,8 +171,11 @@ function seoApiKeyCreate(string $label): array
         return ['ok' => false, 'error' => $check['error'], 'key' => '', 'id' => ''];
     }
 
-    if ((int) value('SELECT COUNT(*) FROM ' . t('seo_api_key'), []) >= SEO_API_KEY_MAX) {
-        return ['ok' => false, 'error' => 'Ключей уже ' . SEO_API_KEY_MAX . ' — отзовите один, прежде чем заводить новый.', 'key' => '', 'id' => ''];
+    // Отозванная строка остаётся историей экрана, но места в пределе не занимает: иначе
+    // «отзовите один» было бы тупиком — после двадцатого когда-либо созданного ключа
+    // создание отвергалось бы навсегда.
+    if ((int) value('SELECT COUNT(*) FROM ' . t('seo_api_key') . ' WHERE revoked_at IS NULL', []) >= SEO_API_KEY_MAX) {
+        return ['ok' => false, 'error' => 'Действующих ключей уже ' . SEO_API_KEY_MAX . ' — отзовите один, прежде чем заводить новый.', 'key' => '', 'id' => ''];
     }
 
     $key = seoApiKeyGenerate();

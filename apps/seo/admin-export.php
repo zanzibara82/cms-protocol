@@ -39,6 +39,12 @@ function seoExportFilters(): array
         $source = '';
     }
 
+    // У отчёта, который не делится по источнику, выбор снимается: подпись «источник»
+    // на общем списке была бы ложью, а не подсказкой.
+    if (!in_array($kind, SEO_EXPORT_SOURCE_KINDS, true)) {
+        $source = '';
+    }
+
     return ['kind' => $kind, 'days' => $days, 'source' => $source];
 }
 

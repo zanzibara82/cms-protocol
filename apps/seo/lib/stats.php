@@ -854,23 +854,27 @@ function seoStatsDaily(string $from, string $to, string $source = ''): array
 }
 
 /**
- * Источники за период: просмотры и сессии из агрегатов, посетители — из сырья.
+ * Источники за период: просмотры и сессии из агрегатов, посетители — из сырья. Фильтр по
+ * источнику оставляет одну строку разреза — так экран показывает выбранный канал, а не весь
+ * список с подписью «выбран».
  *
  * @return list<array{source: string, label: string, views: int, sessions: int, visitors: int}>
  */
-function seoStatsSources(string $from, string $to): array
+function seoStatsSources(string $from, string $to, string $source = ''): array
 {
+    $args = [$from, $to, $source, $source];
+
     $rows = all(
         'SELECT source, SUM(views) AS views, SUM(sessions) AS sessions FROM ' . t('seo_stat_day')
-        . ' WHERE day >= ? AND day <= ? GROUP BY source ORDER BY views DESC',
-        [$from, $to]
+        . ' WHERE day >= ? AND day <= ? AND (? = \'\' OR source = ?) GROUP BY source ORDER BY views DESC',
+        $args
     );
 
     $visitors = [];
     foreach (all(
         'SELECT source, COUNT(DISTINCT visitor_id) AS visitors FROM ' . t('seo_visit')
-        . ' WHERE day >= ? AND day <= ? GROUP BY source',
-        [$from, $to]
+        . ' WHERE day >= ? AND day <= ? AND (? = \'\' OR source = ?) GROUP BY source',
+        $args
     ) as $row) {
         $visitors[(string) $row['source']] = (int) $row['visitors'];
     }
@@ -940,16 +944,19 @@ function seoStatsPages(string $from, string $to, string $source = ''): array
 
 /**
  * Кампании по меткам UTM: то, что разметил рекламный кабинет, а не то, что мы угадали.
+ * Фильтр по источнику — по классифицированному каналу визита, а не по метке `utm_source`:
+ * «выбранный источник» и «метка в адресе» — разные разрезы, и смешивать их нельзя.
  *
  * @return list<array{source: string, medium: string, campaign: string, views: int}>
  */
-function seoStatsCampaigns(string $from, string $to): array
+function seoStatsCampaigns(string $from, string $to, string $source = ''): array
 {
     $rows = all(
         'SELECT utm_source, utm_medium, utm_campaign, COUNT(*) AS views FROM ' . t('seo_visit')
         . ' WHERE day >= ? AND day <= ? AND utm_campaign IS NOT NULL AND utm_campaign <> \'\''
+        . ' AND (? = \'\' OR source = ?)'
         . ' GROUP BY utm_source, utm_medium, utm_campaign ORDER BY views DESC LIMIT 50',
-        [$from, $to]
+        [$from, $to, $source, $source]
     );
 
     $out = [];

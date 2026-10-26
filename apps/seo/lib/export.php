@@ -23,6 +23,11 @@ const SEO_EXPORT_KINDS = [
     'goals' => 'Цели и конверсии',
 ];
 
+// Виды отчёта, которые принимают фильтр по источнику. У конверсии источника нет, поэтому
+// «цели» этот фильтр не принимают: экран для них прячет выбор, а скачивание с источником
+// возвращает к экрану, вместо того чтобы молча отдать общий список под чужой подписью.
+const SEO_EXPORT_SOURCE_KINDS = ['daily', 'pages', 'sources', 'campaigns'];
+
 /**
  * Отчёт для скачивания: те же данные, что и на экранах, но одной таблицей. Период и источник
  * проверяются тем же правилом, что и фильтры панели: значение вне границ — отказ, а не
@@ -42,6 +47,10 @@ function seoExportReport(string $kind, int $days, string $source): ?array
     }
 
     if ($source !== '' && !isset(SEO_SOURCES[$source])) {
+        return null;
+    }
+
+    if ($source !== '' && !in_array($kind, SEO_EXPORT_SOURCE_KINDS, true)) {
         return null;
     }
 
@@ -71,7 +80,7 @@ function seoExportReport(string $kind, int $days, string $source): ?array
             'columns' => ['Источник', 'Просмотры', 'Сессии', 'Посетители'],
             'rows' => array_map(
                 static fn (array $row): array => [(string) $row['label'], (string) $row['views'], (string) $row['sessions'], (string) $row['visitors']],
-                seoStatsSources($from, $to)
+                seoStatsSources($from, $to, $source)
             ),
         ],
         'campaigns' => [
@@ -79,10 +88,10 @@ function seoExportReport(string $kind, int $days, string $source): ?array
             'columns' => ['Метка источника', 'Метка типа', 'Метка кампании', 'Просмотры'],
             'rows' => array_map(
                 static fn (array $row): array => [(string) $row['source'], (string) $row['medium'], (string) $row['campaign'], (string) $row['views']],
-                seoStatsCampaigns($from, $to)
+                seoStatsCampaigns($from, $to, $source)
             ),
         ],
-        default => [
+        'goals' => [
             'title' => $title,
             'columns' => ['Цель', 'Конверсии'],
             'rows' => array_map(
@@ -90,6 +99,7 @@ function seoExportReport(string $kind, int $days, string $source): ?array
                 seoGoalConversions($from, $to)
             ),
         ],
+        default => null,
     };
 }
 
@@ -97,11 +107,21 @@ function seoExportReport(string $kind, int $days, string $source): ?array
  * CSV: скобки кавычек двойным повтором, концы строк CRLF, BOM в голове — «двойной щелчок
  * по файлу» открывает его без визарда. Заголовки колонок — первая строка.
  *
+ * Ячейка, начинающаяся с `=`, `+`, `-`, `@`, табуляции или возврата каретки, получает
+ * ведущий апостроф: Excel и LibreOffice исполняют такую ячейку как формулу, а метки UTM
+ * приходят от посетителя. Данные в базе не меняются — защита стоит только на выводе.
+ *
  * @param array{title: string, columns: list<string>, rows: list<list<string>>} $report
  */
 function seoExportCsv(array $report): string
 {
-    $field = static fn (string $value): string => '"' . str_replace('"', '""', $value) . '"';
+    $field = static function (string $value): string {
+        if (preg_match('/^[=+\-@\t\r]/', $value) === 1) {
+            $value = "'" . $value;
+        }
+
+        return '"' . str_replace('"', '""', $value) . '"';
+    };
 
     $lines = [implode(';', array_map($field, $report['columns']))];
 
