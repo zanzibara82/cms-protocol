@@ -42,6 +42,33 @@ function seoApiV1Respond(int $status, array $payload): never
 }
 
 /**
+ * Заголовок Authorization из доступных источников. nginx с PHP-FPM отдаёт его в
+ * REDIRECT_HTTP_AUTHORIZATION, а CGI — иногда только через getallheaders(). Один общий
+ * вход, чтобы API читал ключ на любом из этих хостингов, а не только там, где переменная
+ * положилась под ожидаемым именем.
+ */
+function seoApiV1AuthHeader(): string
+{
+    foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION'] as $name) {
+        $value = $_SERVER[$name] ?? '';
+
+        if (is_string($value) && trim($value) !== '') {
+            return $value;
+        }
+    }
+
+    if (function_exists('getallheaders')) {
+        foreach (getallheaders() as $name => $value) {
+            if (strcasecmp((string) $name, 'Authorization') === 0 && is_string($value)) {
+                return $value;
+            }
+        }
+    }
+
+    return '';
+}
+
+/**
  * Ключ запроса: шапка Authorization с Bearer и обратная сверка по хешу. Отзываемый ключ не
  * отвечает и при известном секрете: запись уже помечена отозванной.
  *
@@ -49,7 +76,7 @@ function seoApiV1Respond(int $status, array $payload): never
  */
 function seoApiV1Auth(): ?array
 {
-    return seoApiKeyAuthenticate($_SERVER['HTTP_AUTHORIZATION'] ?? '');
+    return seoApiKeyAuthenticate(seoApiV1AuthHeader());
 }
 
 /**

@@ -87,6 +87,10 @@ final class SeoExportTest extends TestCase
             self::assertIsArray($report, 'Вид отчёта ' . $kind . ' не собрался');
             self::assertNotSame([], $report['columns'], 'Отчёт ' . $kind . ' без колонок — пустая таблица в Excel');
             self::assertSame(SEO_EXPORT_KINDS[$kind], $report['title']);
+
+            foreach ($report['numeric'] as $index) {
+                self::assertArrayHasKey($index, $report['columns'], 'Числовой номер колонки отчёта ' . $kind . ' обязан указывать на существующую колонку');
+            }
         }
     }
 
@@ -311,6 +315,7 @@ final class SeoExportTest extends TestCase
             'title' => 'Просмотры по дням',
             'columns' => ['День', 'Просмотры'],
             'rows' => [['2026-10-24', '7']],
+            'numeric' => [1],
         ]);
 
         $files = self::unzipStored($xlsx);
@@ -351,6 +356,37 @@ final class SeoExportTest extends TestCase
         self::assertStringContainsString('&amp;', $sheet, 'Амперсанд без экранирования ломает XML книги');
         self::assertStringContainsString('&lt;', $sheet);
         self::assertStringNotContainsString('<тег>', $sheet);
+    }
+
+    public function testXlsxНеПишетТекстЧислом(): void
+    {
+        $xlsx = seoExportXlsx([
+            'title' => 'Проверка',
+            'columns' => ['Метка', 'Просмотры'],
+            'rows' => [['00123', '7']],
+            'numeric' => [1],
+        ]);
+
+        $sheet = self::unzipStored($xlsx)['xl/worksheets/sheet1.xml'] ?? '';
+
+        self::assertStringContainsString('<t>00123</t>', $sheet, 'Текстовая метка остаётся текстом и не теряет ведущие нули');
+        self::assertStringNotContainsString('<v>123</v>', $sheet);
+        self::assertStringContainsString('<v>7</v>', $sheet, 'Счётчик по-прежнему число: иначе в Excel не сложить сумму');
+    }
+
+    public function testXlsxВычищаетНедопустимыеСимволы(): void
+    {
+        $xlsx = seoExportXlsx([
+            'title' => "Проверка\x01",
+            'columns' => ['Адрес'],
+            'rows' => [["/news\x01\x0B"]],
+            'numeric' => [],
+        ]);
+
+        $sheet = self::unzipStored($xlsx)['xl/worksheets/sheet1.xml'] ?? '';
+
+        self::assertStringNotContainsString("\x01", $sheet, 'Управляющий символ не попадает в XML книги');
+        self::assertNotFalse(simplexml_load_string($sheet), 'Книга остаётся разбираемым XML');
     }
 
     /**

@@ -11,6 +11,24 @@ declare(strict_types=1);
 // обратно на экран: файл с чужим периодом — это не «как получится», а «мы отказались».
 
 /**
+ * Период из адреса: только целое число из разрешённого списка. Приведение `(int)` пропускало
+ * «30abc» как 30 — чужая строка молча становилась отчётом за 30 дней. Ноль здесь значит
+ * «значение не наше»: экран берёт запасной период, скачивание отказывает.
+ */
+function seoExportDays(mixed $raw): int
+{
+    $raw = is_string($raw) ? $raw : '';
+
+    if (preg_match('/^\d+$/', $raw) !== 1) {
+        return 0;
+    }
+
+    $days = (int) $raw;
+
+    return in_array($days, SEO_STATS_PERIODS, true) ? $days : 0;
+}
+
+/**
  * Фильтры экрана экспорта: вид отчёта, период, источник. Неизвестный вид отчёта — экран
  * показывает первый по списку, потому что экран не имеет права свалиться: человеку нужен
  * выбор, а не стена отказа.
@@ -25,10 +43,9 @@ function seoExportFilters(): array
         $kind = (string) array_key_first(SEO_EXPORT_KINDS);
     }
 
-    $rawDays = queryString('days', '');
-    $days = is_string($rawDays) ? (int) $rawDays : 0;
+    $days = seoExportDays(queryString('days', ''));
 
-    if (!in_array($days, SEO_STATS_PERIODS, true)) {
+    if ($days === 0) {
         $days = SEO_STATS_DEFAULT_PERIOD;
     }
 
@@ -102,8 +119,7 @@ function seoExportPage(array $params = []): void
 function seoExportDownloadPage(array $params = []): never
 {
     $kind = (string) queryString('kind', '');
-    $rawDays = queryString('days', '');
-    $days = is_string($rawDays) ? (int) $rawDays : 0;
+    $days = seoExportDays(queryString('days', ''));
     $source = trim((string) queryString('source', ''));
     $format = (string) queryString('format', 'csv') === 'xlsx' ? 'xlsx' : 'csv';
 

@@ -158,10 +158,17 @@ final class SeoExportAdminTest extends TestCase
     public function testЧужойПериодБерётсяЗапасным(): void
     {
         $this->login();
-        $page = Kernel::get(self::SCREEN_PATH . '?days=5');
 
-        self::assertSame(200, $page['status']);
-        self::assertStringContainsString('value="' . SEO_STATS_DEFAULT_PERIOD . '" selected', $page['body']);
+        foreach (['5', '30abc', '30.5'] as $days) {
+            $page = Kernel::get(self::SCREEN_PATH . '?days=' . rawurlencode($days));
+
+            self::assertSame(200, $page['status']);
+            self::assertStringContainsString(
+                'value="' . SEO_STATS_DEFAULT_PERIOD . '" selected',
+                $page['body'],
+                'Период «' . $days . '» — не число дней: экран берёт запасной'
+            );
+        }
     }
 
     // ── Скачивание ─────────────────────────────────────────
@@ -207,9 +214,16 @@ final class SeoExportAdminTest extends TestCase
         seoStatsStoreEvents([['p' => '/news', 'r' => '', 'u' => [], 'd' => 'desktop']], 'visitor-today');
 
         $this->login();
-        $file = $this->download(['kind' => 'daily', 'days' => '7']);
 
-        self::assertStringContainsString(moscowDayKey(nowUtc()), $file['body'], 'Период отчёта смотрит назад и включает сегодня');
+        $daily = $this->download(['kind' => 'daily', 'days' => '7']);
+        self::assertStringContainsString(
+            '"' . moscowDayKey(nowUtc()) . '";"1";"1"',
+            $daily['body'],
+            'Строка сегодняшнего дня несёт само событие, а не пустой ноль'
+        );
+
+        $pages = $this->download(['kind' => 'pages', 'days' => '7']);
+        self::assertStringContainsString('"/news"', $pages['body'], 'Адрес события доехал до файла');
     }
 
     public function testСкачиваниеЗапрещаетИндексированиеИКэш(): void
@@ -229,7 +243,7 @@ final class SeoExportAdminTest extends TestCase
     {
         $this->login();
 
-        foreach ([['kind' => 'tajnyj', 'days' => '30'], ['kind' => 'pages', 'days' => '5'], ['kind' => 'pages', 'days' => 'abc']] as $query) {
+        foreach ([['kind' => 'tajnyj', 'days' => '30'], ['kind' => 'pages', 'days' => '5'], ['kind' => 'pages', 'days' => 'abc'], ['kind' => 'pages', 'days' => '30abc'], ['kind' => 'pages', 'days' => '30.5']] as $query) {
             $file = $this->download($query);
 
             self::assertSame(302, $file['status'], 'Файл с чужим периодом или видом не отдаётся: ' . http_build_query($query));

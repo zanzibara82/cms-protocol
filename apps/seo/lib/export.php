@@ -36,7 +36,7 @@ const SEO_EXPORT_SOURCE_KINDS = ['daily', 'pages', 'sources', 'campaigns'];
  * @param string $kind ключ из SEO_EXPORT_KINDS
  * @param int $days период из SEO_STATS_PERIODS
  * @param string $source ключ из SEO_SOURCES или пустая строка
- * @return array{title: string, columns: list<string>, rows: list<list<string>>}|null
+ * @return array{title: string, columns: list<string>, rows: list<list<string>>, numeric: list<int>}|null
  */
 function seoExportReport(string $kind, int $days, string $source): ?array
 {
@@ -62,6 +62,7 @@ function seoExportReport(string $kind, int $days, string $source): ?array
         'daily' => [
             'title' => $title,
             'columns' => ['День', 'Просмотры', 'Сессии'],
+            'numeric' => [1, 2],
             'rows' => array_map(
                 static fn (array $row): array => [(string) $row['day'], (string) $row['views'], (string) $row['sessions']],
                 seoStatsDaily($from, $to, $source)
@@ -70,6 +71,7 @@ function seoExportReport(string $kind, int $days, string $source): ?array
         'pages' => [
             'title' => $title,
             'columns' => ['Адрес', 'Просмотры', 'Входы', 'Выходы'],
+            'numeric' => [1, 2, 3],
             'rows' => array_map(
                 static fn (array $row): array => [(string) $row['path'], (string) $row['views'], (string) $row['entrances'], (string) $row['exits']],
                 seoStatsPages($from, $to, $source)
@@ -78,6 +80,7 @@ function seoExportReport(string $kind, int $days, string $source): ?array
         'sources' => [
             'title' => $title,
             'columns' => ['Источник', 'Просмотры', 'Сессии', 'Посетители'],
+            'numeric' => [1, 2, 3],
             'rows' => array_map(
                 static fn (array $row): array => [(string) $row['label'], (string) $row['views'], (string) $row['sessions'], (string) $row['visitors']],
                 seoStatsSources($from, $to, $source)
@@ -86,6 +89,7 @@ function seoExportReport(string $kind, int $days, string $source): ?array
         'campaigns' => [
             'title' => $title,
             'columns' => ['Метка источника', 'Метка типа', 'Метка кампании', 'Просмотры'],
+            'numeric' => [3],
             'rows' => array_map(
                 static fn (array $row): array => [(string) $row['source'], (string) $row['medium'], (string) $row['campaign'], (string) $row['views']],
                 seoStatsCampaigns($from, $to, $source)
@@ -94,6 +98,7 @@ function seoExportReport(string $kind, int $days, string $source): ?array
         'goals' => [
             'title' => $title,
             'columns' => ['Цель', 'Конверсии'],
+            'numeric' => [1],
             'rows' => array_map(
                 static fn (array $row): array => [(string) $row['name'], (string) $row['conversions']],
                 seoGoalConversions($from, $to)
@@ -134,16 +139,30 @@ function seoExportCsv(array $report): string
 
 /**
  * XLSX: книга из одного листа. Ячейки — два вида: текст (inline-строка, совместная строка
- * не нужна) и число (целые счётчики). Имя листа подписано отчётом, потому что человек
- * выбирает книгу из почтового вложения и обязан видеть, что в ней.
+ * не нужна) и число (целые счётчики). Числовыми считаются только колонки, перечисленные в
+ * `numeric`: текстовая метка «00123» иначе потеряла бы ведущие нули, а длинный идентификатор —
+ * точность. Имя листа подписано отчётом, потому что человек выбирает книгу из почтового
+ * вложения и обязан видеть, что в ней.
  *
- * @param array{title: string, columns: list<string>, rows: list<list<string>>} $report
+ * @param array{title: string, columns: list<string>, rows: list<list<string>>, numeric?: list<int>} $report
  */
 function seoExportXlsx(array $report): string
 {
-    $xml = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    $xml = static function (string $value): string {
+        // XML 1.0 не принимает управляющие символы (кроме табуляции, LF и CR): метка UTM или
+        // имя цели с таким знаком сделали бы книгу нечитаемой. Чистим только вывод.
+        $clean = mb_convert_encoding($value, 'UTF-8', 'UTF-8');
+        $clean = (string) preg_replace(
+            '/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/u',
+            '',
+            $clean
+        );
+
+        return htmlspecialchars($clean, ENT_QUOTES | ENT_XML1, 'UTF-8');
+    };
 
     $name = $xml(mb_substr($report['title'], 0, 31));
+    $numeric = $report['numeric'] ?? [];
 
     $rowsXml = '<row>';
     foreach ($report['columns'] as $column) {
@@ -153,8 +172,8 @@ function seoExportXlsx(array $report): string
 
     foreach ($report['rows'] as $row) {
         $rowsXml .= '<row>';
-        foreach ($row as $value) {
-            $rowsXml .= preg_match('/^\d+$/', $value) === 1
+        foreach ($row as $index => $value) {
+            $rowsXml .= in_array($index, $numeric, true)
                 ? '<c><v>' . $xml($value) . '</v></c>'
                 : '<c t="inlineStr"><is><t>' . $xml($value) . '</t></is></c>';
         }

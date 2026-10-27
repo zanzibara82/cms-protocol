@@ -126,11 +126,34 @@ final class SeoApiV1Test extends TestCase
     {
         $foreign = seoApiKeyGenerate();
 
-        foreach (['Authorization' => 'Basic ' . $this->key['key'], 'Bearer ' . $foreign, 'bearer-token'] as $header) {
+        foreach ([
+            'Authorization' => 'Basic ' . $this->key['key'],
+            'Bearer ' . $foreign,
+            'bearer-token',
+            'Bearer' . $this->key['key'],
+        ] as $header) {
             self::assertSame(401, $this->ask('/seo/api/v1/summary', ['Authorization' => $header])['status'], 'Заголовок «' . $header . '» — не действующий ключ');
         }
 
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key') . ' WHERE last_used_at IS NOT NULL', []), 'Отказ не помечает ключ использованным');
+    }
+
+    public function testЗаголовокЧитаетсяИзЗапасногоИсточника(): void
+    {
+        $saved = $_SERVER;
+
+        try {
+            unset($_SERVER['HTTP_AUTHORIZATION']);
+            $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = 'Bearer ' . $this->key['key'];
+
+            self::assertSame(
+                'Bearer ' . $this->key['key'],
+                seoApiV1AuthHeader(),
+                'nginx + PHP-FPM отдаёт заголовок в REDIRECT_HTTP_AUTHORIZATION, и API должен его видеть'
+            );
+        } finally {
+            $_SERVER = $saved;
+        }
     }
 
     public function testСДействующимКлючомОтдаётСводку(): void

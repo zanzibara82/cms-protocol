@@ -87,6 +87,19 @@ final class SeoApiKeysAdminTest extends TestCase
         return $matches[1];
     }
 
+    /**
+     * Создание ключа целиком: POST уходит редиректом, секрет печатает следующий GET.
+     */
+    private function createKey(string $label): string
+    {
+        $response = $this->press(['op' => 'key_create', 'label' => $label]);
+
+        self::assertSame(302, $response['status'], 'Создание уходит на GET-экран: обновление не повторит POST');
+        self::assertStringContainsString('notice=api_key_created', $response['headers']['location']);
+
+        return $this->secretFrom(Kernel::get(self::PATH)['body']);
+    }
+
     // ── Право доступа ──────────────────────────────────────
 
     public function testАнонимУходитНаВход(): void
@@ -128,11 +141,13 @@ final class SeoApiKeysAdminTest extends TestCase
         $this->login(self::OWNER_EMAIL);
 
         $created = $this->press(['op' => 'key_create', 'label' => 'Кабинет отчётов']);
+        self::assertSame(302, $created['status'], 'После создания — PRG: обновление не повторяет POST');
 
-        self::assertSame(200, $created['status'], 'Секрет печатается на ответе формы, а не после редиректа');
-        self::assertStringContainsString('Ключ создан', $created['body']);
+        $page = Kernel::get(self::PATH);
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Ключ создан', $page['body']);
 
-        $secret = $this->secretFrom($created['body']);
+        $secret = $this->secretFrom($page['body']);
 
         self::assertSame(1, (int) value(
             'SELECT COUNT(*) FROM ' . t('seo_api_key') . ' WHERE key_hash = ?',
@@ -142,14 +157,30 @@ final class SeoApiKeysAdminTest extends TestCase
             'SELECT COUNT(*) FROM ' . t('seo_api_key') . ' WHERE key_hash = ? OR key_prefix = ?',
             [$secret, $secret]
         ), 'Полного ключа в базе нет ни в одной колонке');
-        self::assertStringContainsString($secret, $created['body']);
+        self::assertStringContainsString($secret, $page['body']);
+    }
+
+    public function testОбновлениеЭкранаНеСоздаётВторойКлюч(): void
+    {
+        $this->login(self::OWNER_EMAIL);
+
+        $this->press(['op' => 'key_create', 'label' => 'Кабинет отчётов']);
+
+        $first = Kernel::get(self::PATH);
+        self::assertStringContainsString('Ключ создан', $first['body']);
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key'), []));
+
+        $second = Kernel::get(self::PATH);
+
+        self::assertSame(0, preg_match('/(seoa_[0-9a-f]{40})/', $second['body']), 'Обновление не возвращает секрет: он показывается один раз');
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key'), []), 'Обновление не создаёт второй ключ');
     }
 
     public function testСписокПоказываетТолькоПрефикс(): void
     {
         $this->login(self::OWNER_EMAIL);
 
-        $secret = $this->secretFrom($this->press(['op' => 'key_create', 'label' => 'Кабинет отчётов'])['body']);
+        $secret = $this->createKey('Кабинет отчётов');
         $page = Kernel::get(self::PATH);
 
         self::assertSame(200, $page['status']);
@@ -167,7 +198,7 @@ final class SeoApiKeysAdminTest extends TestCase
         $response = $this->press(['op' => 'key_create', 'label' => '   ']);
 
         self::assertSame(302, $response['status']);
-        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
+        self::assertStringContainsString(self::PATH, $response['headers']['location']);
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key'), []));
 
         $page = Kernel::get(self::PATH);
@@ -187,18 +218,38 @@ final class SeoApiKeysAdminTest extends TestCase
         $response = $this->press(['op' => 'key_create', 'label' => 'Сверх предела']);
 
         self::assertSame(302, $response['status']);
+        self::assertStringContainsString(self::PATH, $response['headers']['location']);
         self::assertSame(SEO_API_KEY_MAX, (int) value('SELECT COUNT(*) FROM ' . t('seo_api_key'), []), 'Сверх предела ключ не заводится');
-        self::assertStringContainsString('notice=migration-failed', $response['headers']['location']);
 
         $page = Kernel::get(self::PATH);
         self::assertStringContainsString('отзовите один', $page['body'], 'Отказ называет выход: отозвать один');
+    }
+
+    public function testНеизвестноеДействиеНеОтзываетКлюч(): void
+    {
+        $created = seoApiKeyCreate('Живой ключ');
+        self::assertTrue($created['ok'], $created['error']);
+
+        $this->login(self::OWNER_EMAIL);
+
+        $response = $this->press(['op' => 'key_чужое', 'id' => $created['id']]);
+
+        self::assertSame(302, $response['status']);
+        self::assertStringContainsString(self::PATH, $response['headers']['location']);
+        self::assertNull(
+            value('SELECT revoked_at FROM ' . t('seo_api_key') . ' WHERE id = ?', [$created['id']]),
+            'Опечатка в op не должна отзывать ключ'
+        );
+
+        $page = Kernel::get(self::PATH);
+        self::assertStringContainsString('Неизвестное действие', $page['body'], 'Причина отказа видна человеку');
     }
 
     public function testОтзывПишетУведомлениеИГаситКнопку(): void
     {
         $this->login(self::OWNER_EMAIL);
 
-        $secret = $this->secretFrom($this->press(['op' => 'key_create', 'label' => 'Кабинет отчётов'])['body']);
+        $secret = $this->createKey('Кабинет отчётов');
         $id = (string) value('SELECT id FROM ' . t('seo_api_key') . ' WHERE key_hash = ?', [hash('sha256', $secret)]);
 
         $response = $this->press(['op' => 'key_revoke', 'id' => $id]);

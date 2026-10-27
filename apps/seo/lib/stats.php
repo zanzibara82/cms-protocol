@@ -491,7 +491,7 @@ function seoStatsStoreEvents(array $events, string $visitorId): array
         return ['accepted' => 0, 'rejected' => count($events)];
     }
 
-    if (!seoStatsWithinRate($visitor)) {
+    if (!seoStatsWithinRate($visitor, count($events))) {
         return ['accepted' => 0, 'rejected' => count($events)];
     }
 
@@ -519,79 +519,84 @@ function seoStatsStoreEvents(array $events, string $visitorId): array
         return ['accepted' => 0, 'rejected' => $rejected];
     }
 
-    $session = seoStatsSessionForBatch($visitor, $prepared[0], $stamp, $day, $settings['timeout']);
+    // Пачка пишется одной транзакцией: без неё сбой на агрегате часа оставлял визиты и
+    // сессию при живых счётчиках — сырьё и агрегаты расходились, а «половина пачки» не
+    // откатывалась. Чтение сессии тоже внутри: она либо есть вместе с визитами, либо нет.
+    return tx(static function () use ($prepared, $rejected, $visitor, $stamp, $day, $hour, $settings): array {
+        $session = seoStatsSessionForBatch($visitor, $prepared[0], $stamp, $day, $settings['timeout']);
 
-    $visits = [];
-    $dayRows = [];
-    $hourRows = [];
-    $opensSession = $session['isNew'];
+        $visits = [];
+        $dayRows = [];
+        $hourRows = [];
+        $opensSession = $session['isNew'];
 
-    foreach ($prepared as $preparedEvent) {
-        $path = $preparedEvent['path'];
-        $source = $session['source'];
-        // Сессия в пачке одна, поэтому «новая сессия» засчитывается ровно одному просмотру —
-        // первому. Плюс под каждым событием удвоил бы счётчик сессий на пачке из трёх страниц.
-        $sessions = $opensSession ? 1 : 0;
-        $opensSession = false;
+        foreach ($prepared as $preparedEvent) {
+            $path = $preparedEvent['path'];
+            $source = $session['source'];
+            // Сессия в пачке одна, поэтому «новая сессия» засчитывается ровно одному просмотру —
+            // первому. Плюс под каждым событием удвоил бы счётчик сессий на пачке из трёх страниц.
+            $sessions = $opensSession ? 1 : 0;
+            $opensSession = false;
 
-        $visits[] = [
-            $session['id'],
-            $visitor,
-            $path,
-            $source,
-            $preparedEvent['referrer'] !== '' ? $preparedEvent['referrer'] : null,
-            $preparedEvent['utmSource'] !== '' ? $preparedEvent['utmSource'] : null,
-            $preparedEvent['utmMedium'] !== '' ? $preparedEvent['utmMedium'] : null,
-            $preparedEvent['utmCampaign'] !== '' ? $preparedEvent['utmCampaign'] : null,
-            $preparedEvent['device'],
-            $day,
-            $hour,
-            $stamp,
-        ];
+            $visits[] = [
+                $session['id'],
+                $visitor,
+                $path,
+                $source,
+                $preparedEvent['referrer'] !== '' ? $preparedEvent['referrer'] : null,
+                $preparedEvent['utmSource'] !== '' ? $preparedEvent['utmSource'] : null,
+                $preparedEvent['utmMedium'] !== '' ? $preparedEvent['utmMedium'] : null,
+                $preparedEvent['utmCampaign'] !== '' ? $preparedEvent['utmCampaign'] : null,
+                $preparedEvent['device'],
+                $day,
+                $hour,
+                $stamp,
+            ];
 
-        // Разрез копится счётчиком: два просмотра одного адреса в одной пачке дают две строки
-        // в сырье и два просмотра в агрегате, а не одну перезаписанную.
-        $dayKey = $path . '|' . $source;
+            // Разрез копится счётчиком: два просмотра одного адреса в одной пачке дают две строки
+            // в сырье и два просмотра в агрегате, а не одну перезаписанную.
+            $dayKey = $path . '|' . $source;
 
-        if (!isset($dayRows[$dayKey])) {
-            $dayRows[$dayKey] = ['day' => $day, 'path' => $path, 'source' => $source, 'views' => 0, 'sessions' => 0];
+            if (!isset($dayRows[$dayKey])) {
+                $dayRows[$dayKey] = ['day' => $day, 'path' => $path, 'source' => $source, 'views' => 0, 'sessions' => 0];
+            }
+
+            $dayRows[$dayKey]['views']++;
+            $dayRows[$dayKey]['sessions'] += $sessions;
+
+            if (!isset($hourRows[$source])) {
+                $hourRows[$source] = ['day' => $day, 'hour' => $hour, 'source' => $source, 'views' => 0, 'sessions' => 0];
+            }
+
+            $hourRows[$source]['views']++;
+            $hourRows[$source]['sessions'] += $sessions;
         }
 
-        $dayRows[$dayKey]['views']++;
-        $dayRows[$dayKey]['sessions'] += $sessions;
+        seoStatsInsertVisits(array_map(
+            static fn (array $visit): array => [newId(), ...$visit],
+            $visits
+        ));
+        seoStatsExtendSession($session['id'], $stamp, (string) $prepared[count($prepared) - 1]['path'], count($prepared));
+        seoStatsAggregateUpsert('seo_stat_day', 'day, path, source', 'views, sessions', $dayRows);
+        seoStatsAggregateUpsert('seo_stat_hour', 'day, hour, source', 'views, sessions', $hourRows);
 
-        if (!isset($hourRows[$source])) {
-            $hourRows[$source] = ['day' => $day, 'hour' => $hour, 'source' => $source, 'views' => 0, 'sessions' => 0];
+        $goals = seoStatsEnabledGoals();
+
+        foreach ($prepared as $preparedEvent) {
+            seoStatsRecordConversion(
+                $session['id'],
+                $visitor,
+                $preparedEvent['path'],
+                $session['source'],
+                $preparedEvent['device'],
+                $stamp,
+                $day,
+                $goals
+            );
         }
 
-        $hourRows[$source]['views']++;
-        $hourRows[$source]['sessions'] += $sessions;
-    }
-
-    seoStatsInsertVisits(array_map(
-        static fn (array $visit): array => [newId(), ...$visit],
-        $visits
-    ));
-    seoStatsExtendSession($session['id'], $stamp, (string) $prepared[count($prepared) - 1]['path'], count($prepared));
-    seoStatsAggregateUpsert('seo_stat_day', 'day, path, source', 'views, sessions', $dayRows);
-    seoStatsAggregateUpsert('seo_stat_hour', 'day, hour, source', 'views, sessions', $hourRows);
-
-    $goals = seoStatsEnabledGoals();
-
-    foreach ($prepared as $preparedEvent) {
-        seoStatsRecordConversion(
-            $session['id'],
-            $visitor,
-            $preparedEvent['path'],
-            $session['source'],
-            $preparedEvent['device'],
-            $stamp,
-            $day,
-            $goals
-        );
-    }
-
-    return ['accepted' => count($prepared), 'rejected' => $rejected];
+        return ['accepted' => count($prepared), 'rejected' => $rejected];
+    });
 }
 
 /**
@@ -733,10 +738,12 @@ function seoStatsEnabledGoals(): array
 }
 
 /**
- * Предел приёма: от одного посетителя в минуту не больше положенного числа событий. Метка
+ * Предел приёма: от одного посетителя в минуту не больше положенного числа событий. Считается
+ * вся пачка сразу: проверка «уже записано меньше предела» пропускала пачку из двадцати событий
+ * поверх 119 записанных, и обещанный предел «не больше 120» тихо превращался в 139. Метка
  * подписи ограничивает и без этого, но предел нужен и на случай утёкшей подписи.
  */
-function seoStatsWithinRate(string $visitor): bool
+function seoStatsWithinRate(string $visitor, int $batch): bool
 {
     $minuteAgo = utcStamp(shiftSeconds(nowUtc(), -60));
     $count = (int) value(
@@ -744,7 +751,7 @@ function seoStatsWithinRate(string $visitor): bool
         [$visitor, $minuteAgo]
     );
 
-    return $count < SEO_STATS_RATE_LIMIT;
+    return $count + $batch <= SEO_STATS_RATE_LIMIT;
 }
 
 /**

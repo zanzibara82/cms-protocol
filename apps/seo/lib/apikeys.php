@@ -72,21 +72,21 @@ function seoApiKeyHash(string $key): string
 }
 
 /**
- * Аутентификация машинного запроса: заголовок обязан нести «Bearer <ключ>». Отвечает строкой
- * ключа-владельца либо null — вызывающий сам решает, каким кодом отказать.
+ * Аутентификация машинного запроса: заголовок обязан нести ровно «Bearer <ключ>» — слово,
+ * пробел и ключ без хвоста. Прежняя проверка принимала «Bearerseoa_…» (префикс без пробела)
+ * и «Bearer … лишнее»: первое проходило форму, потому что `substr(6)` срезал одну букву,
+ * второе — потому что хвост отбрасывался молча. Отвечает парой ключа-владельца либо null —
+ * вызывающий сам решает, каким кодом отказать.
  *
  * @return array{id: string, label: string}|null
  */
 function seoApiKeyAuthenticate(string $header): ?array
 {
-    $header = trim($header);
-
-    if ($header === '' || stripos($header, 'Bearer') !== 0) {
+    if (preg_match('/^Bearer\s+(\S+)$/i', trim($header), $matches) !== 1) {
         return null;
     }
 
-    $given = trim(substr($header, 6));
-    $clean = seoApiKeyShape($given);
+    $clean = seoApiKeyShape($matches[1]);
 
     if ($clean === null) {
         return null;
@@ -160,22 +160,24 @@ function seoApiKeyValidateLabel(string $raw): array
 /**
  * Создание ключа: метка обязательна, число ключей ограничено. Полный ключ возвращается
  * ровно один раз — на ответе формы; его хеш уходит в базу, а сам он нигде больше не живёт.
+ * Ключ уведомления возвращается рядом: действие пересылает его, как и у отзыва, не выписывая
+ * литерал в точке показа.
  *
- * @return array{ok: bool, error: string, key: string, id: string}
+ * @return array{ok: bool, error: string, key: string, id: string, notice: string}
  */
 function seoApiKeyCreate(string $label): array
 {
     $check = seoApiKeyValidateLabel($label);
 
     if (!$check['ok']) {
-        return ['ok' => false, 'error' => $check['error'], 'key' => '', 'id' => ''];
+        return ['ok' => false, 'error' => $check['error'], 'key' => '', 'id' => '', 'notice' => ''];
     }
 
     // Отозванная строка остаётся историей экрана, но места в пределе не занимает: иначе
     // «отзовите один» было бы тупиком — после двадцатого когда-либо созданного ключа
     // создание отвергалось бы навсегда.
     if ((int) value('SELECT COUNT(*) FROM ' . t('seo_api_key') . ' WHERE revoked_at IS NULL', []) >= SEO_API_KEY_MAX) {
-        return ['ok' => false, 'error' => 'Действующих ключей уже ' . SEO_API_KEY_MAX . ' — отзовите один, прежде чем заводить новый.', 'key' => '', 'id' => ''];
+        return ['ok' => false, 'error' => 'Действующих ключей уже ' . SEO_API_KEY_MAX . ' — отзовите один, прежде чем заводить новый.', 'key' => '', 'id' => '', 'notice' => ''];
     }
 
     $key = seoApiKeyGenerate();
@@ -194,7 +196,7 @@ function seoApiKeyCreate(string $label): array
 
     logInfo('seo.api_key.created', ['id' => $id]);
 
-    return ['ok' => true, 'error' => '', 'key' => $key, 'id' => $id];
+    return ['ok' => true, 'error' => '', 'key' => $key, 'id' => $id, 'notice' => 'api_key_created'];
 }
 
 /**

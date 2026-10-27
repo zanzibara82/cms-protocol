@@ -607,4 +607,50 @@ final class SeoStatsTest extends TestCase
         self::assertSame(3, (int) value('SELECT SUM(views) FROM ' . t('seo_stat_hour') . ' WHERE day = ?', [$day]));
         self::assertSame(1, (int) value('SELECT SUM(sessions) FROM ' . t('seo_stat_hour') . ' WHERE day = ?', [$day]));
     }
+
+    public function testПределПриёмаСчитаетВсюПачку(): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            self::assertSame(20, seoStatsStoreEvents(array_fill(0, 20, self::event()), 'visitor-rate')['accepted']);
+        }
+
+        self::assertSame(19, seoStatsStoreEvents(array_fill(0, 19, self::event()), 'visitor-rate')['accepted']);
+
+        $over = seoStatsStoreEvents(array_fill(0, 20, self::event()), 'visitor-rate');
+
+        self::assertSame(0, $over['accepted'], 'Пачка, которая вывела бы за минуту больше предела, отвергается целиком');
+        self::assertSame(20, $over['rejected']);
+        self::assertSame(
+            SEO_STATS_RATE_LIMIT - 1,
+            (int) value('SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE visitor_id = ?', [seoStatsVisitorHash('visitor-rate')]),
+            'Отвергнутая пачка не добавила ни одного визита'
+        );
+
+        self::assertSame(1, seoStatsStoreEvents([self::event()], 'visitor-rate')['accepted'], 'Ровно до предела — ещё можно');
+        self::assertSame(
+            SEO_STATS_RATE_LIMIT,
+            (int) value('SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE visitor_id = ?', [seoStatsVisitorHash('visitor-rate')]),
+            'Ровно предел — это ещё предел, а не шаг за него'
+        );
+    }
+
+    public function testСбойПакетаНеОставляетПоловинуЗаписей(): void
+    {
+        run('RENAME TABLE ' . t('seo_stat_hour') . ' TO ' . t('seo_stat_hour_fail'));
+
+        $thrown = false;
+
+        try {
+            seoStatsStoreEvents([self::event()], 'visitor-0001');
+        } catch (\Throwable) {
+            $thrown = true;
+        } finally {
+            run('RENAME TABLE ' . t('seo_stat_hour_fail') . ' TO ' . t('seo_stat_hour'));
+        }
+
+        self::assertTrue($thrown, 'Сбой агрегата обязан дойти до вызывающего');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []), 'Визит из упавшей пачки не остался');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_session'), []), 'Сессия из упавшей пачки откатилась');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_stat_day'), []), 'Агрегат дня откатился вместе с пачкой');
+    }
 }

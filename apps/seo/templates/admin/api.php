@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 /**
  * Экран «API-ключи»: ключи машинного чтения отчётов. Полного ключа нет и не будет: база
- * держит хеш, а экран — только префикс. Секрет печатается ровно один раз, на экране ответа
- * формы создания; потом ключ разве что отозвать.
+ * держит хеш, а экран — только префикс. Секрет печатается ровно один раз, на экране сразу
+ * после создания (он приходит из сессии); после обновления страницы его нет.
  *
  * @var string $nav
  * @var string $notice
  * @var string $alertTitle
  * @var string $alertReason
  * @var list<array{id: string, label: string, prefix: string, created_at: string, last_used_at: string, revoked_at: string}> $keys
+ * @var array{key: string}|null $created
  */
 
 $rows = '';
@@ -64,6 +65,18 @@ $createForm = '<form class="space-y-3 rounded-xl border border-ink/10 bg-white p
     . ' type="submit">Создать ключ</button>'
     . '</div></form>';
 
+$createdBlock = $created === null ? '' : '<section class="space-y-4 rounded-xl border border-ink/20 bg-cream p-6">'
+    . '<h2 class="text-lg font-semibold">Ключ создан</h2>'
+    . '<p class="text-sm text-ink/70">Скопируйте ключ сейчас: он показывается один раз. После обновления '
+    . 'страницы его здесь не будет — в базе лежит только хеш, поэтому вернуть ключ нельзя: только '
+    . 'отозвать и завести новый.</p>'
+    . '<code class="block break-all rounded-lg border border-ink/10 bg-white p-4 font-mono text-sm">'
+    . e($created['key'])
+    . '</code>'
+    . '<p class="text-sm text-ink/60">В читателе отчётов ключ передаётся заголовком.'
+    . '<br><code class="font-mono text-xs">Authorization: Bearer &lt;ключ&gt;</code></p>'
+    . '</section>';
+
 $content = $nav
     . '<header class="space-y-2">'
     . '<h1 class="text-2xl font-bold">API-ключи</h1>'
@@ -72,6 +85,7 @@ $content = $nav
     . ' только хешем и показывается ровно один раз — после создания. Не работает — отзовите и заведите '
     . 'новый.</p>'
     . '</header>'
+    . $createdBlock
     . $createForm
     . '<section class="space-y-2">'
     . '<h2 class="text-lg font-semibold">Список ключей</h2>'
