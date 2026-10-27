@@ -172,6 +172,33 @@ final class SeoApiKeysTest extends TestCase
         );
     }
 
+    public function testОтметкаИспользованияПишетсяНеЧащеМинуты(): void
+    {
+        $created = seoApiKeyCreate('Кабинет отчётов');
+        self::assertTrue($created['ok'], $created['error']);
+
+        $query = 'SELECT last_used_at FROM ' . t('seo_api_key') . ' WHERE id = ?';
+        $recent = utcStamp(nowUtc()->sub(new \DateInterval('PT30S')));
+        run('UPDATE ' . t('seo_api_key') . ' SET last_used_at = ? WHERE id = ?', [$recent, $created['id']]);
+
+        self::assertIsArray(seoApiKeyAuthenticate('Bearer ' . $created['key']));
+        self::assertSame(
+            $recent,
+            (string) value($query, [$created['id']]),
+            'Свежая отметка не переписывается: поток машинных чтений не должен давать запись на каждый запрос'
+        );
+
+        $stale = utcStamp(nowUtc()->sub(new \DateInterval('PT2M')));
+        run('UPDATE ' . t('seo_api_key') . ' SET last_used_at = ? WHERE id = ?', [$stale, $created['id']]);
+
+        self::assertIsArray(seoApiKeyAuthenticate('Bearer ' . $created['key']));
+        self::assertNotSame(
+            $stale,
+            (string) value($query, [$created['id']]),
+            'Просроченная отметка обновляется: экран должен видеть, что ключом пользовались'
+        );
+    }
+
     public function testЧужойИПустойЗаголовокНеПускают(): void
     {
         $created = seoApiKeyCreate('Кабинет отчётов');

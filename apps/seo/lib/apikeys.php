@@ -24,6 +24,10 @@ const SEO_API_KEY_HEX_LENGTH = 40;
 // потребность — единицы ключей, по одному на интеграцию.
 const SEO_API_KEY_MAX = 20;
 
+// Отметка использования обновляется не чаще раза в минуту: экрану хватает точности до минуты,
+// а поток машинных чтений не должен превращаться в запись на каждый запрос.
+const SEO_API_KEY_TOUCH_MINUTES = 1;
+
 // Пара запретов для машинного адреса: отчёты не должны ни попадать в поиск, ни оставаться
 // в кэше прокси. Приёмник счётчика несёт те же запреты — машинные адреса раздела единообразны.
 const SEO_API_HEADERS = [
@@ -101,7 +105,16 @@ function seoApiKeyAuthenticate(string $header): ?array
         return null;
     }
 
-    run('UPDATE ' . t('seo_api_key') . ' SET last_used_at = ? WHERE id = ?', [utcStamp(nowUtc()), (string) $row['id']]);
+    $moment = nowUtc();
+    $cutoff = utcStamp($moment->sub(new DateInterval('PT' . SEO_API_KEY_TOUCH_MINUTES . 'M')));
+
+    // Пишем только если прежняя отметка старше шага: экран показывает «когда ключом пользовались»,
+    // и запись на каждый машинный запрос не нужна ни ему, ни журналу базы.
+    run(
+        'UPDATE ' . t('seo_api_key') . ' SET last_used_at = ?'
+        . ' WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)',
+        [utcStamp($moment), (string) $row['id'], $cutoff]
+    );
 
     return ['id' => (string) $row['id'], 'label' => (string) $row['label']];
 }
@@ -175,28 +188,42 @@ function seoApiKeyCreate(string $label): array
 
     // Отозванная строка остаётся историей экрана, но места в пределе не занимает: иначе
     // «отзовите один» было бы тупиком — после двадцатого когда-либо созданного ключа
-    // создание отвергалось бы навсегда.
-    if ((int) value('SELECT COUNT(*) FROM ' . t('seo_api_key') . ' WHERE revoked_at IS NULL', []) >= SEO_API_KEY_MAX) {
+    // создание отвергалось бы навсегда. Проверка и вставка — одна транзакция с блокировкой
+    // действующих строк: два одновременных создания иначе оба увидели бы свободное место
+    // и оба его заняли, превысив обещанный предел.
+    /** @var array{key: string, id: string}|null $created */
+    $created = tx(static function () use ($check): ?array {
+        // Выборка под блокировкой ограничена пределом: больше max ключей нам не нужно, а строки
+        // без предела не выгружаются в память (то же требование держит страж PerformanceTest).
+        $active = all('SELECT id FROM ' . t('seo_api_key') . ' WHERE revoked_at IS NULL LIMIT ' . (SEO_API_KEY_MAX + 1) . ' FOR UPDATE', []);
+
+        if (count($active) >= SEO_API_KEY_MAX) {
+            return null;
+        }
+
+        $key = seoApiKeyGenerate();
+        $id = newId();
+
+        insert('seo_api_key', [
+            'id' => $id,
+            'label' => $check['label'],
+            'key_prefix' => substr($key, 0, 12),
+            'key_hash' => seoApiKeyHash($key),
+            'created_at' => utcStamp(nowUtc()),
+            'last_used_at' => null,
+            'revoked_at' => null,
+        ]);
+
+        return ['key' => $key, 'id' => $id];
+    });
+
+    if ($created === null) {
         return ['ok' => false, 'error' => 'Действующих ключей уже ' . SEO_API_KEY_MAX . ' — отзовите один, прежде чем заводить новый.', 'key' => '', 'id' => '', 'notice' => ''];
     }
 
-    $key = seoApiKeyGenerate();
-    $id = newId();
-    $stamp = utcStamp(nowUtc());
+    logInfo('seo.api_key.created', ['id' => $created['id']]);
 
-    insert('seo_api_key', [
-        'id' => $id,
-        'label' => $check['label'],
-        'key_prefix' => substr($key, 0, 12),
-        'key_hash' => seoApiKeyHash($key),
-        'created_at' => $stamp,
-        'last_used_at' => null,
-        'revoked_at' => null,
-    ]);
-
-    logInfo('seo.api_key.created', ['id' => $id]);
-
-    return ['ok' => true, 'error' => '', 'key' => $key, 'id' => $id, 'notice' => 'api_key_created'];
+    return ['ok' => true, 'error' => '', 'key' => $created['key'], 'id' => $created['id'], 'notice' => 'api_key_created'];
 }
 
 /**
