@@ -13,6 +13,7 @@ require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/search.php';
 require_once __DIR__ . '/goals.php';
+require_once __DIR__ . '/reports.php';
 require_once __DIR__ . '/export.php';
 require_once __DIR__ . '/apikeys.php';
 require_once __DIR__ . '/apiv1.php';

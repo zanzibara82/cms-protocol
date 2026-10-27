@@ -11,7 +11,7 @@ declare(strict_types=1);
  * @var string $notice
  * @var string $alertTitle
  * @var string $alertReason
- * @var array{base: string, kind: string, days: int, source: string, kinds: array<string, string>} $filter
+ * @var array{base: string, kind: string, days: int, source: string, split: bool, kinds: array<string, string>} $filter
  * @var array{title: string, columns: list<string>, rows: list<list<string>>}|null $report
  * @var array{csv: string, xlsx: string} $download
  */
@@ -37,7 +37,7 @@ foreach (SEO_STATS_PERIODS as $days) {
         . '>' . e((string) ($days === SEO_STATS_DEFAULT_PERIOD ? (string) $days . ' (по умолчанию)' : (string) $days)) . '</option>';
 }
 
-$sourceField = in_array($filter['kind'], SEO_EXPORT_SOURCE_KINDS, true)
+$sourceField = $filter['split'] === true
     ? '<label class="block" for="export_source">'
         . '<span class="text-sm text-ink/60">Источник</span>'
         . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_source" name="source">'

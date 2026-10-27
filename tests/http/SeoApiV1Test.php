@@ -181,7 +181,8 @@ final class SeoApiV1Test extends TestCase
         $this->seedVisit('/contact', 'visitor-api-3');
         $this->seedVisit('/news', 'visitor-api-4', 'https://vk.com/ok');
 
-        foreach (['summary', 'pages', 'sources', 'goals'] as $report) {
+        foreach (array_keys(seoReportKinds('api')) as $report) {
+            $report = (string) $report;
             $response = $this->askWithKey('/seo/api/v1/' . $report);
 
             self::assertSame(200, $response['status'], 'Разрез «' . $report . '» обязан отвечать');
@@ -198,6 +199,21 @@ final class SeoApiV1Test extends TestCase
         $goals = $this->json($this->askWithKey('/seo/api/v1/goals'))['items'];
         self::assertIsArray($goals);
         self::assertSame('Заявка', (string) $goals[0]['name']);
+    }
+
+    public function testРазрезыФайлаВApiНеОтвечают(): void
+    {
+        $fileOnly = array_diff_key(seoReportKinds('export'), seoReportKinds('api'));
+
+        self::assertNotSame([], $fileOnly, 'Реестр обязан различать выходы, иначе проверка ничего не ловит');
+
+        foreach (array_keys($fileOnly) as $report) {
+            self::assertSame(
+                404,
+                $this->askWithKey('/seo/api/v1/' . $report)['status'],
+                'Разрез «' . $report . '» живёт только в файле и не имеет машинного адреса'
+            );
+        }
     }
 
     public function testНеизвестныйРазрезОтвечает404(): void

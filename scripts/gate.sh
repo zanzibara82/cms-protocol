@@ -17,7 +17,11 @@ if [ ! -x node_modules/.bin/tailwindcss ]; then
   echo 'Нет node_modules/.bin/tailwindcss: выполни `npm ci` или `bash scripts/css` — сверять артефакт нечем.' >&2
   exit 1
 fi
-css_tmp=$(mktemp -d)
+# Временный каталог создаётся внутри дерева проекта, а не в системном /tmp: на Windows
+# (Git Bash) системный /tmp — это каталог пользователя, а Node понимает «/tmp» как корень
+# диска. Сборщик писал файл в один путь, сравнение искало в другом, и шаг падал на пустом
+# месте. Относительный путь одинаков для обоих, а trap убирает каталог и при отказе.
+css_tmp=$(mktemp -d ./.gate-css.XXXXXX)
 trap 'rm -rf "$css_tmp"' EXIT
 if node_modules/.bin/tailwindcss -i ./src-css/app.css -o "$css_tmp/app.css" --minify >"$css_tmp/build.log" 2>&1; then
   if ! cmp -s "$css_tmp/app.css" public/assets/app.css; then

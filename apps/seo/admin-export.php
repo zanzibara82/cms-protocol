@@ -38,9 +38,10 @@ function seoExportDays(mixed $raw): int
 function seoExportFilters(): array
 {
     $kind = (string) queryString('kind', '');
+    $kinds = seoReportKinds('export');
 
-    if (!isset(SEO_EXPORT_KINDS[$kind])) {
-        $kind = (string) array_key_first(SEO_EXPORT_KINDS);
+    if (!isset($kinds[$kind])) {
+        $kind = (string) array_key_first($kinds);
     }
 
     $days = seoExportDays(queryString('days', ''));
@@ -58,7 +59,7 @@ function seoExportFilters(): array
 
     // У отчёта, который не делится по источнику, выбор снимается: подпись «источник»
     // на общем списке была бы ложью, а не подсказкой.
-    if (!in_array($kind, SEO_EXPORT_SOURCE_KINDS, true)) {
+    if (!seoReportSupportsSource($kind)) {
         $source = '';
     }
 
@@ -98,7 +99,8 @@ function seoExportPage(array $params = []): void
             'kind' => $filters['kind'],
             'days' => $filters['days'],
             'source' => $filters['source'],
-            'kinds' => SEO_EXPORT_KINDS,
+            'split' => seoReportSupportsSource($filters['kind']),
+            'kinds' => seoReportKinds('export'),
         ],
         'report' => $report,
         'download' => [
@@ -123,7 +125,7 @@ function seoExportDownloadPage(array $params = []): never
     $source = trim((string) queryString('source', ''));
     $format = (string) queryString('format', 'csv') === 'xlsx' ? 'xlsx' : 'csv';
 
-    if (!isset(SEO_EXPORT_KINDS[$kind]) || !in_array($days, SEO_STATS_PERIODS, true)) {
+    if (!isset(seoReportKinds('export')[$kind]) || !in_array($days, SEO_STATS_PERIODS, true)) {
         redirect('/seo/admin/export');
     }
 

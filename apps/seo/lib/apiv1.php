@@ -12,22 +12,16 @@ declare(strict_types=1);
 // панель. Ответы — JSON с запретом индексирования и кэша.
 //
 // Период и источник проверяются тем же правилом, что фильтры панели: значение вне границ —
-// отказ 400, а не молчаливая подмена.
+// отказ 400, а не молчаливая подмена. Состав разрезов читается из реестра reports.php: «что
+// предлагается машиной» и «что принимается файлом и экраном» не расходятся.
+//
+// Сессии и cookie здесь нет: адреса метки sessionless, ядро не открывает ни то, ни другое.
+// Режим csrfCheck('public') в этих адресах не применяется: тот режим сверяет подпись раздела
+// в теле POST-запроса (приёмник счётчика), а здесь запрос читающий, GET — CSRF у чтения нет,
+// и его роль играет сам Bearer-ключ.
 
 const SEO_API_PERIOD_DEFAULT = 7;
 const SEO_API_PERIOD_MAX = 365;
-
-/** Разрезы с точными ключами: ключи маршрута не меняются без оговорки в чек-листе. */
-const SEO_API_V1_REPORTS = [
-    'summary' => 'Итоги за период',
-    'pages' => 'Популярные страницы',
-    'sources' => 'Источники',
-    'goals' => 'Цели и конверсии',
-];
-
-// Разрезы, принимающие фильтр по источнику. У конверсии источника нет: подпись «фильтр
-// применён» на общем списке целей была бы ложью, поэтому такой запрос отвергается.
-const SEO_API_V1_SOURCE_REPORTS = ['summary', 'pages', 'sources'];
 
 /**
  * Ответ машины в JSON: один набор заголовков на все коды — запрет индексирования и кэша
@@ -106,8 +100,18 @@ function seoApiV1Period(): array
 }
 
 /**
- * Страница API: один обработчик на четыре разреза. Ошибки говорятся в JSON — машина
- * сама не поймёт перенаправление на экран входа.
+ * Разрез с машинным адресом: имя из реестра отчётов, а не отдельный список. Экран, файл и
+ * машинный ответ читают одно перечисление, поэтому «объявлено машине» и «собирается» не
+ * расходятся.
+ */
+function seoApiV1Report(string $report): bool
+{
+    return isset(SEO_REPORTS[$report]) && SEO_REPORTS[$report]['api'];
+}
+
+/**
+ * Страница API: один обработчик на все разрезы. Ошибки говорятся в JSON — машина сама
+ * не поймёт перенаправление на экран входа.
  *
  * @param array<string, string> $params
  * @return never
@@ -125,7 +129,7 @@ function seoApiV1Page(array $params = []): never
         seoApiV1Respond(401, ['error' => 'Требуется действующий ключ API']);
     }
 
-    if (!isset(SEO_API_V1_REPORTS[$report])) {
+    if (!seoApiV1Report($report)) {
         seoApiV1Respond(404, ['error' => 'Неизвестный отчёт']);
     }
 
@@ -142,7 +146,7 @@ function seoApiV1Page(array $params = []): never
         seoApiV1Respond(400, ['error' => 'Неизвестный источник']);
     }
 
-    if ($source !== '' && !in_array($report, SEO_API_V1_SOURCE_REPORTS, true)) {
+    if ($source !== '' && !seoReportSupportsSource($report)) {
         seoApiV1Respond(400, ['error' => 'Этот отчёт не фильтруется по источнику']);
     }
 
@@ -154,6 +158,8 @@ function seoApiV1Page(array $params = []): never
         'summary' => seoStatsSummary($from, $to, $source),
         'pages' => seoStatsPages($from, $to, $source),
         'sources' => seoStatsSources($from, $to, $source),
+        // Ветки перечислены явно, а остаток падает: новый разрез в реестре без обработчика
+        // обязан провалиться заметно (тест перебирает все api-разрезы), а не молча отдать цели.
         'goals' => array_map(
             static fn (array $row): array => [
                 'name' => (string) $row['name'],
@@ -161,6 +167,7 @@ function seoApiV1Page(array $params = []): never
             ],
             seoGoalConversions($from, $to)
         ),
+        default => throw new LogicException('Нет обработчика машинного разреза: ' . $report),
     };
 
     seoApiV1Respond(200, [

@@ -15,34 +15,25 @@ declare(strict_types=1);
 // Скачивание получает те же запреты, что и приёма прайс-листа магазина: заголовок вложения,
 // запрет индексирования и запрет кэша — цифры отчёта не стоят ни в поиске, ни в кэше.
 
-const SEO_EXPORT_KINDS = [
-    'daily' => 'Просмотры по дням',
-    'pages' => 'Популярные страницы',
-    'sources' => 'Источники',
-    'campaigns' => 'Кампании по меткам',
-    'goals' => 'Цели и конверсии',
-];
-
-// Виды отчёта, которые принимают фильтр по источнику. У конверсии источника нет, поэтому
-// «цели» этот фильтр не принимают: экран для них прячет выбор, а скачивание с источником
-// возвращает к экрану, вместо того чтобы молча отдать общий список под чужой подписью.
-const SEO_EXPORT_SOURCE_KINDS = ['daily', 'pages', 'sources', 'campaigns'];
-
 /**
  * Отчёт для скачивания: те же данные, что и на экранах, но одной таблицей. Период и источник
  * проверяются тем же правилом, что и фильтры панели: значение вне границ — отказ, а не
  * молчаливая подмена («человек хотел другое» словами не названо).
  *
- * @param string $kind ключ из SEO_EXPORT_KINDS
+ * Вид отчёта, подпись и право на источник читаются из реестра: у конверсий источника нет,
+ * поэтому «цели» этот фильтр не принимают, а скачивание с источником возвращает к экрану,
+ * вместо того чтобы молча отдать общий список под чужой подписью.
+ *
+ * @param string $kind ключ из seoReportKinds('export')
  * @param int $days период из SEO_STATS_PERIODS
  * @param string $source ключ из SEO_SOURCES или пустая строка
  * @return array{title: string, columns: list<string>, rows: list<list<string>>, numeric: list<int>}|null
  */
 function seoExportReport(string $kind, int $days, string $source): ?array
 {
-    $title = SEO_EXPORT_KINDS[$kind] ?? '';
+    $report = SEO_REPORTS[$kind] ?? null;
 
-    if ($title === '' || !in_array($days, SEO_STATS_PERIODS, true)) {
+    if ($report === null || !$report['export'] || !in_array($days, SEO_STATS_PERIODS, true)) {
         return null;
     }
 
@@ -50,9 +41,11 @@ function seoExportReport(string $kind, int $days, string $source): ?array
         return null;
     }
 
-    if ($source !== '' && !in_array($kind, SEO_EXPORT_SOURCE_KINDS, true)) {
+    if ($source !== '' && !$report['source']) {
         return null;
     }
+
+    $title = $report['title'];
 
     $period = seoStatsPeriod($days);
     $from = $period['from'];

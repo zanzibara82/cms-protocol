@@ -77,20 +77,36 @@ final class SeoExportTest extends TestCase
 
     public function testВидыОтчётовНазваныИСобираются(): void
     {
-        self::assertNotSame([], SEO_EXPORT_KINDS, 'Без видов отчёта экран экспорта нечего предлагать');
+        $kinds = seoReportKinds('export');
+
+        self::assertNotSame([], $kinds, 'Без видов отчёта экран экспорта нечего предлагать');
 
         seoStatsStoreEvents([self::event()], 'visitor-0001');
 
-        foreach (array_keys(SEO_EXPORT_KINDS) as $kind) {
+        foreach ($kinds as $kind => $title) {
             $report = seoExportReport((string) $kind, SEO_STATS_DEFAULT_PERIOD, '');
 
             self::assertIsArray($report, 'Вид отчёта ' . $kind . ' не собрался');
             self::assertNotSame([], $report['columns'], 'Отчёт ' . $kind . ' без колонок — пустая таблица в Excel');
-            self::assertSame(SEO_EXPORT_KINDS[$kind], $report['title']);
+            self::assertSame($title, $report['title']);
 
             foreach ($report['numeric'] as $index) {
                 self::assertArrayHasKey($index, $report['columns'], 'Числовой номер колонки отчёта ' . $kind . ' обязан указывать на существующую колонку');
             }
+        }
+    }
+
+    public function testРазрезТолькоМашинногоАпиНеСкачивается(): void
+    {
+        $apiOnly = array_diff_key(seoReportKinds('api'), seoReportKinds('export'));
+
+        self::assertNotSame([], $apiOnly, 'Реестр обязан различать выходы, иначе проверка ничего не ловит');
+
+        foreach (array_keys($apiOnly) as $kind) {
+            self::assertNull(
+                seoExportReport((string) $kind, SEO_STATS_DEFAULT_PERIOD, ''),
+                'Разрез «' . $kind . '» живёт только в машинном ответе и в файл не уезжает'
+            );
         }
     }
 

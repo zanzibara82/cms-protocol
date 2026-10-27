@@ -30,6 +30,12 @@ const SEO_STATS_RETENTION_MAX = 365;
 const SEO_STATS_MAX_EVENTS = 20;
 const SEO_STATS_RATE_LIMIT = 120;
 
+// Пределы выгрузки: экран и файл показывают самые заметные строки периода, а не весь перечень.
+// Числа стоят здесь, потому что режут запрос; реестр отчётов ссылается на них, а документация
+// называет те же значения — одно число не может разойтись между SQL и обещанием владельцу.
+const SEO_STATS_PAGES_LIMIT = 100;
+const SEO_STATS_CAMPAIGNS_LIMIT = 50;
+
 // Предел тела приёмника в байтах. Пачка событий от нашего скрипта занимает килобайты, а тело
 // больше предела мы не разбираем вовсе. Причина не в аккуратности: разбор тела в несколько
 // мегабайт способен исчерпать память процесса, а нехватка памяти в PHP ведёт к аварийному
@@ -913,7 +919,7 @@ function seoStatsPages(string $from, string $to, string $source = ''): array
 
     $rows = all(
         'SELECT path, SUM(views) AS views FROM ' . t('seo_stat_day')
-        . ' WHERE day >= ? AND day <= ? AND (? = \'\' OR source = ?) GROUP BY path ORDER BY views DESC LIMIT 100',
+        . ' WHERE day >= ? AND day <= ? AND (? = \'\' OR source = ?) GROUP BY path ORDER BY views DESC LIMIT ' . SEO_STATS_PAGES_LIMIT,
         $args
     );
 
@@ -962,7 +968,7 @@ function seoStatsCampaigns(string $from, string $to, string $source = ''): array
         'SELECT utm_source, utm_medium, utm_campaign, COUNT(*) AS views FROM ' . t('seo_visit')
         . ' WHERE day >= ? AND day <= ? AND utm_campaign IS NOT NULL AND utm_campaign <> \'\''
         . ' AND (? = \'\' OR source = ?)'
-        . ' GROUP BY utm_source, utm_medium, utm_campaign ORDER BY views DESC LIMIT 50',
+        . ' GROUP BY utm_source, utm_medium, utm_campaign ORDER BY views DESC LIMIT ' . SEO_STATS_CAMPAIGNS_LIMIT,
         [$from, $to, $source, $source]
     );
 
