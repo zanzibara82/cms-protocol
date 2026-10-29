@@ -57,8 +57,9 @@ if ((string) $form['category'] === '') {
         . '<h1 class="text-3xl font-bold">' . e($title) . '</h1>'
         . '<p class="text-ink/70">Сначала выберите категорию — от неё зависят дополнительные поля.</p>'
         . '</header>'
+        // Шаг выбора категории ходит GET-запросом: токен здесь мёртвый груз — GET-обработчик
+        // csrfCheck() не вызывает, а поле уезжало бы в адресную строку (журналы, referer).
         . '<form class="space-y-5 rounded-xl border border-ink/10 bg-white p-5" method="get" action="' . e($action) . '">'
-        . csrfField()
         . '<label class="block" for="category">'
         . '<span class="mb-1 block text-sm text-ink/70">Категория</span>'
         . '<select class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="category" name="category" required' . $invalid('category') . '>'

@@ -11,9 +11,38 @@ declare(strict_types=1);
 const CLASSIFIEDS_API_PAGE_SIZE = 20;
 
 /**
- * Порция объявлений для потока. Отметка «after» — дата создания последней строки
- * прошлого ответа: следующая порция берётся объявлениями, старше отметки. Мусор в
- * отметке снимается: отвечает первая порция, без пустой выборки.
+ * Композитный курсор потока. Признаются две формы: «штамп|id» (композит) и чистый штамп
+ * прежнего формата — старые клиенты продолжают листать, но внутри одной секунды границу
+ * держит только композит: секундная точность штампа теряла хвост группы между порциями.
+ * Мусор в отметке снимается: отвечает первая порция, без ярости.
+ *
+ * @return array{stamp: string, id: string} пустые строки означают «отметки нет»
+ */
+function classifiedsApiCursorParse(string $after): array
+{
+    $after = trim($after);
+
+    if ($after === '') {
+        return ['stamp' => '', 'id' => ''];
+    }
+
+    $parts = explode('|', $after, 2);
+    $stampRaw = (string) $parts[0];
+    $id = (string) ($parts[1] ?? '');
+
+    // Штамп обязан читаться датой базы: иначе весь курсор — мусор, и первая порция честнее.
+    if (fromDb($stampRaw) === null) {
+        return ['stamp' => '', 'id' => ''];
+    }
+
+    return ['stamp' => $stampRaw, 'id' => $id];
+}
+
+/**
+ * Порция объявлений для потока. Отметка «after» — композит «штамп|id» последней строки
+ * прошлого ответа (или чистый штамп прежних клиентов): следующая порция берёт объявления
+ * старше отметки, а внутри одной секунды — по идентификатору; сортировка и фильтр
+ * согласованы по одной паре.
  *
  * @return list<array<string, mixed>>
  */
@@ -21,10 +50,18 @@ function classifiedsApiListingList(string $after): array
 {
     $where = [];
     $args = [];
+    $cursor = classifiedsApiCursorParse($after);
 
-    if (fromDb($after) !== null) {
-        $where[] = 'l.created_at < ?';
-        $args[] = $after;
+    if ($cursor['stamp'] !== '') {
+        if ($cursor['id'] !== '') {
+            $where[] = '(l.created_at < ? OR (l.created_at = ? AND l.id < ?))';
+            $args[] = $cursor['stamp'];
+            $args[] = $cursor['stamp'];
+            $args[] = $cursor['id'];
+        } else {
+            $where[] = 'l.created_at < ?';
+            $args[] = $cursor['stamp'];
+        }
     }
 
     $where[] = "l.status = 'PUBLISHED'";
@@ -112,8 +149,12 @@ function classifiedsApiListings(array $rows): void
     );
     $nextAfter = null;
 
+    // Полная порция обещает продолжение: отметка отдаётся композитом «штамп|id» последней
+    // строки — следующая порция доедает строки той же секунды по идентификатору.
     if ($rows !== [] && count($rows) >= CLASSIFIEDS_API_PAGE_SIZE) {
-        $nextAfter = (string) $rows[count($rows) - 1]['created_at'];
+        $last = $rows[count($rows) - 1];
+
+        $nextAfter = (string) $last['created_at'] . '|' . (string) $last['id'];
     }
 
     respond(200, (string) json_encode([

@@ -309,9 +309,27 @@ function commerceWebhookTransportDefault(array $receiver, string $event, string 
     $error = (string) (curl_error($handle) ?: '');
     curl_close($handle);
 
-    if ($body === false || $body === '') {
-        logWarn('commerce.webhook_transport', ['reason' => $error !== '' ? $error : 'пустой ответ']);
+    // Отказ сети — единственный случай, когда транспорт говорит за себя в журнале:
+    // коды не-2xx commerceWebhookSend() уже замечает как «Не доставлено».
+    if ($body === false) {
+        logWarn('commerce.webhook_transport', ['reason' => $error !== '' ? $error : 'транспорт не ответил']);
+    }
 
+    return commerceWebhookVerdict(is_string($body) ? $body : false, $code);
+}
+
+/**
+ * Вердикт доставки по ответу транспорта: код 2xx — доставка, всё остальное — отказ.
+ * Тело ничего не решает: приёмники используют 204 и 200 с пустым телом, чтобы сказать
+ * «принято, возвращать нечего» — раньше пустой ответ уводился в отказ раньше проверки
+ * кода, и честная доставка съезжала в «Не доставлено». Отказ сети выражается ровно
+ * одним значением — false от curl_exec: в этой ветке код ответа доверять нельзя.
+ *
+ * @param string|false $body сырой ответ curl_exec: строка — полученный ответ, false — отказ сети
+ */
+function commerceWebhookVerdict(string|false $body, int $code): bool
+{
+    if ($body === false) {
         return false;
     }
 

@@ -203,6 +203,67 @@ final class CommercePricebookTest extends CommerceDbTestCase
         self::assertStringContainsString('ниже', $result['report']['skips'][0]['reason']);
     }
 
+    public function testИмпортНеПонижаетЦенуНижеСвоегоПромо(): void
+    {
+        // Обратная пара к «ПромоБезЦеныНижефакта»: строка меняет обычную цену и не трогает
+        // промо. Без проверки промо 800 оставалось бы при retail 500 — витрина продавала бы
+        // «обычный» товар по промо-цене, и инвариант «промо ниже обычной» нарушался молча.
+        $product = self::makeProduct(['slug' => 'kolonka', 'sku' => 'SPK-1']);
+        $saved = commerceCreateVariant($product, ['title' => '20 Вт', 'sku' => 'SPK-20', 'price_retail' => '1000', 'price_promo' => '800', 'stock' => '5', 'supplier' => '']);
+        self::assertTrue($saved['ok'], $saved['error']);
+        $variantId = self::variantId('SPK-20');
+
+        // Строка «цена 500, промо пусто» роняет строку с человеческой причиной.
+        $rejected = self::applyCsv("SPK-20;500;;3\r\n");
+
+        self::assertTrue($rejected['ok'], $rejected['error']);
+        self::assertSame(0, $rejected['report']['applied']);
+        self::assertSame(1, $rejected['report']['skipped']);
+        self::assertSame('SPK-20', $rejected['report']['skips'][0]['sku']);
+        self::assertStringContainsString('Новая обычная цена не ниже текущей промо-цены', $rejected['report']['skips'][0]['reason']);
+
+        // Вариант не тронут ни в цене, ни в промо, ни в остатке.
+        $untouched = commerceVariantById($variantId);
+        self::assertIsArray($untouched);
+        self::assertSame(1000.0, (float) $untouched['price_retail']);
+        self::assertSame(800.0, (float) $untouched['price_promo']);
+        self::assertSame(5, (int) $untouched['stock']);
+
+        // Явное промо в строке resolves инвариант: строка проходит целиком.
+        $resolved = self::applyCsv("SPK-20;500;400;3\r\n");
+
+        self::assertTrue($resolved['ok'], $resolved['error']);
+        self::assertSame(1, $resolved['report']['applied']);
+        self::assertSame([], $resolved['report']['skips'], 'Строка с явным промо отказов не даёт');
+        $row = commerceVariantById($variantId);
+        self::assertIsArray($row);
+        self::assertSame(500.0, (float) $row['price_retail']);
+        self::assertSame(400.0, (float) $row['price_promo']);
+        self::assertSame(3, (int) $row['stock']);
+    }
+
+    public function testИмпортСнимаетПромоНулёмПриПониженииЦены(): void
+    {
+        // Единственный способ понизить обычную цену ниже текущего промо без указания нового
+        // промо — снять его нулём в той же строке: «снятие» — документированное значение нуля.
+        $product = self::makeProduct(['slug' => 'kolonka', 'sku' => 'SPK-1']);
+        $saved = commerceCreateVariant($product, ['title' => '20 Вт', 'sku' => 'SPK-20', 'price_retail' => '1000', 'price_promo' => '800', 'stock' => '5', 'supplier' => '']);
+        self::assertTrue($saved['ok'], $saved['error']);
+        $variantId = self::variantId('SPK-20');
+
+        $result = self::applyCsv("SPK-20;600;0;3\r\n");
+
+        self::assertTrue($result['ok'], $result['error']);
+        self::assertSame(1, $result['report']['applied']);
+        self::assertSame(0, $result['report']['skipped']);
+
+        $row = commerceVariantById($variantId);
+        self::assertIsArray($row);
+        self::assertSame(600.0, (float) $row['price_retail']);
+        self::assertNull($row['price_promo'], 'Нуль в промо-колонке снимает акцию: NULL вместо нулевой цены');
+        self::assertSame(3, (int) $row['stock']);
+    }
+
     public function testИмпортПустойФайл(): void
     {
         $result = self::applyCsv(self::BOM);

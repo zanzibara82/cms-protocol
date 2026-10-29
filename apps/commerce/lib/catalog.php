@@ -406,38 +406,57 @@ function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null): a
     $id = newId();
     $prices = $values['prices'];
 
-    tx(static function () use ($id, $slug, $values, $fields, $prices, $moment): void {
-        insert('commerce_product', [
-            'id' => $id,
-            'slug' => $slug,
-            'sku' => (string) $fields['sku'],
-            'title' => (string) $fields['title'],
-            'lead_text' => (string) $fields['lead_text'] !== '' ? (string) $fields['lead_text'] : null,
-            'cover' => null,
-            'body' => $values['body'] !== [] ? json_encode($values['body'], JSON_UNESCAPED_UNICODE) : null,
-            'brand' => (string) $fields['brand'] !== '' ? (string) $fields['brand'] : null,
-            'barcode' => (string) $fields['barcode'] !== '' ? (string) $fields['barcode'] : null,
-            'price_retail' => (float) $prices['price_retail'],
-            'price_promo' => $prices['price_promo'],
-            'price_cost' => $prices['price_cost'],
-            'currency' => (string) $fields['currency'],
-            'stock' => (int) $values['stock'],
-            'status' => (string) $fields['status'],
-            'seo_title' => (string) $fields['seo_title'] !== '' ? (string) $fields['seo_title'] : null,
-            'seo_description' => $fields['seo_description'] !== ''
-                ? (string) $fields['seo_description'] : null,
-            'noindex' => (string) $fields['noindex'] === '1' ? 1 : 0,
-            'created_at' => utcStamp($moment),
-            'updated_at' => utcStamp($moment),
-        ]);
-
-        foreach ($values['categories'] as $categoryId) {
-            insert('commerce_product_category', [
-                'product_id' => $id,
-                'category_id' => $categoryId,
+    // Слаг и артикул держатся уникальными ключами: параллельное создание того же товара
+    // гонит наш INSERT в отказ базы. Кто именно занят — читается перечитыванием, потому что
+    // текст исключения не обещает имя ключа: у человека формулировка своя для каждой из причин.
+    try {
+        tx(static function () use ($id, $slug, $values, $fields, $prices, $moment): void {
+            insert('commerce_product', [
+                'id' => $id,
+                'slug' => $slug,
+                'sku' => (string) $fields['sku'],
+                'title' => (string) $fields['title'],
+                'lead_text' => (string) $fields['lead_text'] !== '' ? (string) $fields['lead_text'] : null,
+                'cover' => null,
+                'body' => $values['body'] !== [] ? json_encode($values['body'], JSON_UNESCAPED_UNICODE) : null,
+                'brand' => (string) $fields['brand'] !== '' ? (string) $fields['brand'] : null,
+                'barcode' => (string) $fields['barcode'] !== '' ? (string) $fields['barcode'] : null,
+                'price_retail' => (float) $prices['price_retail'],
+                'price_promo' => $prices['price_promo'],
+                'price_cost' => $prices['price_cost'],
+                'currency' => (string) $fields['currency'],
+                'stock' => (int) $values['stock'],
+                'status' => (string) $fields['status'],
+                'seo_title' => (string) $fields['seo_title'] !== '' ? (string) $fields['seo_title'] : null,
+                'seo_description' => $fields['seo_description'] !== ''
+                    ? (string) $fields['seo_description'] : null,
+                'noindex' => (string) $fields['noindex'] === '1' ? 1 : 0,
+                'created_at' => utcStamp($moment),
+                'updated_at' => utcStamp($moment),
             ]);
+
+            foreach ($values['categories'] as $categoryId) {
+                insert('commerce_product_category', [
+                    'product_id' => $id,
+                    'category_id' => $categoryId,
+                ]);
+            }
+        });
+    } catch (Throwable $insertError) {
+        if (!duplicateInsertException($insertError)) {
+            throw $insertError;
         }
-    });
+
+        $slugBusy = (int) value('SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE slug = ?', [$slug]) > 0;
+        $skuBusy = (int) value('SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE sku = ?', [(string) $fields['sku']]) > 0;
+
+        if ($skuBusy) {
+            return ['ok' => false, 'error' => 'Артикул уже занят другим товаром — предложите свой.', 'id' => '', 'slug' => '', 'notice' => ''];
+        }
+
+        // Слаг занят либо заняты оба: формулировка о слаге остаётся единственной честной.
+        return ['ok' => false, 'error' => 'Такой адрес уже занят другим товаром — предложите свой.', 'id' => '', 'slug' => '', 'notice' => ''];
+    }
 
     logInfo('commerce.product_created', ['productId' => $id, 'slug' => $slug]);
 
@@ -468,43 +487,63 @@ function commerceUpdateProduct(string $id, array $values, string $previousSlug, 
         return ['ok' => false, 'error' => 'Адрес не собрался из названия.', 'slug' => '', 'notice' => ''];
     }
 
-    tx(static function () use ($id, $slug, $values, $fields, $prices, $moment): void {
-        run(
-            'UPDATE ' . t('commerce_product') . ' SET slug = ?, sku = ?, title = ?, lead_text = ?, body = ?,'
-            . ' brand = ?, barcode = ?, price_retail = ?, price_promo = ?, price_cost = ?, currency = ?,'
-            . ' stock = ?, status = ?, seo_title = ?, seo_description = ?, noindex = ?, updated_at = ?'
-            . ' WHERE id = ?',
-            [
-                $slug,
-                (string) $fields['sku'],
-                (string) $fields['title'],
-                (string) $fields['lead_text'] !== '' ? (string) $fields['lead_text'] : null,
-                $values['body'] !== [] ? json_encode($values['body'], JSON_UNESCAPED_UNICODE) : null,
-                (string) $fields['brand'] !== '' ? (string) $fields['brand'] : null,
-                (string) $fields['barcode'] !== '' ? (string) $fields['barcode'] : null,
-                (float) $prices['price_retail'],
-                $prices['price_promo'],
-                $prices['price_cost'],
-                (string) $fields['currency'],
-                (int) $values['stock'],
-                (string) $fields['status'],
-                (string) $fields['seo_title'] !== '' ? (string) $fields['seo_title'] : null,
-                $fields['seo_description'] !== '' ? (string) $fields['seo_description'] : null,
-                (string) $fields['noindex'] === '1' ? 1 : 0,
-                utcStamp($moment),
-                $id,
-            ]
-        );
+    // Правка и чужое сохранение могут претендовать на один слаг или артикул: проигравший
+    // UPDATE получает отказ уникального ключа. Причина разыменовывается перечитыванием —
+    // человеку видна формулировка о том поле, которое действительно занято.
+    try {
+        tx(static function () use ($id, $slug, $values, $fields, $prices, $moment): void {
+            run(
+                'UPDATE ' . t('commerce_product') . ' SET slug = ?, sku = ?, title = ?, lead_text = ?, body = ?,'
+                . ' brand = ?, barcode = ?, price_retail = ?, price_promo = ?, price_cost = ?, currency = ?,'
+                . ' stock = ?, status = ?, seo_title = ?, seo_description = ?, noindex = ?, updated_at = ?'
+                . ' WHERE id = ?',
+                [
+                    $slug,
+                    (string) $fields['sku'],
+                    (string) $fields['title'],
+                    (string) $fields['lead_text'] !== '' ? (string) $fields['lead_text'] : null,
+                    $values['body'] !== [] ? json_encode($values['body'], JSON_UNESCAPED_UNICODE) : null,
+                    (string) $fields['brand'] !== '' ? (string) $fields['brand'] : null,
+                    (string) $fields['barcode'] !== '' ? (string) $fields['barcode'] : null,
+                    (float) $prices['price_retail'],
+                    $prices['price_promo'],
+                    $prices['price_cost'],
+                    (string) $fields['currency'],
+                    (int) $values['stock'],
+                    (string) $fields['status'],
+                    (string) $fields['seo_title'] !== '' ? (string) $fields['seo_title'] : null,
+                    $fields['seo_description'] !== '' ? (string) $fields['seo_description'] : null,
+                    (string) $fields['noindex'] === '1' ? 1 : 0,
+                    utcStamp($moment),
+                    $id,
+                ]
+            );
 
-        run('DELETE FROM ' . t('commerce_product_category') . ' WHERE product_id = ?', [$id]);
+            run('DELETE FROM ' . t('commerce_product_category') . ' WHERE product_id = ?', [$id]);
 
-        foreach ($values['categories'] as $categoryId) {
-            insert('commerce_product_category', [
-                'product_id' => $id,
-                'category_id' => $categoryId,
-            ]);
+            foreach ($values['categories'] as $categoryId) {
+                insert('commerce_product_category', [
+                    'product_id' => $id,
+                    'category_id' => $categoryId,
+                ]);
+            }
+        });
+    } catch (Throwable $updateError) {
+        if (!duplicateInsertException($updateError)) {
+            throw $updateError;
         }
-    });
+
+        $skuBusy = (int) value(
+            'SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE sku = ? AND id <> ?',
+            [(string) $fields['sku'], $id]
+        ) > 0;
+
+        if ($skuBusy) {
+            return ['ok' => false, 'error' => 'Артикул уже занят другим товаром — предложите свой.', 'slug' => '', 'notice' => ''];
+        }
+
+        return ['ok' => false, 'error' => 'Такой адрес уже занят другим товаром — предложите свой.', 'slug' => '', 'notice' => ''];
+    }
 
     logInfo('commerce.product_updated', ['productId' => $id, 'slug' => $slug]);
 

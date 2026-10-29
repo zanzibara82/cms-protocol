@@ -53,9 +53,13 @@ function seoFunnelsAction(array $params = []): void
 
     $op = postString('op');
 
+    // Кнопки шаблона шлют «funnel_enable»/«funnel_disable» (форма знает текущее состояние),
+    // «funnel_toggle» — общая форма после ошибок. Все три вызывают одну функцию: раньше
+    // из UI не доезжало ни одно значение — обработчик принимал только «funnel_toggle»,
+    // которого ни одна кнопка не посылала.
     if ($op === 'funnel_create') {
         $result = seoFunnelCreate(['name' => postString('name')]);
-    } elseif ($op === 'funnel_toggle') {
+    } elseif (in_array($op, ['funnel_enable', 'funnel_disable', 'funnel_toggle'], true)) {
         $id = mb_substr(trim((string) postString('id')), 0, 26);
         $result = $id !== '' ? seoFunnelToggle($id) : ['ok' => false, 'error' => 'Воронка не выбрана.', 'notice' => ''];
     } elseif ($op === 'funnel_delete') {

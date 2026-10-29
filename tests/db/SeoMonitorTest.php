@@ -69,6 +69,25 @@ final class SeoMonitorTest extends TestCase
         self::assertSame('/net-takoy-stranicy', (string) $rows[0]['path']);
     }
 
+    public function testПовторноеОбращениеНеЗатираетХостПервойВстречи(): void
+    {
+        // Строка «один адрес — одна строка» живёт одной записью с обновлением на дубликате:
+        // select-then-insert рушился бы на гонке двух первых запросов (второй INSERT падал
+        // нарушением уникального ключа — и несуществующий адрес отвечал HTTP 500). Здесь
+        // проверяется и ветка дубликата: счётчик растёт, referrer первой встречи остаётся.
+        $_SERVER['HTTP_REFERER'] = 'https://www.google.com/x';
+        seoMonitorRecordMiss('/bitaya');
+
+        unset($_SERVER['HTTP_REFERER']);
+        seoMonitorRecordMiss('/bitaya');
+
+        $rows = seoMonitorMisses();
+
+        self::assertCount(1, $rows);
+        self::assertSame(2, (int) $rows[0]['hits'], 'Повторное обращение увеличивает счётчик');
+        self::assertSame('google.com', (string) $rows[0]['referrer_host'], 'Хост первой встречи остаётся без перезаписи');
+    }
+
     public function testВЖурналПишетсяТолькоХостИсточника(): void
     {
         $_SERVER['HTTP_REFERER'] = 'https://www.google.com/search?q=secret';
@@ -129,6 +148,24 @@ final class SeoMonitorTest extends TestCase
         $rows = seoMonitorRedirects();
 
         self::assertCount(1, $rows, 'Один адрес — одно правило: вторая правка обновляет первую');
+        self::assertSame('/drugoy-adres', (string) $rows[0]['to_path']);
+        self::assertSame(302, (int) $rows[0]['code']);
+    }
+
+    public function testДообновлениеПравилаПослеПроиграннойГонки(): void
+    {
+        // Гонку вставки в тесте не поднять (победитель обязан закоммитить между SELECT и INSERT
+        // того же процесса), поэтому рука гонки-проигравшего проверяется напрямую: дообновление
+        // перезаписывает строку победителя и не заводит второе правило на тот же адрес.
+        seoMonitorRedirectSave(['from' => '/staryy-adres', 'to' => '/novyy-adres', 'code' => 301]);
+        $winner = seoMonitorRedirectByPath('/staryy-adres');
+        self::assertIsArray($winner);
+
+        updateRedirectRow($winner, ['from' => '/staryy-adres', 'to' => '/drugoy-adres', 'code' => 302]);
+
+        $rows = seoMonitorRedirects();
+
+        self::assertCount(1, $rows, 'Дообновление не заводит второе правило');
         self::assertSame('/drugoy-adres', (string) $rows[0]['to_path']);
         self::assertSame(302, (int) $rows[0]['code']);
     }

@@ -183,6 +183,49 @@ final class MailerTest extends TestCase
         }
     }
 
+    public function testОтправительМожетБытьЗаписанИменемИАдресом(): void
+    {
+        // «Школа <адрес>» — обычная запись отправителя в config.php: MAIL_FROM с именем не
+        // обязан ронять каждое письмо магазина (правка C1 refactor: раньше заголовок собирался
+        // как «From: <Школа <адрес>>», и конверт SMTP проваливался).
+        $message = $this->message();
+        $message['from'] = 'Школа <noreply@example.com>';
+
+        $this->mailer()->send($message);
+
+        $raw = (string) $this->sent[0]['raw'];
+
+        // Имя кодируется по тем же правилам, что и тема: не-ASCII не уезжает в заголовок сырым байтом.
+        self::assertStringContainsString(
+            'From: =?UTF-8?B?' . base64_encode('Школа') . '?= <noreply@example.com>' . "\r\n",
+            $raw
+        );
+
+        // Message-ID строится по домену отправителя: с именной записью домен остаётся тем же.
+        self::assertMatchesRegularExpression('/^Message-ID: <[0-9a-z]+@example\.com>/m', $raw);
+    }
+
+    public function testНепохожийОтправительНеукалываетСеть(): void
+    {
+        $cases = [
+            'имя с не-адресом внутри скобок' => ['Школа <не-по-почте>', 'Адрес отправителя не похож на почту.'],
+            'имя без скобок вовсе' => ['Школа a@b.ru', 'Адрес отправителя не похож на почту.'],
+            'приписка после скобок' => ['Имя <a@b.ru> приписка', 'Адрес отправителя не похож на почту.'],
+        ];
+
+        foreach ($cases as $label => [$from, $expected]) {
+            $message = $this->message();
+            $message['from'] = $from;
+            $this->sent = [];
+
+            $result = $this->mailer()->send($message);
+
+            self::assertFalse($result['ok'], $label);
+            self::assertSame($expected, $result['error'], $label);
+            self::assertCount(0, $this->sent, $label);
+        }
+    }
+
     public function testСбойТранспортаВозвращаетПонятныйОтказ(): void
     {
         $mailer = new Mailer(static fn (array $headers, string $raw): array => ['ok' => false, 'error' => 'сервер ответил 550']);

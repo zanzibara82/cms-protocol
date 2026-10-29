@@ -530,10 +530,15 @@ function seoSearchDimensionsFor(string $dimension): array
 /**
  * Чтение строк из источника. Возвращает ['ok' => bool, 'error' => string, 'rows' => list].
  *
+ * Параметр $retried закрывает повтор: 401 с живым refresh-токеном может не проходить и
+ * после обновления (отозвано правило свойства, недостаточный scope) — без флага каждый
+ * успешный refresh порождал новую попытку с тем же исходом, до переполнения стека.
+ * Обещание комментария «обновляем и повторяем один раз» теперь держит и сам код.
+ *
  * @param array<string, mixed> $connection
  * @return array{ok: bool, error: string, rows: list<array<string, mixed>>}
  */
-function seoSearchFetchRows(array $connection, string $from, string $to, string $dimension): array
+function seoSearchFetchRows(array $connection, string $from, string $to, string $dimension, bool $retried = false): array
 {
     $settings = seoSearchSettings();
 
@@ -575,12 +580,23 @@ function seoSearchFetchRows(array $connection, string $from, string $to, string 
 
     if ($response['status'] === 401) {
         // Токен истёк, а срок в базе не совпал: обновляем и повторяем один раз.
+        // Второй 401 по свежему токену — честный отказ, а не новая сетевая попытка.
+        if ($retried) {
+            return ['ok' => false, 'error' => 'Источник отказал в доступе и после обновления токена.', 'rows' => []];
+        }
+
         $refreshed = seoSearchRefresh($connection);
 
         if ($refreshed['ok']) {
             seoSearchStoreTokens($refreshed['tokens']);
 
-            return seoSearchFetchRows(seoSearchConnection() ?? $connection, $from, $to, $dimension);
+            return seoSearchFetchRows(
+                seoSearchConnection() ?? $connection,
+                $from,
+                $to,
+                $dimension,
+                true
+            );
         }
 
         return ['ok' => false, 'error' => 'Источник отказал в доступе: ' . $refreshed['error'], 'rows' => []];

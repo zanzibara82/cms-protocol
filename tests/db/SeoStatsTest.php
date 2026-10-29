@@ -653,4 +653,164 @@ final class SeoStatsTest extends TestCase
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_session'), []), 'Сессия из упавшей пачки откатилась');
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_stat_day'), []), 'Агрегат дня откатился вместе с пачкой');
     }
+
+    // ── Гонки приёма ────────────────────────────────────────
+    //
+    // Приём — это «сначала посмотреть, потом записать», и каждое такое окно рвётся двумя
+    // одновременными пачками одного посетителя. Оракул — второе соединение к той же базе:
+    // оно держит незакоммиченные строки «победителя гонки», которые обычное чтение (снимок
+    // REPEATABLE READ) не видит вовсе, а блокирующее (FOR UPDATE) обязано увидеть и встать.
+    // Честный приём на закрытой гонке падает по тайм-ауту ожидания блокировки и не пишет
+    // ничего; приём, прошедший мимо, спокойно дописывает параллельные строки — тест краснеет.
+
+    public function testДвеОдновременныеПачкиЗаводятОднуСессию(): void
+    {
+        $visitorId = 'visitor-race-session';
+        $visitor = seoStatsVisitorHash($visitorId);
+        self::assertNotSame('', $visitor);
+
+        $thrown = self::raceAttempt(static function (\PDO $rival) use ($visitor): void {
+            // Соперник завёл сессию того же посетителя и ещё не зафиксировал: чтение снимком
+            // её не видит, и приём заводит параллельную сессию — счётчик сессий раздувается,
+            // а источник захода одной цепочки расходится.
+            $statement = $rival->prepare(
+                'INSERT INTO ' . t('seo_session')
+                . ' (id, visitor_id, source, landing_path, last_path, views, started_at, last_seen_at, day)'
+                . ' VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)'
+            );
+            $statement->execute([
+                bin2hex(random_bytes(13)),
+                $visitor,
+                SEO_SOURCE_DIRECT,
+                '/rival',
+                '/rival',
+                utcStamp(nowUtc()),
+                utcStamp(nowUtc()),
+                moscowDayKey(nowUtc()),
+            ]);
+        }, $visitorId, [self::event()]);
+
+        self::assertNotNull($thrown, 'Приём прошёл мимо незакоммиченной сессии соперника и завёл параллельную');
+        self::assertStringContainsString('Lock wait timeout', (string) $thrown->getMessage(), 'Выбор сессии обязан ждать блокировку чтения, а не пройти мимо');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit'), []), 'Визит из проигравшей гонку пачки не остался');
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('seo_session'), []), 'Параллельная сессия проигравшей пачки не осталась');
+    }
+
+    public function testПределВыдерживаетсяПротивНезакоммиченнойПачкиСоперника(): void
+    {
+        $visitorId = 'visitor-race-rate';
+        $visitor = seoStatsVisitorHash($visitorId);
+        self::assertNotSame('', $visitor);
+
+        // Порог: 119 записанных событий, пачка из двадцати ещё проходит, а две такие пачки
+        // поверх порога дают 139 вместо обещанных 120 — это и есть дефект гонки.
+        for ($i = 0; $i < 5; $i++) {
+            self::assertSame(20, seoStatsStoreEvents(array_fill(0, 20, self::event()), $visitorId)['accepted']);
+        }
+
+        self::assertSame(19, seoStatsStoreEvents(array_fill(0, 19, self::event()), $visitorId)['accepted']);
+        self::assertSame(119, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE visitor_id = ?', [$visitor]));
+
+        $thrown = self::raceAttempt(static function (\PDO $rival) use ($visitor): void {
+            // Соперник принял свою пачку из двадцати и ещё не зафиксировал: счёт предела по
+            // снимку этих строк не видит и пускает вторую пачку поверх порога.
+            $statement = $rival->prepare(
+                'INSERT INTO ' . t('seo_visit')
+                . ' (id, session_id, visitor_id, path, source, referrer_host, utm_source, utm_medium, utm_campaign, device, day, hour, created_at)'
+                . ' VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?)'
+            );
+
+            for ($i = 0; $i < 20; $i++) {
+                $statement->execute([
+                    bin2hex(random_bytes(13)),
+                    bin2hex(random_bytes(13)),
+                    $visitor,
+                    '/rival-' . $i,
+                    SEO_SOURCE_DIRECT,
+                    'desktop',
+                    moscowDayKey(nowUtc()),
+                    (int) substr(moscowIso(nowUtc()), 11, 2),
+                    utcStamp(nowUtc()),
+                ]);
+            }
+        }, $visitorId, array_fill(0, 20, self::event()));
+
+        self::assertNotNull($thrown, 'Приём прошёл мимо незакоммиченной пачки соперника и вывел минуту за предел');
+        self::assertStringContainsString('Lock wait timeout', (string) $thrown->getMessage(), 'Счёт предела обязан ждать незакоммиченные строки соперника');
+        self::assertSame(119, (int) value('SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE visitor_id = ?', [$visitor]), 'Пачка проигравшего гонку приёма не осталась в сырье');
+    }
+
+    public function testСекретСчётчикаСоздаётсяОдинРазИСовпадаетСоХранимым(): void
+    {
+        // Гонка «два первых запроса одновременно» здесь не воспроизводится двумя
+        // соединениями: вставка секрета обязана быть атомарной «только если пусто», и тогда
+        // проигравший возвращает значение победителя — свойство проверяется последовательно.
+        deleteOption(SEO_STATS_OPTION_SECRET);
+
+        $first = seoCollectSecret();
+
+        self::assertNotSame('', $first, 'Ленивое создание обязано вернуть секрет, а не пустоту');
+        self::assertSame($first, getOption(SEO_STATS_OPTION_SECRET, ''), 'Возвращённый секрет не совпал с сохранённым');
+        self::assertSame($first, seoCollectSecret(), 'Повторный вызов переродил секрет — подписи страниц разъехались бы с приёмником');
+    }
+
+    /**
+     * Второе соединение к той же базе — «соперник» в гонке. Отдельное соединение обязательно:
+     * незакоммиченные строки другого запроса живут только в его собственной транзакции.
+     */
+    private static function rivalConnection(): \PDO
+    {
+        return new \PDO(
+            sprintf(
+                'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+                (string) configValue('DB_HOST'),
+                (string) configValue('DB_PORT'),
+                (string) configValue('DB_NAME')
+            ),
+            (string) configValue('DB_USER'),
+            (string) configValue('DB_PASS', ''),
+            [
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+                \PDO::ATTR_EMULATE_PREPARES => false,
+            ]
+        );
+    }
+
+    /**
+     * Оракул гонки приёма: соперник в своей незакоммиченной транзакции вставляет строки того
+     * же посетителя, после чего приём обязан остановиться на блокирующем чтении. Возвращается
+     * брошенное исключение или null, если приём прошёл свободно (на коде с открытой гонкой).
+     *
+     * @param \Closure(\PDO): void $seedRival вставка соперника внутрь его транзакции
+     * @param list<array<string, mixed>> $events
+     */
+    private static function raceAttempt(\Closure $seedRival, string $visitorId, array $events): ?\Throwable
+    {
+        $rival = self::rivalConnection();
+        $rival->beginTransaction();
+
+        try {
+            $seedRival($rival);
+
+            // Тайм-аут ожидания на время попытки: честный приём на закрытой гонке встаёт на
+            // незакоммиченных строках соперника и падает быстро, а не висит до значения по
+            // умолчанию. Прежнее значение восстанавливается, чтобы не трогать соседние тесты.
+            $previous = (int) value('SELECT @@SESSION.innodb_lock_wait_timeout', []);
+
+            run('SET SESSION innodb_lock_wait_timeout = 2');
+
+            try {
+                seoStatsStoreEvents($events, $visitorId);
+
+                return null;
+            } catch (\Throwable $error) {
+                return $error;
+            } finally {
+                run('SET SESSION innodb_lock_wait_timeout = ' . $previous);
+            }
+        } finally {
+            $rival->rollBack();
+        }
+    }
 }

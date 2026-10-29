@@ -140,6 +140,42 @@ final class SeoFunnelsAdminTest extends TestCase
         self::assertSame(0, (int) value('SELECT enabled FROM ' . t('seo_funnel') . ' WHERE id = ?', [$id]));
     }
 
+    public function testКнопкиШаблонаПереключаютВоронкуИДатаСозданияОстаётся(): void
+    {
+        // Две находки: кнопки из шаблона шлют funnel_disable/funnel_enable — обработчик
+        // о них не знал, и обе кнопки всегда отвечали «Неизвестное действие». А тот, кто
+        // переключал воронку обходным путём, каждый раз затирал ей дату создания: в
+        // таблице нет updated_at, и прежний UPDATE писал текущий штамп в created_at.
+        $this->loginAdmin();
+
+        $this->press([
+            'op' => 'funnel_create',
+            'name' => 'Путь к заказу',
+        ]);
+
+        $created = one('SELECT id, created_at FROM ' . t('seo_funnel') . ' WHERE name = ?', ['Путь к заказу']);
+        $id = (string) $created['id'];
+
+        $disable = Kernel::post(self::PATH, [
+            '_token' => Kernel::tokenFrom(Kernel::get(self::PATH)['body']),
+            'op' => 'funnel_disable',
+            'id' => $id,
+        ]);
+
+        self::assertSame(302, $disable['status']);
+        self::assertStringContainsString('notice=funnel_disabled', $disable['headers']['location']);
+        self::assertSame(0, (int) value('SELECT enabled FROM ' . t('seo_funnel') . ' WHERE id = ?', [$id]));
+
+        $enable = $this->press(['op' => 'funnel_enable', 'id' => $id]);
+
+        self::assertSame(302, $enable['status']);
+        self::assertStringContainsString('notice=funnel_enabled', $enable['headers']['location']);
+        self::assertSame(1, (int) value('SELECT enabled FROM ' . t('seo_funnel') . ' WHERE id = ?', [$id]));
+
+        // Дата создания не сдвигается ни одним из переключений.
+        self::assertSame((string) $created['created_at'], (string) value('SELECT created_at FROM ' . t('seo_funnel') . ' WHERE id = ?', [$id]));
+    }
+
     public function testВоронкаУдаляется(): void
     {
         $this->loginAdmin();

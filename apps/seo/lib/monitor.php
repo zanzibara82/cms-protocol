@@ -71,27 +71,22 @@ function seoMonitorRecordMiss(string $path): void
 
     $referrer = seoStatsReferrerHost((string) ($_SERVER['HTTP_REFERER'] ?? ''));
     $stamp = utcStamp(nowUtc());
-    $existing = one('SELECT id FROM ' . t('seo_404') . ' WHERE path = ?', [$clean]);
 
-    if ($existing === null) {
-        insert('seo_404', [
-            'id' => newId(),
-            'path' => $clean,
-            'hits' => 1,
-            'referrer_host' => $referrer !== '' ? $referrer : null,
-            'first_seen_at' => $stamp,
-            'last_seen_at' => $stamp,
-        ]);
-
-        seoMonitorTrim();
-
-        return;
-    }
-
+    // Одна строка на адрес держится уникальным ключом, и вставка с обновлением на месте
+    // честнее select-then-insert: два первых одновременных запроса прочли бы оба «нет
+    // такой строки», и второй INSERT падал бы 1062-м исключением невхости — смотрющийся
+    // посетителю HTTP 500 на несуществующем адресе. Повторное обращение только
+    // увеличивает счётчик и обновляет отметку, referrer первой встречи остаётся.
     run(
-        'UPDATE ' . t('seo_404') . ' SET hits = hits + 1, last_seen_at = ? WHERE id = ?',
-        [$stamp, (string) $existing['id']]
+        'INSERT INTO ' . t('seo_404') . ' (id, path, hits, referrer_host, first_seen_at, last_seen_at)'
+        . ' VALUES (?, ?, 1, ?, ?, ?)'
+        . ' ON DUPLICATE KEY UPDATE hits = hits + 1, last_seen_at = VALUES(last_seen_at)',
+        [newId(), $clean, $referrer !== '' ? $referrer : null, $stamp, $stamp]
     );
+
+    // Срез вызывается после каждой записи: внутри один COUNT и ранний выход, пока журнал
+    // не налился сверх границы.
+    seoMonitorTrim();
 }
 
 /**
@@ -295,24 +290,54 @@ function seoMonitorRedirectSave(array $values): array
     $stamp = utcStamp(nowUtc());
 
     if ($existing !== null) {
-        run(
-            'UPDATE ' . t('seo_redirect') . ' SET to_path = ?, code = ?, updated_at = ? WHERE id = ?',
-            [(string) $values['to'], (int) $values['code'], $stamp, (string) $existing['id']]
-        );
+        updateRedirectRow($existing, (array) $values);
 
         return ['ok' => true, 'error' => '', 'notice' => 'redirect_saved'];
     }
 
-    insert('seo_redirect', [
-        'id' => newId(),
-        'from_path' => (string) $values['from'],
-        'to_path' => (string) $values['to'],
-        'code' => (int) $values['code'],
-        'created_at' => $stamp,
-        'updated_at' => $stamp,
-    ]);
+    // Select-then-insert гонится в отказ двумя одновременными сохранениями: оба прочли «нет
+    // строки», и проигравший INSERT получает отказ уникального ключа. Семантика экрана —
+    // «вторая запись на тот же адрес обновляет первую», поэтому проигравший гонку дообновляет
+    // строку победителя; если правило меж тем удалили — честная причина, а не 500.
+    try {
+        insert('seo_redirect', [
+            'id' => newId(),
+            'from_path' => (string) $values['from'],
+            'to_path' => (string) $values['to'],
+            'code' => (int) $values['code'],
+            'created_at' => $stamp,
+            'updated_at' => $stamp,
+        ]);
+    } catch (Throwable $insertError) {
+        if (!duplicateInsertException($insertError)) {
+            throw $insertError;
+        }
+
+        $raced = seoMonitorRedirectByPath((string) $values['from']);
+
+        if ($raced === null) {
+            return ['ok' => false, 'error' => 'Это правило только что правят — обновите список и повторите.', 'notice' => ''];
+        }
+
+        updateRedirectRow($raced, (array) $values);
+    }
 
     return ['ok' => true, 'error' => '', 'notice' => 'redirect_saved'];
+}
+
+/**
+ * Обновление строки правила значениями формы: одна рука для спокойной правки и для
+ * дообновления после проигранной гонки вставки.
+ *
+ * @param array<string, mixed> $existing
+ * @param array{from: string, to: string, code: int} $values
+ */
+function updateRedirectRow(array $existing, array $values): void
+{
+    run(
+        'UPDATE ' . t('seo_redirect') . ' SET to_path = ?, code = ?, updated_at = ? WHERE id = ?',
+        [(string) $values['to'], (int) $values['code'], utcStamp(nowUtc()), (string) $existing['id']]
+    );
 }
 
 /**

@@ -166,6 +166,34 @@ final class SeoSchemaTest extends TestCase
         self::assertNull(seoSchemaByPath('/obhod'));
     }
 
+    public function testДообновлениеПослеПроиграннойГонки(): void
+    {
+        // Гонку вставки в тесте не поднять (победитель обязан закоммитить между SELECT и INSERT
+        // того же процесса), поэтому код гонки-проигравшего проверяется своей рукой: дообновление
+        // должно перезаписать строку победителя и сдвинуть updated_at, не заводя вторую строку.
+        seoSchemaSave(seoSchemaValidate(self::form())['values']);
+        $winner = seoSchemaByPath('/obhod');
+        self::assertIsArray($winner);
+
+        updateSchemaRow($winner, [
+            'schema_type' => 'Article',
+            'name' => 'Дообновлённая разметка',
+            'description' => null,
+            'image' => null,
+            'author' => null,
+            'date_published' => null,
+            'date_modified' => null,
+            'updated_at' => utcStamp(nowUtc()),
+        ]);
+
+        // Строка в справочнике одна, значения формы переписали строку победителя: тем самым
+        // рука гонки-проигравшего доезжает до базы (updated_at держит секундная точность,
+        // сравнение дат внутри одной секунды ничего не доказывает).
+        self::assertCount(1, seoSchemaList(), 'Дообновление не заводит вторую разметку');
+        self::assertSame('Дообновлённая разметка', (string) (seoSchemaByPath('/obhod')['name'] ?? ''));
+        self::assertSame('Article', (string) (seoSchemaByPath('/obhod')['schema_type'] ?? ''));
+    }
+
     public function testУдалениеНесуществующейРазметкиДаётОтказ(): void
     {
         $result = seoSchemaDelete('net-takoy-stroki');

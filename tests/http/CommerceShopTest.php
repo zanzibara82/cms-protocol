@@ -129,6 +129,55 @@ final class CommerceShopTest extends TestCase
         self::assertSame(34, CommerceHttpSetup::stockOf());
     }
 
+    public function testДобавлениеВКорзинуВозвращаетНаИсходныйЭкран(): void
+    {
+        // Дефект «back»: адрес возврата честно проверяли, но не использовали — рука всегда
+        // прыгала в корзину, даже добавляя товар с карточки. Возврат обязан идти по полю.
+        $page = Kernel::get('/shop/kofemashina');
+        self::assertSame(200, $page['status']);
+
+        $added = Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+
+        self::assertSame(302, $added['status']);
+        self::assertSame('/shop/kofemashina', (string) ($added['headers']['location'] ?? ''));
+
+        // Форма витрины шлёт свой адрес: возврат тоже там, а не в корзине.
+        $shop = Kernel::get('/shop');
+        $addedShop = Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($shop['body']),
+            'id' => CommerceHttpSetup::$productId,
+            'qty' => '1',
+            'back' => '/shop',
+        ]);
+
+        self::assertSame(302, $addedShop['status']);
+        self::assertSame('/shop', (string) ($addedShop['headers']['location'] ?? ''));
+    }
+
+    public function testОтказДобавленияВедётВКорзинуСПричиной(): void
+    {
+        // При отказе возврат остаётся в корзине: там экран читает и печатает flash причины.
+        $page = Kernel::get('/shop/kofemashina');
+
+        $rejected = Kernel::post('/shop/cart/add', [
+            '_token' => $this->token($page['body']),
+            'id' => 'не-того-товара',
+            'qty' => '1',
+            'back' => '/shop/kofemashina',
+        ]);
+
+        self::assertSame(302, $rejected['status']);
+        self::assertSame('/shop/cart', (string) ($rejected['headers']['location'] ?? ''));
+
+        $cart = Kernel::get('/shop/cart');
+        self::assertStringContainsString('Товар недоступен для покупки', $cart['body']);
+    }
+
     public function testЗаказБезТокенаОтклоняется(): void
     {
         $response = Kernel::post('/shop/order', [
@@ -320,6 +369,50 @@ final class CommerceShopTest extends TestCase
 
         $page = Kernel::get('/commerce/admin/orders');
         self::assertStringContainsString('Отправленный или завершённый заказ отменить нельзя', $page['body']);
+    }
+
+    public function testПравкаТовараСНеизменнымАртикуломПроходит(): void
+    {
+        // Критичный для этой задачи дефект: форма товара не несёт служебного идентификатора
+        // (POST — это ввод человека), а валидатор сверял занятость SKU с `$_POST['id']`.
+        // Каждая правка без смены артикула отвечала отказом «занят другим товаром» —
+        // сохранить цену или остаток было нельзя. POST здесь честный: без поля id вовсе.
+        $this->ensureEditor();
+        $this->login();
+
+        $form = Kernel::get('/commerce/admin/products/' . CommerceHttpSetup::$productId);
+        self::assertSame(200, $form['status']);
+
+        $save = Kernel::post('/commerce/admin/products/' . CommerceHttpSetup::$productId, [
+            '_token' => $this->token($form['body']),
+            'title' => 'Кофемашина',
+            'sku' => 'COFFEE-1',
+            'slug' => 'kofemashina',
+            'brand' => '',
+            'barcode' => '',
+            'lead_text' => 'Готовит эспрессо и капучино.',
+            'price_retail' => '2800,00',
+            'price_promo' => '2240,00',
+            'price_cost' => '',
+            'currency' => 'RUB',
+            'stock' => '34',
+            'status' => 'PUBLISHED',
+            'seo_title' => '',
+            'seo_description' => '',
+            'noindex' => '0',
+            'body_title' => [],
+            'body_text' => [],
+            'categories' => [],
+        ]);
+
+        // Отказ формы приходил бы ответом 200 с плашкой: сохранение красит список авторедиректом.
+        self::assertSame(302, $save['status'], $save['body']);
+
+        // Правка попала в базу: остаток поменялся под тем же артикулом.
+        self::assertSame('34', (string) value(
+            'SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?',
+            [CommerceHttpSetup::$productId]
+        ));
     }
 
     public function testЧастныйПутьМагазинаЗакрытRobots(): void

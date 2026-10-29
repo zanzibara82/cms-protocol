@@ -75,13 +75,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 116;
-    private const MARKED_TOTAL = 94;
+    private const VARIANTS_TOTAL = 117;
+    private const MARKED_TOTAL = 95;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (116 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 115;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (117 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 116;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -975,6 +975,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /future' => [
                 ['path' => '/future', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /brokenseed' => [
+                ['path' => '/brokenseed', 'outcome' => self::MARKED, 'status' => 404],
             ],
         ];
     }

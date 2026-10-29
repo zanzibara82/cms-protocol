@@ -257,6 +257,27 @@ final class CommerceOrderTest extends CommerceDbTestCase
         self::assertStringContainsString('«Оплачен»', $text);
     }
 
+    public function testДвойнаяОтменаОдногоЗаказаВозвращаетОстатокОдинРаз(): void
+    {
+        // Гонка смены статуса: два одновременных «Отменить» прочли один и тот же статус и
+        // раньше доезжали до двух независимых UPDATE — остаток удваивался, купон расходом
+        // возвращался дважды. Охрана «WHERE … AND status = ?» отдаёт обновление первому.
+        $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
+        $order = commerceOrderCreate(self::checkout(), [self::line($product, 'RUB', 2, 10000)]);
+        self::assertSame(3, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
+
+        $first = commerceSetOrderStatus((string) $order['id'], 'CANCELLED');
+        self::assertTrue($first['ok'], $first['error']);
+        self::assertSame(5, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
+
+        $second = commerceSetOrderStatus((string) $order['id'], 'CANCELLED');
+
+        self::assertFalse($second['ok']);
+        self::assertSame('Заказ уже в этом статусе.', (string) $second['error']);
+        // Один возврат — один приход остатка: второй отказал и ничего не вернул.
+        self::assertSame(5, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
+    }
+
     public function testОтменаОправленногоНеВозвращаетОстаток(): void
     {
         $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
@@ -271,6 +292,47 @@ final class CommerceOrderTest extends CommerceDbTestCase
         self::assertFalse($result['ok']);
         // Товарные позиции после отправки уже выбраны: отмена не возвращает их наряду.
         self::assertSame(3, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$product]));
+    }
+
+    public function testРаскупленнаяПозицияИсчезаетИзКорзиныИЗаказа(): void
+    {
+        // Дефект багажа: строка «0 × цена» доезжала до базы — списание с qty = 0 проходило
+        // охрану (stock >= 0 всегда истинно), и заказ считался успешным.
+        $soldOut = self::makeProduct(['slug' => 'sold-out', 'sku' => 'OUT-1', 'title' => 'Раскупленная', 'stock' => 0]);
+        $alive = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'title' => 'Кола', 'stock' => 5]);
+
+        startSession();
+        $_SESSION[COMMERCE_SESSION_CART] = [$soldOut => 3, $alive => 2];
+
+        $lines = commerceCartLines();
+
+        self::assertCount(1, $lines, 'Раскупленная позиция молча исчезает из списка корзины');
+        self::assertSame('KOLA-1', (string) $lines[0]['sku']);
+
+        $order = commerceOrderCreate(self::checkout(), $lines);
+
+        self::assertTrue($order['ok'], $order['error']);
+
+        // В заказе только живая позиция; раскупленная не составила «0 × цена» и не прошла
+        // списание мимо охраны остатка.
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('commerce_order_item') . ' WHERE order_id = ?',
+            [(string) $order['id']]
+        ));
+        self::assertSame(3, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$alive]));
+        self::assertSame(0, (int) value('SELECT stock FROM ' . t('commerce_product') . ' WHERE id = ?', [$soldOut]));
+    }
+
+    public function testНулеваяСтрокаННапрямуюЗаказНеСоставляет(): void
+    {
+        $product = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1', 'stock' => 5]);
+
+        // Защита на входе commerceOrderCreate(): даже если позиция пришла мимо корзины
+        // (например, из чужого кода через фильтр), нулевая строка заказа не составляет.
+        $order = commerceOrderCreate(self::checkout(), [self::line($product, 'RUB', 0, 10000)]);
+
+        self::assertFalse($order['ok']);
+        self::assertSame('Корзина пуста.', (string) $order['error']);
     }
 
     // -----------------------------------------------------------------------

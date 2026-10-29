@@ -474,15 +474,23 @@ function orNull(string $value): ?string
 }
 
 // Рубрику могли удалить из справочника, пока форма висела открытой: ответ обязан называть причину,
-// а не падать на внешнем ключе.
-function checkCategory(string $categoryId): string
+// а не падать на внешнем ключе. Публикация требует видимой рубрики: у скрытой карточке негде
+// показаться, и кнопка списка такое правило уже держит (setItemStatus) — форма обязана сверить
+// то же правило, иначе «На печать» облистывало б размещение рубрики.
+function checkCategory(string $categoryId, bool $requireVisible = false): string
 {
     if ($categoryId === '') {
         return 'Выберите рубрику: без неё материал не попадёт ни в один раздел.';
     }
 
-    if (!categoryExists($categoryId)) {
+    $category = one('SELECT title, visible FROM ' . t('news_category') . ' WHERE id = ?', [$categoryId]);
+
+    if ($category === null) {
         return 'Рубрики, в которую вы кладёте материал, уже нет — выберите другую.';
+    }
+
+    if ($requireVisible && (int) $category['visible'] !== 1) {
+        return sprintf('Рубрика «%s» скрыта: сначала покажите её в справочнике.', (string) $category['title']);
     }
 
     return '';
@@ -708,7 +716,12 @@ function createItem(array $input, array $editor, ?DateTimeImmutable $now = null)
     $moment = $now ?? nowUtc();
     $status = (string) ($input['status'] ?? NEWS_STATUS['DRAFT']);
 
-    $categoryError = checkCategory((string) ($input['categoryId'] ?? ''));
+    // На печать публикация идёт кнопкой формы и кнопкой списка — правило рубрики одно:
+    // печатается материал только в видимой рубрике.
+    $categoryError = checkCategory(
+        (string) ($input['categoryId'] ?? ''),
+        $status === NEWS_STATUS['PUBLISHED']
+    );
 
     if ($categoryError !== '') {
         return itemFailure($categoryError);
@@ -738,13 +751,24 @@ function createItem(array $input, array $editor, ?DateTimeImmutable $now = null)
     $tagIds = resolveTagIds(tagLabelsOf($input['tags'] ?? []));
     $publishedNow = $status === NEWS_STATUS['PUBLISHED'];
 
-    tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $publishedNow, $moment, $tagIds): void {
-        insert('news_item', array_merge(
-            dataOf($input, $publishedAt, $editor, $publishedNow, $moment),
-            ['id' => $id, 'slug' => $slug, 'created_at' => utcStamp($moment)]
-        ));
-        linkItemTags($id, $tagIds);
-    });
+    // Slug свободен в момент плана, но два одновременных сохранения могут претендовать на
+    // один и тот же адрес: проигравшая вставка получает отказ уникального ключа. Человеку
+    // возвращается причина с предложением, а не HTTP 500 сырого исключения.
+    try {
+        tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $publishedNow, $moment, $tagIds): void {
+            insert('news_item', array_merge(
+                dataOf($input, $publishedAt, $editor, $publishedNow, $moment),
+                ['id' => $id, 'slug' => $slug, 'created_at' => utcStamp($moment)]
+            ));
+            linkItemTags($id, $tagIds);
+        });
+    } catch (Throwable $error) {
+        if (!duplicateInsertException($error)) {
+            throw $error;
+        }
+
+        return itemFailure('Такой адрес уже занят другим материалом — предложите свой.');
+    }
 
     logInfo('news.item_created', ['itemId' => $id, 'slug' => $slug, 'status' => $status]);
 
@@ -769,7 +793,11 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
     }
 
     $status = (string) ($input['status'] ?? NEWS_STATUS['DRAFT']);
-    $categoryError = checkCategory((string) ($input['categoryId'] ?? ''));
+    // Правило то же, что у создания и у кнопки списка: публикация только в видимой рубрике.
+    $categoryError = checkCategory(
+        (string) ($input['categoryId'] ?? ''),
+        $status === NEWS_STATUS['PUBLISHED']
+    );
 
     if ($categoryError !== '') {
         return itemFailure($categoryError);
@@ -804,19 +832,29 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
     // доходить до карточки, а не в 404 (§8.3).
     $oldSlugs = rememberOldSlug(oldSlugsOf($id), $previous, $slug);
 
-    tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $becamePublished, $moment, $tagIds, $oldSlugs, $slugChanged): void {
-        $data = array_merge(dataOf($input, $publishedAt, $editor, $becamePublished, $moment), ['slug' => $slug]);
+    // Адрес свободен в момент плана, но правка и чужая публикация могут претендовать на
+    // один и тот же slug — проигравший UPDATE получает отказ уникального ключа.
+    try {
+        tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $becamePublished, $moment, $tagIds, $oldSlugs, $slugChanged): void {
+            $data = array_merge(dataOf($input, $publishedAt, $editor, $becamePublished, $moment), ['slug' => $slug]);
 
-        run(
-            'UPDATE ' . t('news_item') . ' SET ' . implode(', ', updateSet($data)) . ' WHERE id = ?',
-            array_merge(array_values($data), [$id])
-        );
-        linkItemTags($id, $tagIds);
+            run(
+                'UPDATE ' . t('news_item') . ' SET ' . implode(', ', updateSet($data)) . ' WHERE id = ?',
+                array_merge(array_values($data), [$id])
+            );
+            linkItemTags($id, $tagIds);
 
-        if ($slugChanged) {
-            saveOldSlugs($id, $oldSlugs);
+            if ($slugChanged) {
+                saveOldSlugs($id, $oldSlugs);
+            }
+        });
+    } catch (Throwable $error) {
+        if (!duplicateInsertException($error)) {
+            throw $error;
         }
-    });
+
+        return itemFailure('Такой адрес уже занят другим материалом — предложите свой.');
+    }
 
     logInfo('news.item_updated', [
         'itemId' => $id,

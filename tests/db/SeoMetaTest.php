@@ -44,6 +44,11 @@ final class SeoMetaTest extends TestCase
     {
         run('DELETE FROM ' . t('seo_meta'));
         $_SERVER['REQUEST_URI'] = '/';
+
+        // Счётчик посещений — чужая подписка page_meta: по умолчанию сбор включён, и тег
+        // скрипта въезжал бы в каждую голову. Набор проверяет метаданные, а не счётчик:
+        // сбор выключается на класс, тег скрипта проверяет SeoCollectTest.
+        setOption(SEO_STATS_OPTION_ENABLED, '0');
     }
 
     protected function tearDown(): void

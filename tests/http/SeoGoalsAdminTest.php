@@ -164,6 +164,38 @@ final class SeoGoalsAdminTest extends TestCase
         self::assertSame(0, (int) value('SELECT enabled FROM ' . t('seo_goal') . ' WHERE id = ?', [$id]));
     }
 
+    public function testКнопкиШаблонаПереключаютЦель(): void
+    {
+        // Дефект «op из шаблона»: кнопки «Выключить»/«Включить» шлют goal_disable/goal_enable,
+        // а обработчик принимал только goal_toggle — обе кнопки всегда отвечали «Неизвестное
+        // действие», и переключение цели из интерфейса было мёртво.
+        $this->loginAdmin();
+
+        $this->press([
+            'op' => 'goal_create',
+            'name' => 'Завершение заказа',
+            'type' => SEO_GOAL_TYPE_PAGE_VIEW,
+            'pattern' => '/order/success',
+            'match_type' => SEO_GOAL_MATCH_PREFIX,
+            'source' => '',
+            'device' => '',
+        ]);
+
+        $id = (string) one('SELECT id FROM ' . t('seo_goal') . ' WHERE name = ?', ['Завершение заказа'])['id'];
+
+        $disable = $this->press(['op' => 'goal_disable', 'id' => $id]);
+
+        self::assertSame(302, $disable['status']);
+        self::assertStringContainsString('notice=goal_disabled', $disable['headers']['location']);
+        self::assertSame(0, (int) value('SELECT enabled FROM ' . t('seo_goal') . ' WHERE id = ?', [$id]));
+
+        $enable = $this->press(['op' => 'goal_enable', 'id' => $id]);
+
+        self::assertSame(302, $enable['status']);
+        self::assertStringContainsString('notice=goal_enabled', $enable['headers']['location']);
+        self::assertSame(1, (int) value('SELECT enabled FROM ' . t('seo_goal') . ' WHERE id = ?', [$id]));
+    }
+
     public function testЦельУдаляется(): void
     {
         $this->loginAdmin();

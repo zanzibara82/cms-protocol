@@ -211,32 +211,62 @@ function seoSchemaSave(array $values): array
     ];
 
     if ($existing !== null) {
-        run(
-            'UPDATE ' . t('seo_schema') . ' SET schema_type = ?, name = ?, description = ?, image = ?,'
-            . ' author = ?, date_published = ?, date_modified = ?, updated_at = ? WHERE id = ?',
-            [
-                (string) $row['schema_type'],
-                (string) $row['name'],
-                $row['description'],
-                $row['image'],
-                $row['author'],
-                $row['date_published'],
-                $row['date_modified'],
-                (string) $row['updated_at'],
-                (string) $existing['id'],
-            ]
-        );
+        updateSchemaRow($existing, $row);
 
         return ['ok' => true, 'error' => '', 'notice' => 'schema_saved'];
     }
 
-    insert('seo_schema', array_merge($row, [
-        'id' => newId(),
-        'path' => (string) $values['path'],
-        'created_at' => $stamp,
-    ]));
+    // Select-then-insert гонится в отказ двумя одновременными сохранениями: оба прочли «нет
+    // строки», и проигравший INSERT получает отказ уникального ключа. Семантика экрана —
+    // «вторая запись на тот же адрес обновляет первую», поэтому проигравший гонку дообновляет
+    // строку победителя; если строку меж тем удалили — честная причина, а не 500.
+    try {
+        insert('seo_schema', array_merge($row, [
+            'id' => newId(),
+            'path' => (string) $values['path'],
+            'created_at' => $stamp,
+        ]));
+    } catch (Throwable $insertError) {
+        if (!duplicateInsertException($insertError)) {
+            throw $insertError;
+        }
+
+        $raced = seoSchemaByPath((string) $values['path']);
+
+        if ($raced === null) {
+            return ['ok' => false, 'error' => 'Разметку на этот адрес только что правят — обновите список и повторите.', 'notice' => ''];
+        }
+
+        updateSchemaRow($raced, $row);
+    }
 
     return ['ok' => true, 'error' => '', 'notice' => 'schema_saved'];
+}
+
+/**
+ * Обновление строки разметки значениями формы: одна рука для спокойной правки и для
+ * дообновления после проигранной гонки вставки.
+ *
+ * @param array<string, mixed> $existing
+ * @param array{schema_type: string, name: string, description: ?string, image: ?string, author: ?string, date_published: ?string, date_modified: ?string, updated_at: string} $row
+ */
+function updateSchemaRow(array $existing, array $row): void
+{
+    run(
+        'UPDATE ' . t('seo_schema') . ' SET schema_type = ?, name = ?, description = ?, image = ?,'
+        . ' author = ?, date_published = ?, date_modified = ?, updated_at = ? WHERE id = ?',
+        [
+            (string) $row['schema_type'],
+            (string) $row['name'],
+            $row['description'],
+            $row['image'],
+            $row['author'],
+            $row['date_published'],
+            $row['date_modified'],
+            (string) $row['updated_at'],
+            (string) $existing['id'],
+        ]
+    );
 }
 
 /**

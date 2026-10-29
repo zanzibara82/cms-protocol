@@ -377,8 +377,9 @@ function classifiedsCreateListing(string $ownerId, array $values, ?DateTimeImmut
 }
 
 /**
- * Правка объявления. Владельца, адрес, категорию и статус правит вызывающий код —
- * здесь чистятся текстовые поля и цена.
+ * Правка объявления: строка, характеристики и галерея едят одной транзакцией — сбой посреди
+ * сохранения не оставляет объявление с новым текстом и старыми атрибутами. Владение проверяет
+ * вызывающий код (кабинет), форма приносит готовый статус и категорию — здесь только запись.
  *
  * @param array<string, mixed> $values результат classifiedsValidateListing()
  * @return array{ok: bool, error: string, notice: string}
@@ -399,8 +400,10 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
 
     $moment = $now ?? nowUtc();
     $status = (string) $values['status'];
-    // Первая публикация, повторная после черновика и продление истёкшей записи получают
-    // новый срок. Обычное редактирование опубликованного срок не сдвигает.
+    // Первая публикация и повторная после черновика получают новый срок. Правка истёкшего
+    // срок НЕ сдвигает: бесплатно продлевать истёкшее из правки нельзя — продление это
+    // явное действие владельца («Опубликовать» в кабинете) или платное продление.
+    // Обычное редактирование опубликованного срок не сдвигает.
     $expiresAt = $listing['expires_at'];
     // Отправка на проверку начинает новый круг: старая причина отказа больше не актуальна.
     $moderationNote = $status === 'PENDING_REVIEW' ? null : $listing['moderation_note'];
@@ -408,7 +411,7 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
 
     if ($status !== 'PUBLISHED') {
         $expiresAt = null;
-    } elseif ($expiresAt === null || (string) $listing['status'] !== 'PUBLISHED' || classifiedsListingIsExpired($listing, $moment)) {
+    } elseif ($expiresAt === null || (string) $listing['status'] !== 'PUBLISHED') {
         $expiresAt = classifiedsListingNewExpiry($moment);
     }
 
@@ -416,39 +419,43 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
         $moderationNote = null;
     }
 
-    run(
-        'UPDATE ' . t('classifieds_listing')
-        . ' SET category_id = ?, slug = ?, title = ?, body = ?, price = ?, negotiable = ?, location = ?,' .
-        ' image = ?, status = ?, expires_at = ?, moderation_note = ?, submitted_at = ?, seo_title = ?, seo_description = ?, noindex = ?, views_public = ?, updated_at = ? WHERE id = ?',
-        [
-            (string) $values['category'],
-            $slug,
-            (string) $values['title'],
-            (string) $values['body'],
-            $values['price_float'],
-            (int) $values['negotiable'],
-            (string) $values['location'] !== '' ? (string) $values['location'] : null,
-            isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
-            $status,
-            $expiresAt,
-            $moderationNote,
-            $submittedAt,
-            (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
-            (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
-            (int) $values['noindex'],
-            (int) ($values['views_public'] ?? 1),
-            utcStamp($moment),
-            $id,
-        ]
-    );
+    tx(static function () use ($id, $values, $status, $expiresAt, $moderationNote, $submittedAt, $moment): void {
+        run(
+            'UPDATE ' . t('classifieds_listing')
+            . ' SET category_id = ?, slug = ?, title = ?, body = ?, price = ?, negotiable = ?, location = ?,' .
+            ' image = ?, status = ?, expires_at = ?, moderation_note = ?, submitted_at = ?, seo_title = ?, seo_description = ?, noindex = ?, views_public = ?, updated_at = ? WHERE id = ?',
+            [
+                (string) $values['category'],
+                (string) $values['slug'],
+                (string) $values['title'],
+                (string) $values['body'],
+                $values['price_float'],
+                (int) $values['negotiable'],
+                (string) $values['location'] !== '' ? (string) $values['location'] : null,
+                isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
+                $status,
+                $expiresAt,
+                $moderationNote,
+                $submittedAt,
+                (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
+                (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
+                (int) $values['noindex'],
+                (int) ($values['views_public'] ?? 1),
+                utcStamp($moment),
+                $id,
+            ]
+        );
 
-    if (isset($values['attributes']) && is_array($values['attributes'])) {
-        classifiedsReplaceListingAttributes($id, $values['attributes']);
-    }
+        if (isset($values['attributes']) && is_array($values['attributes'])) {
+            classifiedsReplaceListingAttributes($id, $values['attributes']);
+        }
 
-    if (isset($values['gallery']) && is_array($values['gallery'])) {
-        classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $now);
-    }
+        if (isset($values['gallery']) && is_array($values['gallery'])) {
+            classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $moment);
+        }
+    });
+
+    logInfo('classifieds.listing_updated', ['listingId' => $id, 'slug' => (string) $values['slug'], 'status' => $status]);
 
     return ['ok' => true, 'error' => '', 'notice' => 'listing_saved'];
 }
@@ -594,8 +601,9 @@ function classifiedsListingClone(string $id, string $ownerId, ?DateTimeImmutable
 }
 
 /**
- * Удаление объявления владельцем. Черновики удаляются молча; публикация сначала снимается —
- * правило в кабинете проверяет состояние, здесь честно стирает строку.
+ * Удаление объявления владельцем. Черновики удаляются молча; опубликованное сначала
+ * снимается с публикации событием — подписчик узнаёт о исчезновении, а не замечает его
+ * молчанием витрины: отсутствие объявления в выдаче и событие «снято» различаются.
  *
  * @return array{ok: bool, error: string, notice: string}
  */
@@ -612,6 +620,13 @@ function classifiedsListingDelete(string $id, string $ownerId): array
 
     if ($cover !== '') {
         array_unshift($files, $cover);
+    }
+
+    // Событие уходит ДО стирания строки: приёмник, пришедший позже удаления, получил бы
+    // обещание «сам заберёт детали» по адресу, которого уже нет. Данные события — снимок
+    // строки с её текущим статусом: подписчик видит именно то, что было снято.
+    if ((string) $listing['status'] === 'PUBLISHED') {
+        classifiedsWebhookEvent('listing.hidden', classifiedsWebhookListingData($listing));
     }
 
     run('DELETE FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$id]);

@@ -84,21 +84,49 @@ final class LoginLimitTest extends TestCase
     // хотя тексты отказов уже были одинаковые. Замер сделан относительно эталона, полученного
     // на этой же машине в этом же процессе, — поэтому он не зависит от скорости диска и не
     // сравнивает между собой две ветки входа (такой тест дрейфует).
+    //
+    // Две серии замеров подряд (сначала эталон, потом вход) нечестны: эталонная серия горит
+    // чистым процессором, а серия входа между вызовами отдыхает на паузах базы, и машина
+    // с квотой CPU систематически занижает вторую серию — прямой замер в контейнере даёт
+    // равные медианы (458 против 467 мс) при попеременном цикле, а при двух сериях подряд
+    // стабильно выходит 0.74–0.77. Поэтому пары замеров чередуются в одном цикле: обе стороны
+    // живут в одном графике нагрузки, а медианы сглаживают одиночные выбросы.
     public function testОтказПоНеизвестномуАдресуСтоитКакПроверкаПароля(): void
     {
         $probeHash = hashPassword('эталон-для-замера');
 
-        $start = hrtime(true);
-        verifyPassword('не тот пароль', $probeHash);
-        $verifyMs = (hrtime(true) - $start) / 1000000;
+        // Разогрев: первый вызов аргона после паузы дороже следующих (fault страниц под
+        // 64 МиБ рабочего множества), и одиночный холодный выброс не должен лечь в медиану.
+        verifyPassword('разогрев', $probeHash);
+        $warmup = attemptLogin('razogrev-zamera@school.dev', 'неверный-пароль');
+        self::assertFalse($warmup['ok']);
+        self::assertSame(LOGIN_ERROR_GENERIC, $warmup['error']);
 
-        $start = hrtime(true);
-        $result = attemptLogin('net-takogo@school.dev', 'неверный-пароль');
-        $loginMs = (hrtime(true) - $start) / 1000000;
+        $verifyMs = [];
+        $loginMs = [];
 
-        self::assertFalse($result['ok']);
-        self::assertSame(LOGIN_ERROR_GENERIC, $result['error']);
-        self::assertGreaterThanOrEqual($verifyMs * 0.8, $loginMs, 'Отказ по неизвестному адресу быстрее проверки пароля — адрес выдаётся временем ответа');
+        for ($trial = 0; $trial < 7; $trial++) {
+            $start = hrtime(true);
+            verifyPassword('не тот пароль', $probeHash);
+            $verifyMs[] = (hrtime(true) - $start) / 1000000;
+
+            $start = hrtime(true);
+            // Адрес на каждую попытку свой: лимит «пять неудач на адрес» иначе закроет
+            // серию раньше медианы, и замер встал бы на отказ «слишком много попыток».
+            $result = attemptLogin('net-takogo-' . $trial . '@school.dev', 'неверный-пароль');
+            $loginMs[] = (hrtime(true) - $start) / 1000000;
+
+            self::assertFalse($result['ok']);
+            self::assertSame(LOGIN_ERROR_GENERIC, $result['error']);
+        }
+
+        $median = static function (array $times): float {
+            sort($times);
+
+            return (float) $times[intdiv(count($times), 2)];
+        };
+
+        self::assertGreaterThanOrEqual($median($verifyMs) * 0.8, $median($loginMs), 'Отказ по неизвестному адресу быстрее проверки пароля — адрес выдаётся временем ответа');
     }
 
     // Пакет #289, находка первой тяжести: адрес длиннее ширины колонки tbl_login_attempt.email (190)

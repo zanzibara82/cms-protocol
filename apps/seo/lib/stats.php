@@ -211,7 +211,9 @@ function seoCollectorTokenValid(string $token): bool
 
 /**
  * Секрет подписи: он живёт в настройках и появляется при первом обращении. Секрет не в
- * манифесте и не в коде: подпись должна быть неподдельной, а не «примерно такой».
+ * манифесте и не в коде: подпись должна быть неподдельной, а не «примерно такой». Первое
+ * создание выдерживает гонку: два одновременных первых запроса получают один и тот же
+ * секрет, а не два разных.
  */
 function seoCollectSecret(): string
 {
@@ -219,7 +221,21 @@ function seoCollectSecret(): string
 
     if ($secret === '') {
         $secret = bin2hex(random_bytes(32));
-        setOption(SEO_STATS_OPTION_SECRET, $secret);
+
+        // Вставка «только если строки ещё нет» вместо setOption(): тот перезаписывает
+        // значение по «ON DUPLICATE KEY UPDATE», и из двух одновременных первых запросов
+        // последний затёр бы секрет первого — страницы, подписанные между записями,
+        // перестали бы сверяться приёмником. Самоприсваивание оставляет значение победителя
+        // нетронутым, а перечитывание возвращает тот секрет, что реально лежит в базе:
+        // проигравший гонку вставки уходит с секретом победителя.
+        run(
+            'INSERT INTO ' . t('option') . ' (option_name, option_value, autoload) VALUES (?, ?, 1)'
+            . ' ON DUPLICATE KEY UPDATE option_value = option_value',
+            [SEO_STATS_OPTION_SECRET, $secret]
+        );
+
+        optionsReset();
+        $secret = trim(getOption(SEO_STATS_OPTION_SECRET, ''));
     }
 
     return $secret;
@@ -497,10 +513,6 @@ function seoStatsStoreEvents(array $events, string $visitorId): array
         return ['accepted' => 0, 'rejected' => count($events)];
     }
 
-    if (!seoStatsWithinRate($visitor, count($events))) {
-        return ['accepted' => 0, 'rejected' => count($events)];
-    }
-
     $settings = seoStatsSettings();
     $moment = nowUtc();
     $stamp = utcStamp($moment);
@@ -528,7 +540,17 @@ function seoStatsStoreEvents(array $events, string $visitorId): array
     // Пачка пишется одной транзакцией: без неё сбой на агрегате часа оставлял визиты и
     // сессию при живых счётчиках — сырьё и агрегаты расходились, а «половина пачки» не
     // откатывалась. Чтение сессии тоже внутри: она либо есть вместе с визитами, либо нет.
-    return tx(static function () use ($prepared, $rejected, $visitor, $stamp, $day, $hour, $settings): array {
+    $batchTotal = count($events);
+
+    // Предел проверяется первой операцией транзакции, а не до неё: проверка по снимку
+    // пропускала две одновременные пачки одного посетителя — каждая видела «место есть»,
+    // и минута выходила за предел. Блокирующий счёт внутри seoStatsWithinRate() ставит
+    // пачки одного посетителя в очередь, а отказ считает отвергнутой всю пачку, как и раньше.
+    return tx(static function () use ($prepared, $rejected, $visitor, $batchTotal, $stamp, $day, $hour, $settings): array {
+        if (!seoStatsWithinRate($visitor, $batchTotal)) {
+            return ['accepted' => 0, 'rejected' => $batchTotal];
+        }
+
         $session = seoStatsSessionForBatch($visitor, $prepared[0], $stamp, $day, $settings['timeout']);
 
         $visits = [];
@@ -615,8 +637,15 @@ function seoStatsStoreEvents(array $events, string $visitorId): array
  */
 function seoStatsSessionForBatch(string $visitor, array $first, string $stamp, string $day, int $timeoutMinutes): array
 {
+    // Блокирующее чтение: две одновременные пачки одного посетителя иначе обе видят
+    // «сессии нет» и заводят параллельные — счётчик сессий раздувается, а источник захода
+    // одной цепочки расходится. FOR UPDATE по индексу (visitor_id, last_seen_at) ставит
+    // пачки одного посетителя в очередь: проигравший дожидается фиксации победителя,
+    // продлевает его сессию и параллельной строки не заводит. Чтение живёт только внутри
+    // транзакции приёма, поэтому ожидание ограничено её длиной.
     $row = one(
-        'SELECT id, source, last_seen_at FROM ' . t('seo_session') . ' WHERE visitor_id = ? ORDER BY last_seen_at DESC LIMIT 1',
+        'SELECT id, source, last_seen_at FROM ' . t('seo_session')
+        . ' WHERE visitor_id = ? ORDER BY last_seen_at DESC LIMIT 1 FOR UPDATE',
         [$visitor]
     );
 
@@ -748,12 +777,17 @@ function seoStatsEnabledGoals(): array
  * вся пачка сразу: проверка «уже записано меньше предела» пропускала пачку из двадцати событий
  * поверх 119 записанных, и обещанный предел «не больше 120» тихо превращался в 139. Метка
  * подписи ограничивает и без этого, но предел нужен и на случай утёкшей подписи.
+ *
+ * Счёт блокирующий и зовётся только из транзакции приёма: обычный COUNT читает снимок и не
+ * видит незакоммиченной пачки соперника, поэтому две одновременные пачки обе видели «место
+ * есть». FOR UPDATE по индексу (visitor_id, created_at) выстраивает их в очередь —
+ * проигравший считает уже зафиксированные строки победителя.
  */
 function seoStatsWithinRate(string $visitor, int $batch): bool
 {
     $minuteAgo = utcStamp(shiftSeconds(nowUtc(), -60));
     $count = (int) value(
-        'SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE visitor_id = ? AND created_at >= ?',
+        'SELECT COUNT(*) FROM ' . t('seo_visit') . ' WHERE visitor_id = ? AND created_at >= ? FOR UPDATE',
         [$visitor, $minuteAgo]
     );
 

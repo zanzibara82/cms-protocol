@@ -10,6 +10,7 @@ declare(strict_types=1);
  * @var array<string, string> $values
  * @var array<string, string> $errors
  * @var string $notice
+ * @var string $cartError
  */
 $currency = (string) $totals['currency'];
 $formError = (string) ($errors['form'] ?? '');
@@ -22,6 +23,10 @@ $formError = (string) ($errors['form'] ?? '');
 
     <?php if ($notice !== ''): ?>
         <p class="rounded-lg border border-ink/10 bg-accent/10 p-4 text-sm"><?= e($notice) ?></p>
+    <?php endif; ?>
+
+    <?php if ($cartError !== ''): ?>
+        <p class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"><?= e($cartError) ?></p>
     <?php endif; ?>
 
     <?php if ($formError !== ''): ?>

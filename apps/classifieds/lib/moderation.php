@@ -72,9 +72,14 @@ function classifiedsModerationDecide(
     $moment = $now ?? nowUtc();
     $approved = $decision === 'approve';
 
-    run(
+    // Проверку «ждёт проверки» прошли двое одновременно — проигравший UPDATE обязан
+    // кончиться отказом, а не вторым уведомлением и вторым событием: два письма продавцу
+    // о одном решении врут. Условный UPDATE решает гонку одной инструкцией; ноль строк
+    // различается перечитыванием — строку удалили или её уже решили.
+    $rows = run(
         'UPDATE ' . t('classifieds_listing')
-        . ' SET status = ?, expires_at = ?, moderation_note = ?, submitted_at = NULL, updated_at = ? WHERE id = ?',
+        . ' SET status = ?, expires_at = ?, moderation_note = ?, submitted_at = NULL, updated_at = ?'
+        . " WHERE id = ? AND status = 'PENDING_REVIEW'",
         [
             $approved ? 'PUBLISHED' : 'REJECTED',
             $approved ? classifiedsListingNewExpiry($moment) : null,
@@ -83,6 +88,22 @@ function classifiedsModerationDecide(
             $id,
         ]
     );
+
+    if ($rows === 0) {
+        if (classifiedsListingById($id) === null) {
+            return ['ok' => false, 'error' => 'Объявление не найдено — обновите очередь.', 'notice' => ''];
+        }
+
+        return ['ok' => false, 'error' => 'Объявление уже не ждёт проверки — обновите очередь.', 'notice' => ''];
+    }
+
+    // Строка перечитывается после решения: событие уносит НОВЫЙ статус (подписчик получает
+    // честную пару «имя события — состояние в теле», а не старую «ждёт проверки»).
+    $listing = classifiedsListingById($id);
+
+    if ($listing === null) {
+        return ['ok' => false, 'error' => 'Объявление не найдено — обновите очередь.', 'notice' => ''];
+    }
 
     $body = $approved
         ? 'Объявление «' . (string) $listing['title'] . '» прошло проверку и опубликовано.'

@@ -70,6 +70,50 @@ final class CommerceDiscountTest extends CommerceDbTestCase
         self::assertFalse(commerceCouponCodeTaken('autumn'));
     }
 
+    public function testГонкаКодаКупонаОтказываетПоЧеловечески(): void
+    {
+        // Гонка записи: проверку «код свободен» обе формы прошли, а вставка первого сохранения
+        // успела раньше. Проигравший обязан получить тот же ответ, что и у спокойной проверки
+        // кода, — не 500 от сырого PDOException.
+        CommerceHttpSetup::addCoupon('RACE', 'PERCENT', 10.0);
+
+        $lost = commerceCreateCoupon([
+            'code' => 'RACE',
+            'kind' => 'PERCENT',
+            'value' => 5.0,
+            'min_total' => null,
+            'expires' => '',
+            'max_uses' => null,
+            'active' => 1,
+        ], nowUtc());
+
+        self::assertFalse($lost['ok']);
+        self::assertSame('Код уже занят другим купоном — предложите свой.', $lost['error']);
+        self::assertSame('', $lost['notice']);
+
+        // Правка чужой купонной строки тоже кончается человеческой причиной: код поменяли на
+        // код соседнего купона — валидатор мог пропустить (сосед появился после проверки).
+        $victimId = CommerceHttpSetup::addCoupon('VICTIM', 'PERCENT', 10.0);
+        $secondId = CommerceHttpSetup::addCoupon('NEIGHBOUR', 'PERCENT', 10.0);
+        $edited = commerceUpdateCoupon($victimId, [
+            'code' => 'NEIGHBOUR',
+            'kind' => 'PERCENT',
+            'value' => 5.0,
+            'min_total' => null,
+            'expires' => '',
+            'max_uses' => null,
+            'active' => 1,
+        ], nowUtc());
+
+        self::assertFalse($edited['ok']);
+        self::assertSame('Код уже занят другим купоном — предложите свой.', $edited['error']);
+        self::assertSame('VICTIM', (string) commerceCouponById($victimId)['code'], 'Отказ правки не переписал код');
+
+        // Обе строки живы: отказ правки ничего не разрушил.
+        self::assertNotNull(commerceCouponById($victimId));
+        self::assertNotNull(commerceCouponById($secondId));
+    }
+
     public function testСкидкаКупонаПроцентИФикс(): void
     {
         $percentId = CommerceHttpSetup::addCoupon('P10', 'PERCENT', 10.0);

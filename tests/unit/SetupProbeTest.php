@@ -73,6 +73,73 @@ final class SetupProbeTest extends TestCase
     /** Пустое сообщение — пустая граница: функция обязана отдавать край, а не фантом. */
     public function testПустоеСообщениеДаётПустуюГраницу(): void
     {
-        self::assertSame('', setupFailureHint(''), 'Пустое сообщение дало непустой текст отказа');
+        self::assertSame('', setupFailureHint(''), 'Пустое сообщение дало непустую границу');
+    }
+
+    /**
+     * Убирает замок любого вида перед и после проверки: настоящий файл и мусорный каталог
+     * на его месте стираются. Тест трогает настоящий public/install.lock, поэтому прибирается
+     * сам — чужой набор после него не обязан разбираться, что здесь осталось.
+     */
+    private static function clearLock(): void
+    {
+        if (is_file(SETUP_LOCK)) {
+            unlink(SETUP_LOCK);
+        }
+
+        if (is_dir(SETUP_LOCK)) {
+            @rmdir(SETUP_LOCK);
+        }
+    }
+
+    /**
+     * Свободный замок захватывается вердиктом 'proceed' и честно создаёт файл: без него
+     * «повторяемость шага после сбоя» держалась бы на честном слове.
+     */
+    public function testСвободныйЗамокДаётProceedИСоздаётФайл(): void
+    {
+        self::clearLock();
+
+        try {
+            self::assertSame('proceed', setupLockVerdict(), 'Свободный замок захватывается');
+            self::assertFileExists(SETUP_LOCK, 'Захват оставляет файл замка на диске');
+        } finally {
+            self::clearLock();
+        }
+    }
+
+    /**
+     * Стоящий замок — вердикт 'installed': сайт уже установлен, захват не происходит и файл
+     * не переписывается.
+     */
+    public function testСтоящийЗамокДаётInstalled(): void
+    {
+        self::clearLock();
+        file_put_contents(SETUP_LOCK, utcStamp(nowUtc()) . "\n");
+
+        try {
+            self::assertSame('installed', setupLockVerdict(), 'Стоящий замок закрывает экран');
+        } finally {
+            self::clearLock();
+        }
+    }
+
+    /**
+     * Проигравший захват при «замка на диске нет» — вердикт 'busy' (M1): продолжать без
+     * замка нельзя, ровно эту руку в POST-ветке встречает отказ. Гонку двух запросов
+     * однопоточный тест не поднимает, поэтому предикат руки проверяется его же гранью:
+     * fopen('xb') отказывает, а is_file замка ложно — мусорный каталог на месте замка
+     * даёт ровно эту пару (файл каталогом не читается).
+     */
+    public function testПроигранныйЗахватБезЗамкаНаДискеДаётBusy(): void
+    {
+        self::clearLock();
+        self::assertTrue(mkdir(SETUP_LOCK), 'Каталог на месте замка создан');
+
+        try {
+            self::assertSame('busy', setupLockVerdict(), 'Захват без замка на диске — рука проигравшего');
+        } finally {
+            self::clearLock();
+        }
     }
 }

@@ -7,18 +7,54 @@ declare(strict_types=1);
 // Персональные вещи (заказы, клиенты, потроха товара) API не отдаёт вовсе, поэтому
 // ключ не чудит: читать витринные цены посторонний может и страницей каталога.
 
+/**
+ * Композитный курсор потока. Признаются две формы: «штамп|id» (композит) и чистый штамп
+ * прежнего формата — старые клиенты продолжают листать, но внутри одной секунды границу
+ * держит только композит: READ COMMITTED и секундная точность штампа давали порции без
+ * остатков строки. Мусор в отметке снимается: отвечает первая порция, без ярости.
+ *
+ * @return array{stamp: string, id: string} пустые строки означают «отметки нет»
+ */
+function commerceApiCursorParse(string $after): array
+{
+    $after = trim($after);
+
+    if ($after === '') {
+        return ['stamp' => '', 'id' => ''];
+    }
+
+    $parts = explode('|', $after, 2);
+    $stampRaw = (string) $parts[0];
+    $id = (string) ($parts[1] ?? '');
+
+    // Штамп обязан читаться датой базы: иначе весь курсор — мусор, и первая порция честнее.
+    if (fromDb($stampRaw) === null) {
+        return ['stamp' => '', 'id' => ''];
+    }
+
+    return ['stamp' => $stampRaw, 'id' => $id];
+}
+
 /** @return list<array<string, mixed>> */
 function commerceApiProductList(string $after): array
 {
     $where = [];
     $args = [];
+    $cursor = commerceApiCursorParse($after);
 
-    // Отметка потока: следующая порция берётся товарами, старше присланной отметки.
-    // Отметка ставится датой created_at последней строки прошлого ответа. Мусор в
-    // отметке снимается: отвечает первая порция, без ярости и без пустой выборки.
-    if (fromDb($after) !== null) {
-        $where[] = 'p.created_at < ?';
-        $args[] = $after;
+    // Отметка потока: следующая порция берётся товарами, старше присланной отметки, а
+    // внутри одной и той же секунды — по идентификатору: сортировка «created_at DESC,
+    // id DESC» и курсор держат согласованность между порциями.
+    if ($cursor['stamp'] !== '') {
+        if ($cursor['id'] !== '') {
+            $where[] = '(p.created_at < ? OR (p.created_at = ? AND p.id < ?))';
+            $args[] = $cursor['stamp'];
+            $args[] = $cursor['stamp'];
+            $args[] = $cursor['id'];
+        } else {
+            $where[] = 'p.created_at < ?';
+            $args[] = $cursor['stamp'];
+        }
     }
 
     $where[] = "p.status = 'PUBLISHED'";
@@ -27,7 +63,7 @@ function commerceApiProductList(string $after): array
     /** @var list<array<string, mixed>> $rows */
     $rows = all(
         sprintf(
-            'SELECT %s FROM %s p%s ORDER BY p.created_at DESC, p.id LIMIT %d',
+            'SELECT %s FROM %s p%s ORDER BY p.created_at DESC, p.id DESC LIMIT %d',
             COMMERCE_CARD_COLUMNS,
             t('commerce_product'),
             $clause,
@@ -111,8 +147,13 @@ function commerceApiProducts(array $rows): void
     );
     $nextAfter = null;
 
+    // Полная порция обещает продолжение: отметка отдаётся композитом «штамп|id»
+    // последней строки — следующая порция читает его и доедает строки той же
+    // секунды по идентификатору, без потерь между порциями.
     if ($rows !== [] && count($rows) >= COMMERCE_API_PAGE_SIZE) {
-        $nextAfter = (string) $rows[count($rows) - 1]['created_at'];
+        $last = $rows[count($rows) - 1];
+
+        $nextAfter = (string) $last['created_at'] . '|' . (string) $last['id'];
     }
 
     respond(200, (string) json_encode([

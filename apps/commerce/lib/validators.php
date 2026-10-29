@@ -10,12 +10,16 @@ declare(strict_types=1);
  * Числовые поля товара приходят из формы строками: приём «строка → число» сосредоточен
  * здесь, а контроллер получает уже проверенные значения.
  *
+ * Адрес и SKU правимого товара приходят контроллером из строки базы, а не из POST: POST —
+ * это ввод человека, служебный идентификатор строки формы не несёт и не обязан.
+ *
  * @param array<string, string> $post
  * @param list<array{id: string, title: string}> $categoryOptions
  * @param callable(string): bool $slugTaken
+ * @param string $currentId идентификатор правимого товара; при создании — ''
  * @return array{errors: array<string, string>, values: array<string, mixed>, slug_error: string}
  */
-function commerceValidateProduct(array $post, string $currentSlug, array $categoryOptions, callable $slugTaken): array
+function commerceValidateProduct(array $post, string $currentSlug, array $categoryOptions, callable $slugTaken, string $currentId = ''): array
 {
     $errors = [];
     $fields = [
@@ -54,7 +58,9 @@ function commerceValidateProduct(array $post, string $currentSlug, array $catego
             'SELECT id FROM ' . t('commerce_product') . ' WHERE sku = ?',
             [$fields['sku']]
         );
-    if ($skuSeen !== null && (string) ($post['id'] ?? '') !== (string) $skuSeen['id']) {
+    // Свой SKU собственной строки не создаёт: правка товара с неизменным артикулом обязана
+    // проходить, как и правка с неизменным адресом ($currentSlug выше по коду).
+    if ($skuSeen !== null && $currentId !== (string) $skuSeen['id']) {
         $errors['sku'] = 'Такой артикул уже занят другим товаром.';
     }
 

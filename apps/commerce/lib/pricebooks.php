@@ -374,7 +374,7 @@ function commercePricebookApply(string $path, ?string $supplierId): array
         }
 
         // Скоуп поставщика: неизвестный поставщику SKU получает свою и видную причину.
-        $parts = ['SELECT price_retail FROM ' . t('commerce_variant') . ' WHERE sku = ?'];
+        $parts = ['SELECT price_retail, price_promo FROM ' . t('commerce_variant') . ' WHERE sku = ?'];
         $args = [$row['sku']];
 
         if ($supplierId !== null && $supplierId !== '') {
@@ -397,6 +397,21 @@ function commercePricebookApply(string $path, ?string $supplierId): array
         if ($row['promo_set'] && (float) $row['promo'] > 0 && !$row['price_set']
             && (float) $variant['price_retail'] <= (float) $row['promo']) {
             $fails[] = ['sku' => $row['sku'], 'reason' => 'Промо-цена обязана быть ниже обычной цены товара.'];
+
+            continue;
+        }
+
+        // Обратная пара: строка меняет обычную цену и не трогает промо. После такой правки
+        // промо-цена может оказаться выше новой обычной — и витрина молча продавала бы
+        // «обычный» товар по промо. Строка отказывает с причиной: поставщик обязан указать
+        // промо в этой же строке или снять его нулём.
+        if ($row['price_set'] && !$row['promo_set']
+            && $variant['price_promo'] !== null
+            && (float) $variant['price_promo'] >= (float) $row['price']) {
+            $fails[] = [
+                'sku' => $row['sku'],
+                'reason' => 'Новая обычная цена не ниже текущей промо-цены: укажите промо в строке или снимите его нулём.',
+            ];
 
             continue;
         }

@@ -21,6 +21,14 @@ declare(strict_types=1);
  */
 function commerceOrderCreate(array $checkout, array $lines): array
 {
+    // Нулевые позиции заказ не составляет: строка «0 × цена» пробила бы охрану списания
+    // (WHERE stock >= 0 всегда истинно) и осела бы в базе без остатка. Защита на входе
+    // держит контракт «списание через stock >= qty» честным при любой паре строк.
+    $lines = array_values(array_filter(
+        $lines,
+        static fn (array $line): bool => (int) $line['qty'] >= 1
+    ));
+
     if ($lines === []) {
         return ['ok' => false, 'error' => 'Корзина пуста.', 'id' => '', 'number' => 0, 'total_cents' => 0];
     }
@@ -320,11 +328,19 @@ function commerceSetOrderStatus(string $orderId, string $status): array
     // Купон держит код на руках: возврат визита и письмо живут своей сделкой.
     $couponCode = (string) $order['coupon_code'];
 
-    tx(static function () use ($orderId, $status, $couponCode): void {
-        run(
-            'UPDATE ' . t('commerce_order') . ' SET status = ?, updated_at = ? WHERE id = ?',
-            [$status, utcStamp(nowUtc()), $orderId]
+    // Статус перепроверяется самой строкой: два параллельных запроса прочли один и тот же
+    // статус, а поменять строку успеет один — второй ответит отказом «уже изменился», без
+    // двойного возврата остатков и без обхода цепочки (прочитан NEW, поменялся в SHIPPED —
+    // отмена от чудесного SHIPPED→CANCELLED не пройдёт: строка уже не NEW).
+    $updated = tx(static function () use ($orderId, $status, $previous, $couponCode): bool {
+        $updated = run(
+            'UPDATE ' . t('commerce_order') . ' SET status = ?, updated_at = ? WHERE id = ? AND status = ?',
+            [$status, utcStamp(nowUtc()), $orderId, $previous]
         );
+
+        if ($updated !== 1) {
+            return false;
+        }
 
         if ($status === 'CANCELLED') {
             // Товарные позиции возвращают остаток товару, вариантные — варианту.
@@ -346,7 +362,17 @@ function commerceSetOrderStatus(string $orderId, string $status): array
             // Купона визит возвращается: сделка не состоялась, и скидка не сгорает зря.
             commerceReturnCouponCount((string) $couponCode);
         }
+
+        return true;
     });
+
+    if (!$updated) {
+        return [
+            'ok' => false,
+            'error' => 'Статус заказа уже изменился — обновите список.',
+            'notice' => '',
+        ];
+    }
 
     logInfo('commerce.order_status', ['orderId' => $orderId, 'status' => $status, 'previous' => $previous]);
 

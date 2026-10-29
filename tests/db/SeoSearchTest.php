@@ -420,6 +420,54 @@ final class SeoSearchTest extends TestCase
         self::assertSame('новый-токен', (string) $fresh['access_token']);
     }
 
+    public function testОдинПовторПослеОбновленияТокена(): void
+    {
+        // Сценарий гонки рекурсии: access-токеном формально живой, но источник отвечает 401
+        // на каждый запрос (правило свойства отозвано, scope недостаточен). Раньше каждый
+        // успешный refresh порождал новую попытку с тем же исходом — бесконечную рекурсию
+        // до переполнения стека. Теперь попыток две: исходная и одна после обновления.
+        self::connectGoogleSource();
+
+        $dataCalls = 0;
+        $refreshCalls = 0;
+
+        addFilter('seo_search_http', static function (mixed $value, string $method, string $url, array $options) use (&$dataCalls, &$refreshCalls): array {
+            if (str_contains($url, 'oauth2.googleapis.com')) {
+                $refreshCalls++;
+
+                return [
+                    'status' => 200,
+                    'body' => (string) json_encode(['access_token' => 'свежий-токен', 'expires_in' => 3600]),
+                    'error' => '',
+                ];
+            }
+
+            $dataCalls++;
+
+            return [
+                'status' => 401,
+                'body' => '',
+                'error' => '',
+            ];
+        });
+
+        $connection = seoSearchConnection();
+        self::assertNotNull($connection);
+
+        $fetched = seoSearchFetchRows($connection, '2026-10-01', '2026-10-02', 'query');
+
+        self::assertFalse($fetched['ok'], 'Повторный 401 обязан кончиться отказом, а не новыми попытками');
+        self::assertStringContainsString('после обновления токена', (string) $fetched['error']);
+        self::assertSame([], $fetched['rows']);
+
+        self::assertSame(2, $dataCalls, 'Запрос к данным идёт дважды: исходный и один повтор');
+        self::assertSame(1, $refreshCalls, 'Обновление токена одно, без цепочки обновлений');
+
+        $fresh = seoSearchConnection();
+        self::assertNotNull($fresh);
+        self::assertSame('свежий-токен', (string) $fresh['access_token'], 'Обновлённый токен сохранился');
+    }
+
     public function testАдресВходаСобранПоПравиламИсточника(): void
     {
         self::connectGoogleSource();

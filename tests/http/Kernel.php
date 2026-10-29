@@ -234,9 +234,11 @@ final class Kernel
 
     /**
      * Значением поля может быть `\CURLFile`: `CURLOPT_POSTFIELDS` принимает его нативно и сам
-     * переключает запрос на `multipart/form-data`.
+     * переключает запрос на `multipart/form-data`. Значением может быть и массив — так браузер
+     * присылает множественные поля (`name="body_title[]"`): curl кодирует вложенность скобками,
+     * а пустой массив не уезжает вовсе, что и даёт форму с полем без значений.
      *
-     * @param array<string, string|\CURLFile> $fields
+     * @param array<string, array<int|string, mixed>|\CURLFile|string> $fields
      * @param array<string, mixed> $options
      * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}
      */
@@ -246,7 +248,7 @@ final class Kernel
     }
 
     /**
-     * @param array<string, string|\CURLFile> $fields
+     * @param array<string, array<int|string, mixed>|\CURLFile|string> $fields
      * @param array<string, mixed> $options
      * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}
      */

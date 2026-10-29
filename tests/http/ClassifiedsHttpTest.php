@@ -410,6 +410,66 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertContains('kofemashina', $slugs);
     }
 
+    public function testJsonВыдачаЛистаетХвостОднойСекундыКомпозитнымКурсором(): void
+    {
+        // W14b: чистый штамп секундной точности терял хвост группы — 21 объявление одной
+        // секунды не доезжали до читателя целиком, часть строки выпадала между порциями.
+        // Композит «штамп|id» держит границу по идентификатору; мусор снимается первой
+        // порцией, а чистый штамп прежнего формата продолжает работать старым клиентам.
+        for ($i = 0; $i < 21; $i++) {
+            self::addListing(self::$sellerId, 'potok-' . $i, 'Поток ' . $i, 'PUBLISHED');
+        }
+
+        // Группа прижимается к одному штампу: иначе граница секунд уронила бы часть строк
+        // в соседнюю порцию и проверка ничего не доказала бы.
+        $stamp = utcStamp(nowUtc());
+        run('UPDATE ' . t('classifieds_listing') . ' SET created_at = ? WHERE slug LIKE ?', [$stamp, 'potok-%']);
+
+        $first = json_decode(Kernel::get('/classifieds/api/listings')['body'], true);
+        self::assertIsArray($first);
+        self::assertCount(20, $first['items'], 'Первая порция — полные двадцать строк');
+
+        $after = (string) $first['next_after'];
+        self::assertStringContainsString('|', $after, 'Продолжение отдаётся композитом «штамп|id»');
+        self::assertSame($stamp, explode('|', $after, 2)[0]);
+
+        $slugs = [];
+
+        foreach ($first['items'] as $item) {
+            $slugs[] = (string) $item['slug'];
+        }
+
+        self::assertCount(20, array_unique($slugs), 'Первая порция без повторов');
+
+        $second = json_decode(Kernel::get('/classifieds/api/listings?after=' . rawurlencode($after))['body'], true);
+        self::assertIsArray($second);
+
+        foreach ($second['items'] as $item) {
+            $slugs[] = (string) $item['slug'];
+        }
+
+        $potok = array_values(array_filter($slugs, static fn (string $slug): bool => str_starts_with($slug, 'potok-')));
+
+        self::assertCount(21, $potok, 'Хвост одной секунды доезжает второй порцией');
+        self::assertCount(count($potok), array_unique($potok), 'Курсор не дублирует строки');
+        self::assertNull($second['next_after'], 'Неполная порция обещает конец потока');
+
+        // Мусор в отметке снимается: отвечает первая порция, без пустой выборки и ярости.
+        $garbage = json_decode(Kernel::get('/classifieds/api/listings?after=' . rawurlencode('мусор-вместо-отметки'))['body'], true);
+        self::assertIsArray($garbage);
+        self::assertCount(20, $garbage['items']);
+        self::assertStringContainsString('|', (string) $garbage['next_after']);
+
+        // Совместимость: чистый штамп прежнего формата листается. Все 21 строка стоят НА
+        // штампе, поэтому строго-старее остаются только сидовые объявления.
+        $legacy = json_decode(Kernel::get('/classifieds/api/listings?after=' . rawurlencode($stamp))['body'], true);
+        self::assertIsArray($legacy);
+
+        $legacySlugs = array_map(static fn (array $item): string => (string) $item['slug'], $legacy['items']);
+        self::assertNotContains('potok-0', $legacySlugs);
+        self::assertContains('kofemashina', $legacySlugs);
+    }
+
     public function testСкрытаяКатегорияНеОткрывается(): void
     {
         run('UPDATE ' . t('classifieds_category') . ' SET visible = 0 WHERE id = ?', [self::$categoryId]);
@@ -500,7 +560,12 @@ final class ClassifiedsHttpTest extends TestCase
     public function testПродавецСоздаётОбъявлениеИОноПоявляетсяНаДоске(): void
     {
         $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
-        $form = Kernel::get('/classifieds/cabinet/new');
+        $step = Kernel::get('/classifieds/cabinet/new');
+        self::assertSame(200, $step['status']);
+
+        // Полная форма — второй шаг: категория выбрана, форма становится POST-формой,
+        // и только она несёт сессионный токен.
+        $form = Kernel::get('/classifieds/cabinet/new?category=' . rawurlencode((string) self::$categoryId));
         self::assertSame(200, $form['status']);
 
         $saved = Kernel::post('/classifieds/cabinet/new', [
@@ -543,6 +608,23 @@ final class ClassifiedsHttpTest extends TestCase
             'SELECT COUNT(*) FROM ' . t('classifieds_notification') . ' WHERE user_id = ? AND kind = ?',
             [self::$sellerId, 'moderation']
         ));
+    }
+
+    public function testШагКатегорииОткрываетсяGetБезТокена(): void
+    {
+        // W11: шаг выбора категории ходит GET-запросом. Скрытый токен в GET-форме был
+        // мёртвым грузом — GET-обработчик csrfCheck() не вызывает, а сессионная метка
+        // уезжала в адресную строку: журналы и referer её собирали.
+        $this->login(self::SELLER_EMAIL, self::SELLER_PASSWORD);
+        $page = Kernel::get('/classifieds/cabinet/new');
+        self::assertSame(200, $page['status']);
+
+        self::assertSame(
+            1,
+            preg_match('/<form[^>]*method="get"[^>]*>.*?<\/form>/s', $page['body'], $matches),
+            'Шаг категории открывается GET-формой'
+        );
+        self::assertStringNotContainsString('name="_token"', (string) $matches[0], 'GET-форма не несёт CSRF-токен');
     }
 
     public function testПравкаСохраняетАдресОбъявления(): void

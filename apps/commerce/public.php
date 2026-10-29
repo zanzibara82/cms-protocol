@@ -402,17 +402,20 @@ function commerceCartAddAction(array $params = []): void
     $qty = max(1, min($qty, COMMERCE_CART_MAX_QTY));
     $back = isInternalNextPath((string) ($_POST['back'] ?? '')) ? (string) $_POST['back'] : '/shop';
 
-    // Куда вернуться: если товар был передан с карточки — назад к нему; причина отказа
-    // печатается зелёной/красной плашкой текущего раздела.
+    // Куда вернуться: если товар был передан с карточки или витрины — назад туда,
+    // чтобы рука не перепрыгивала в корзину при каждом добавлении. Причина отказа
+    // печатается на экране корзины (commerceCartErrorFlash() её читает и снимает).
     $saved = commerceCartAdd($id, $qty, $variantId);
 
     if (!$saved['ok']) {
         startSession();
         // Причина отказа продаётся один раз: экран корзины читает и снимает flash.
         $_SESSION['commerce_cart_error'] = mb_substr((string) $saved['error'], 0, 200);
+
+        redirect('/shop/cart');
     }
 
-    redirect('/shop/cart');
+    redirect($back);
 }
 
 /** Причина отказа добавления в корзину: читается один раз и снимается с сессии. */

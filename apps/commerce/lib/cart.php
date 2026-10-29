@@ -126,6 +126,13 @@ function commerceCartLines(): array
 
         if ($parts['variant_id'] === '') {
             $qty = min($qty, (int) $product['stock']);
+
+            // Раскупленная позиция молча исчезает, как обещает заголовок функции: строка
+            // «0 × цена» не обязана доходить до оформления и в письме подтверждения.
+            if ($qty < 1) {
+                continue;
+            }
+
             $price = $product['price_promo'] !== null ? (float) $product['price_promo'] : (float) $product['price_retail'];
 
             $lines[] = [
@@ -153,6 +160,13 @@ function commerceCartLines(): array
         }
 
         $qty = min($qty, (int) $variant['stock']);
+
+        // То же правило у варианта: раскупленный вариант исчезает молча, корзина живёт
+        // только позициями, которые ещё можно купить.
+        if ($qty < 1) {
+            continue;
+        }
+
         $price = $variant['price_promo'] !== null ? (float) $variant['price_promo'] : (float) $variant['price_retail'];
 
         $lines[] = [

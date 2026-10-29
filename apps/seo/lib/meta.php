@@ -238,45 +238,65 @@ function seoMetaSave(array $values, string $id = ''): array
     $moment = utcStamp(nowUtc());
 
     if ($id === '') {
-        $newId = newId();
-        insert('seo_meta', [
-            'id' => $newId,
-            'path' => $path,
-            'title' => $values['title'] !== '' ? $values['title'] : null,
-            'description' => $values['description'] !== '' ? $values['description'] : null,
-            'canonical' => $values['canonical'] !== '' ? $values['canonical'] : null,
-            'robots' => $values['robots'] !== '' ? $values['robots'] : null,
-            'og_title' => $values['og_title'] !== '' ? $values['og_title'] : null,
-            'og_description' => $values['og_description'] !== '' ? $values['og_description'] : null,
-            'og_image' => $values['og_image'] !== '' ? $values['og_image'] : null,
-            'noindex' => $values['noindex'],
-            'in_sitemap' => $values['in_sitemap'],
-            'created_at' => $moment,
-            'updated_at' => $moment,
-        ]);
+        // Select-then-insert гонится в отказ двумя одновременными сохранениями: оба прочли
+        // «нет строки», и проигравший INSERT получает отказ уникального ключа. Обещание
+        // раздела «чужой адрес занимает адрес, и об этом говорят» держится и в гонке:
+        // проигравшему возвращается та же причина, что и у спокойной проверки.
+        try {
+            insert('seo_meta', [
+                'id' => newId(),
+                'path' => $path,
+                'title' => $values['title'] !== '' ? $values['title'] : null,
+                'description' => $values['description'] !== '' ? $values['description'] : null,
+                'canonical' => $values['canonical'] !== '' ? $values['canonical'] : null,
+                'robots' => $values['robots'] !== '' ? $values['robots'] : null,
+                'og_title' => $values['og_title'] !== '' ? $values['og_title'] : null,
+                'og_description' => $values['og_description'] !== '' ? $values['og_description'] : null,
+                'og_image' => $values['og_image'] !== '' ? $values['og_image'] : null,
+                'noindex' => $values['noindex'],
+                'in_sitemap' => $values['in_sitemap'],
+                'created_at' => $moment,
+                'updated_at' => $moment,
+            ]);
+        } catch (Throwable $insertError) {
+            if (!duplicateInsertException($insertError)) {
+                throw $insertError;
+            }
+
+            return ['ok' => false, 'error' => 'Такой адрес уже есть в метаданных — правьте ту строку.', 'notice' => ''];
+        }
 
         return ['ok' => true, 'error' => '', 'notice' => 'meta_saved'];
     }
 
-    run(
-        'UPDATE ' . t('seo_meta')
-        . ' SET path = ?, title = ?, description = ?, canonical = ?, robots = ?, og_title = ?,'
-        . ' og_description = ?, og_image = ?, noindex = ?, in_sitemap = ?, updated_at = ? WHERE id = ?',
-        [
-            $path,
-            $values['title'] !== '' ? $values['title'] : null,
-            $values['description'] !== '' ? $values['description'] : null,
-            $values['canonical'] !== '' ? $values['canonical'] : null,
-            $values['robots'] !== '' ? $values['robots'] : null,
-            $values['og_title'] !== '' ? $values['og_title'] : null,
-            $values['og_description'] !== '' ? $values['og_description'] : null,
-            $values['og_image'] !== '' ? $values['og_image'] : null,
-            $values['noindex'],
-            $values['in_sitemap'],
-            $moment,
-            $id,
-        ]
-    );
+    // Правка меняет адрес: правка и чужая новая строка могут претендовать на один путь.
+    try {
+        run(
+            'UPDATE ' . t('seo_meta')
+            . ' SET path = ?, title = ?, description = ?, canonical = ?, robots = ?, og_title = ?,'
+            . ' og_description = ?, og_image = ?, noindex = ?, in_sitemap = ?, updated_at = ? WHERE id = ?',
+            [
+                $path,
+                $values['title'] !== '' ? $values['title'] : null,
+                $values['description'] !== '' ? $values['description'] : null,
+                $values['canonical'] !== '' ? $values['canonical'] : null,
+                $values['robots'] !== '' ? $values['robots'] : null,
+                $values['og_title'] !== '' ? $values['og_title'] : null,
+                $values['og_description'] !== '' ? $values['og_description'] : null,
+                $values['og_image'] !== '' ? $values['og_image'] : null,
+                $values['noindex'],
+                $values['in_sitemap'],
+                $moment,
+                $id,
+            ]
+        );
+    } catch (Throwable $updateError) {
+        if (!duplicateInsertException($updateError)) {
+            throw $updateError;
+        }
+
+        return ['ok' => false, 'error' => 'Такой адрес уже есть в метаданных — правьте ту строку.', 'notice' => ''];
+    }
 
     return ['ok' => true, 'error' => '', 'notice' => 'meta_saved'];
 }

@@ -68,6 +68,48 @@ final class CommerceApiTest extends CommerceDbTestCase
         self::assertSame(21, (int) value('SELECT COUNT(*) FROM ' . t('commerce_product')));
     }
 
+    public function testСтрокиОднойСекундыДоезжаютВторойПорцией(): void
+    {
+        // Дефект курсора: отметка «последний штамп» при выборке «строже отметки» теряла
+        // товары, созданные (импортированные) в одну секунду с границей порции. Композитный
+        // курсор «штамп|id» держит границу парой: одна и та же секунда доедает по идентификатору.
+        foreach (range(1, 21) as $i) {
+            self::makeProduct(['slug' => 'sekunda-' . $i, 'sku' => 'S-' . $i, 'title' => 'Сек ' . $i]);
+        }
+
+        // Двадцать одна строка в один и тот же штамп: разрыв страницы обязан падать внутрь группы.
+        run('UPDATE ' . t('commerce_product') . ' SET created_at = ?, updated_at = created_at WHERE slug LIKE ?', [utcStamp(nowUtc()), 'sekunda-%']);
+
+        $stamp = (string) value('SELECT created_at FROM ' . t('commerce_product') . ' WHERE slug = ?', ['sekunda-1']);
+        self::assertNotSame('', $stamp);
+
+        $first = commerceApiProductList('');
+        self::assertCount(COMMERCE_API_PAGE_SIZE, $first);
+
+        // Курсор последней строки первой порции: строка с этим же штампом, но старым идентификатором.
+        $cursor = $stamp . '|' . (string) $first[COMMERCE_API_PAGE_SIZE - 1]['id'];
+        $second = commerceApiProductList($cursor);
+
+        self::assertCount(1, $second, 'Хвост группы той же секунды не теряется между порциями');
+        self::assertNotSame((string) $first[COMMERCE_API_PAGE_SIZE - 1]['id'], (string) $second[0]['id']);
+
+        // Дальше курса нет: третья порция пуста.
+        $cursorEnd = $stamp . '|' . (string) $second[0]['id'];
+        self::assertSame([], commerceApiProductList($cursorEnd), 'После последней строки потока порция пуста');
+
+        // Курсор середины группы отдаёт ровно остаток группы с меньшими идентификаторами.
+        $midCursor = $stamp . '|' . (string) $first[10]['id'];
+        self::assertCount(10, commerceApiProductList($midCursor));
+
+        // Чистый штамп прежнего формата совместим: отдаёт только строки строго старше секунды.
+        self::assertSame([], commerceApiProductList($stamp), 'Прежний формат отметки продолжает читаться');
+
+        // Мусор в отметке снимается: отвечает первая порция (строк не больше размера порции),
+        // без ярости и без пустой выборки.
+        self::assertCount(COMMERCE_API_PAGE_SIZE, commerceApiProductList('это-не-курсор|чужой'));
+        self::assertCount(COMMERCE_API_PAGE_SIZE, commerceApiProductList('не-штамп'));
+    }
+
     public function testКартаAPIРазворачиваетВарианты(): void
     {
         $productId = self::makeProduct(['slug' => 'variativnyi', 'sku' => 'V-1', 'title' => 'Вариативный']);

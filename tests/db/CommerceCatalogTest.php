@@ -185,6 +185,88 @@ final class CommerceCatalogTest extends CommerceDbTestCase
     // Валидация
     // -----------------------------------------------------------------------
 
+    public function testСвояСтрокаПриПравкеСНеизменнымАртикуломЗанятойНеСчитается(): void
+    {
+        $product = self::makeProduct(['slug' => 'kolonka', 'sku' => 'SPEAKER-1', 'title' => 'Колонка']);
+        $other = self::makeProduct(['slug' => 'kola', 'sku' => 'KOLA-1']);
+        $slugTaken = static fn (string $s): bool => false;
+        $post = static fn (string $sku): array => [
+            'title' => 'Колонка обновлённая',
+            'slug' => 'kolonka',
+            'sku' => $sku,
+            'currency' => 'RUB',
+            'status' => 'DRAFT',
+            'stock' => '3',
+            'price_retail' => '100',
+        ];
+
+        // Правка товара с прежним артикулом: идентификатор правимого товара приходит
+        // контроллером из базы, свой SKU — занятость не создаёт.
+        $own = commerceValidateProduct($post('SPEAKER-1'), 'kolonka', [], $slugTaken, $product);
+        self::assertArrayNotHasKey('sku', $own['errors']);
+
+        // Чужой SKU остаётся занятием другого товара: отказ печатается полем.
+        $foreign = commerceValidateProduct($post('KOLA-1'), 'kolonka', [], $slugTaken, $product);
+        self::assertArrayHasKey('sku', $foreign['errors']);
+        self::assertSame('Такой артикул уже занят другим товаром.', (string) $foreign['errors']['sku']);
+    }
+
+    public function testГонкаАдресаИАртикулаТовараОтказываетПоЧеловечески(): void
+    {
+        // Гонка записи: обе формы прошли проверку «свободно», первое сохранение успело. Слаг
+        // и артикул держатся уникальными ключами, и проигравший обязан получить человеческую
+        // причину именно о том поле, которое занято, — не 500 сырого PDOException.
+        self::makeProduct(['slug' => 'kolonka', 'sku' => 'SPEAKER-1', 'title' => 'Колонка']);
+
+        $values = static fn (string $slug, string $sku): array => [
+            'fields' => [
+                'title' => 'Гонка',
+                'slug' => $slug,
+                'sku' => $sku,
+                'lead_text' => '',
+                'brand' => '',
+                'barcode' => '',
+                'currency' => 'RUB',
+                'status' => 'DRAFT',
+                'noindex' => '0',
+                'seo_title' => '',
+                'seo_description' => '',
+            ],
+            'prices' => ['price_retail' => 100.0, 'price_promo' => null, 'price_cost' => null],
+            'stock' => 1,
+            'body' => [],
+            'slug' => $slug,
+            'categories' => [],
+        ];
+
+        // Чужой слаг при свободном артикуле: причина о слаге.
+        $slugLost = commerceCreateProduct($values('kolonka', 'RACE-1'), nowUtc());
+
+        self::assertFalse($slugLost['ok']);
+        self::assertSame('Такой адрес уже занят другим товаром — предложите свой.', $slugLost['error']);
+
+        // Чужой артикул при свободном слаге: причина об артикуле.
+        $skuLost = commerceCreateProduct($values('gonka-tovara', 'SPEAKER-1'), nowUtc());
+
+        self::assertFalse($skuLost['ok']);
+        self::assertSame('Артикул уже занят другим товаром — предложите свой.', $skuLost['error']);
+
+        // Правка с чужим артикулом тоже кончается человеческой причиной (валидатор мог
+        // пропустить: сосед появился после проверки), и товар остаётся в прежнем виде.
+        $victim = self::makeProduct(['slug' => 'pravyj', 'sku' => 'MINE-1', 'title' => 'Правимый']);
+        $edited = commerceUpdateProduct($victim, $values('pravyj', 'SPEAKER-1'), 'pravyj', nowUtc());
+
+        self::assertFalse($edited['ok']);
+        self::assertSame('Артикул уже занят другим товаром — предложите свой.', $edited['error']);
+        self::assertSame('MINE-1', (string) commerceProductById($victim)['sku'], 'Отказ правки не переписал артикул');
+
+        // Правка с чужим слагом: причина о слаге.
+        $editedSlug = commerceUpdateProduct($victim, $values('kolonka', 'MINE-1'), 'pravyj', nowUtc());
+
+        self::assertFalse($editedSlug['ok']);
+        self::assertSame('Такой адрес уже занят другим товаром — предложите свой.', $editedSlug['error']);
+    }
+
     public function testПромоЦенаНижеRetailОбязанноОтклоняться(): void
     {
         $check = commerceValidateProduct(

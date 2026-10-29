@@ -53,6 +53,20 @@ final class CommerceWebhookTest extends CommerceDbTestCase
     // Валидация и CRUD справочника
     // ------------------------------------------------------------------
 
+    public function testВердиктДоставкиДержитсяКодом(): void
+    {
+        // Дефект транспорта: пустой ответ считался отказом раньше проверки кода, и честный
+        // «204 No Content» (или 200 без тела — тоже распространённая практика) уходил в
+        // «Не доставлено». Вердикт держится только кодом; тело вообще ничего не решает.
+        self::assertTrue(commerceWebhookVerdict('', 204), '204 без тела — штатная доставка');
+        self::assertTrue(commerceWebhookVerdict('', 200), '200 без тела — тоже доставка');
+        self::assertTrue(commerceWebhookVerdict('ok', 299), 'Верхняя граница 2xx включена');
+        self::assertFalse(commerceWebhookVerdict('ok', 300), 'Коды вне 2xx — отказ');
+        self::assertFalse(commerceWebhookVerdict('ok', 500), 'Ошибка приёмника — отказ');
+        self::assertFalse(commerceWebhookVerdict(false, 0), 'curl_exec вернул false: код ответа недоступен, отказ сети');
+        self::assertFalse(commerceWebhookVerdict(false, 200), 'Даже «код 200» при отказе сети не засчитывается');
+    }
+
     public function testВалидаторПроситАдресИСекрет(): void
     {
         $empty = commerceValidateWebhook([]);

@@ -412,9 +412,11 @@ function seoFunnelToggle(string $id): array
 
     $enabled = (int) $row['enabled'] === 1 ? 0 : 1;
 
+    // created_at не трогаем: в таблице нет updated_at, и прежний UPDATE при каждом
+    // переключении затирал дату создания — исходная дата терялась безвозвратно.
     run(
-        'UPDATE ' . t('seo_funnel') . ' SET enabled = ?, created_at = ? WHERE id = ?',
-        [$enabled, utcStamp(nowUtc()), (string) $row['id']]
+        'UPDATE ' . t('seo_funnel') . ' SET enabled = ? WHERE id = ?',
+        [$enabled, (string) $row['id']]
     );
 
     logInfo('seo.funnel_toggled', ['funnelId' => $id, 'enabled' => $enabled]);

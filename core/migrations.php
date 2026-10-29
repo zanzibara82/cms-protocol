@@ -181,7 +181,22 @@ function installApp(string $id): array
         return $result;
     }
 
-    seedApp($manifest);
+    // Закладка идёт после миграций: она пишет в таблицы, которых до них не существует. Срыв
+    // закладки не может остаться «установленным разделом без закладки»: строку установки снимаем
+    // — та же симметрия, что у отказа applyApp() выше. Таблицы и журнал миграций при этом
+    // остаются: planApp() при повторной установке увидит пустой план и доведёт по сид заново.
+    try {
+        seedApp($manifest);
+    } catch (Throwable $error) {
+        logWarn('app.seed_failed', ['app' => $id, 'message' => $error->getMessage()]);
+        run('DELETE FROM ' . t('app_installation') . ' WHERE id = ?', [$id]);
+
+        return [
+            'ok' => false,
+            'error' => 'Не удалось заложить начальные данные раздела: ' . $error->getMessage(),
+            'applied' => $result['applied'],
+        ];
+    }
     doAction('app_installed', $id);
     logInfo('app.installed', ['app' => $id, 'files' => $result['applied']]);
 

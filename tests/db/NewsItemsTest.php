@@ -342,6 +342,44 @@ final class NewsItemsTest extends NewsDbTestCase
         self::assertFalse(createItem($this->input(['categoryId' => '']), $this->editor())['ok']);
     }
 
+    public function testПубликацияВСкрытойРубрикеОтказывается(): void
+    {
+        // Дефект «видимая рубрика»: форма шла через checkCategory(), который знаний о видимости
+        // не имел, и «На печать» в форме выпускала материал в скрытую рубрику — карточка
+        // нигде не показывалась. Кнопка списка такое правило уже держала; здесь форма
+        // обязана сверить то же правило.
+        toggleCategoryVisibility(categoryIdOf('metodika'));
+
+        $result = createItem($this->input([
+            'status' => NEWS_STATUS['PUBLISHED'],
+            'categoryId' => categoryIdOf('metodika'),
+            'body' => [['title' => '', 'text' => 'Текст для публикации.']],
+        ]), $this->editor());
+
+        self::assertFalse($result['ok']);
+        self::assertSame('Рубрика «Методика» скрыта: сначала покажите её в справочнике.', (string) $result['error']);
+
+        // Материал права на печать сомнительного качества в базу не пишется вовсе.
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('news_item')));
+
+        // Черновик в скрытой рубрике сохраняется, как и раньше: рубрика — дело публикации.
+        $draft = createItem($this->input(['categoryId' => categoryIdOf('metodika')]), $this->editor());
+        self::assertTrue($draft['ok'], (string) $draft['error']);
+
+        // Выпуск через правку тоже отказывается: то же правило, тот же текст.
+        $publish = updateItem(
+            (string) $draft['id'],
+            $this->input([
+                'status' => NEWS_STATUS['PUBLISHED'],
+                'categoryId' => categoryIdOf('metodika'),
+            ]),
+            $this->editor()
+        );
+
+        self::assertFalse($publish['ok']);
+        self::assertStringContainsString('скрыта', (string) $publish['error']);
+    }
+
     public function testСменаАдресаЗапоминаетПрежний(): void
     {
         $created = createItem($this->input(), $this->editor());

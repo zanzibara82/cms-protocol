@@ -302,7 +302,8 @@ function commerceProductSaveAction(array $params = []): void
         $_POST,
         $previousSlug,
         commerceCategories(),
-        static fn (string $candidate): bool => commerceProductSlugTaken($candidate)
+        static fn (string $candidate): bool => commerceProductSlugTaken($candidate),
+        $product === null ? '' : (string) $product['id']
     );
 
     if ($check['errors'] !== []) {

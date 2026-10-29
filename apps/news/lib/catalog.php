@@ -178,12 +178,22 @@ function createCategory(string $rawTitle, string $rawDescription = ''): array
     $id = newId();
     $stamp = utcStamp(nowUtc());
 
-    run(
-        'INSERT INTO ' . t('news_category')
-            . ' (id, slug, title, description, order_index, visible, created_at, updated_at)'
-            . ' VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
-        [$id, $slug, $checked['title'], $checked['description'], $last + 1, $stamp, $stamp]
-    );
+    // Название и адрес уникальны ключом: параллельное создание той же рубрики гонит нас
+    // в отказ базы. Человеку возвращается причина, а не HTTP 500 чужого PDOException.
+    try {
+        run(
+            'INSERT INTO ' . t('news_category')
+                . ' (id, slug, title, description, order_index, visible, created_at, updated_at)'
+                . ' VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+            [$id, $slug, $checked['title'], $checked['description'], $last + 1, $stamp, $stamp]
+        );
+    } catch (Throwable $insertError) {
+        if (!duplicateInsertException($insertError)) {
+            throw $insertError;
+        }
+
+        return ['ok' => false, 'notice' => '', 'error' => 'Эту рубрику только что создали параллельным сохранением — обновите справочник.'];
+    }
 
     logInfo('news.category_created', ['categoryId' => $id, 'slug' => $slug]);
 
@@ -206,10 +216,20 @@ function renameCategory(string $id, string $rawTitle): array
         return ['ok' => false, 'notice' => '', 'error' => 'Рубрика с таким названием уже есть.'];
     }
 
-    run(
-        'UPDATE ' . t('news_category') . ' SET title = ?, updated_at = ? WHERE id = ?',
-        [$checked['title'], utcStamp(nowUtc()), (string) $row['id']]
-    );
+    // Название уникально ключом: параллельное переименование в ту же строку отвечает
+    // отказом базы у проигравшего. Человеку — причина, а не 500.
+    try {
+        run(
+            'UPDATE ' . t('news_category') . ' SET title = ?, updated_at = ? WHERE id = ?',
+            [$checked['title'], utcStamp(nowUtc()), (string) $row['id']]
+        );
+    } catch (Throwable $updateError) {
+        if (!duplicateInsertException($updateError)) {
+            throw $updateError;
+        }
+
+        return ['ok' => false, 'notice' => '', 'error' => 'В это название только что вписалась другая рубрика — обновите страницу и повторите.'];
+    }
 
     logInfo('news.category_renamed', [
         'categoryId' => (string) $row['id'],
@@ -237,10 +257,20 @@ function updateCategoryDescription(string $id, string $rawTitle, string $rawDesc
         return ['ok' => false, 'notice' => '', 'error' => 'Рубрика с таким названием уже есть.'];
     }
 
-    run(
-        'UPDATE ' . t('news_category') . ' SET title = ?, description = ?, updated_at = ? WHERE id = ?',
-        [$checked['title'], $checked['description'], utcStamp(nowUtc()), (string) $row['id']]
-    );
+    // Название уникально ключом: параллельное сохранение отвечало бы отказом базы. Здесь
+    // проигравший получает человеческую причину и свежую страницу.
+    try {
+        run(
+            'UPDATE ' . t('news_category') . ' SET title = ?, description = ?, updated_at = ? WHERE id = ?',
+            [$checked['title'], $checked['description'], utcStamp(nowUtc()), (string) $row['id']]
+        );
+    } catch (Throwable $updateError) {
+        if (!duplicateInsertException($updateError)) {
+            throw $updateError;
+        }
+
+        return ['ok' => false, 'notice' => '', 'error' => 'В это название только что вписалась другая рубрика — обновите страницу и повторите.'];
+    }
 
     logInfo('news.category_described', ['categoryId' => (string) $row['id']]);
 
@@ -445,7 +475,30 @@ function resolveTagIds(array $labels): array
         );
 
         $id = newId();
-        run('INSERT INTO ' . t('news_tag') . ' (id, slug, label) VALUES (?, ?, ?)', [$id, $slug, $clean]);
+
+        // Проверка «свободно» и INSERT — руки двух одновременных сохранений раздела: если
+        // параллельное создание положило тот же тег первым, наш INSERT отвечает отказом
+        // уникального ключа. Чужая строка забирается на месте: тег один, и материалы
+        // ссылаются на него.
+        try {
+            run('INSERT INTO ' . t('news_tag') . ' (id, slug, label) VALUES (?, ?, ?)', [$id, $slug, $clean]);
+        } catch (Throwable $insertError) {
+            if (!duplicateInsertException($insertError)) {
+                throw $insertError;
+            }
+
+            $raced = one('SELECT id FROM ' . t('news_tag') . ' WHERE label = ? OR slug = ? LIMIT 1', [$clean, $slug]);
+
+            if ($raced === null) {
+                throw $insertError;
+            }
+
+            $ids[] = (string) $raced['id'];
+            logInfo('news.tag_race_resolved', ['tagId' => (string) $raced['id'], 'label' => $clean]);
+
+            continue;
+        }
+
         logInfo('news.tag_created', ['tagId' => $id, 'slug' => $slug, 'label' => $clean]);
         $ids[] = $id;
     }

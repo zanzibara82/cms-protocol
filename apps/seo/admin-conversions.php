@@ -50,6 +50,10 @@ function seoConversionsAction(array $params = []): void
     $op = postString('op');
     $id = mb_substr(trim((string) postString('id')), 0, 26);
 
+    // Кнопки шаблона шлют intents: «goal_enable»/«goal_disable» (форма знает текущее
+    // состояние) и «goal_toggle» — общая форма после ошибок. Все три вызывают одну
+    // функцию переключения: раньше из UI не доезжало ни одно значение — обработчик
+    // принимал только «goal_toggle», которого ни одна кнопка не посылала.
     if ($op === 'goal_create') {
         $result = seoGoalCreate([
             'name' => postString('name'),
@@ -59,7 +63,7 @@ function seoConversionsAction(array $params = []): void
             'source' => postString('source'),
             'device' => postString('device'),
         ]);
-    } elseif ($op === 'goal_toggle' && $id !== '') {
+    } elseif (in_array($op, ['goal_enable', 'goal_disable', 'goal_toggle'], true) && $id !== '') {
         $result = seoGoalToggle($id);
     } elseif ($op === 'goal_delete' && $id !== '') {
         $result = seoGoalDelete($id);

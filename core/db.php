@@ -89,6 +89,18 @@ function run(string $sql, array $args = []): int
     return $statement->rowCount();
 }
 
+/**
+ * Нарушение ограничения записи: два одновременных запроса прошли одну и ту же проверку
+ * «свободно, ещё нет строки», и проигравший INSERT получил отказ от уникального ключа.
+ * Вызывающий отвечает человеку человеческой причиной, а не HTTP 500 чужого исключения.
+ */
+function duplicateInsertException(Throwable $error): bool
+{
+    // Только принятие уникального ключа: SQLSTATE 23000 ставит и отказ внешнего ключа
+    // (MySQL-код 1452), и он — чужая причина; «адрес занят» на неё не переписывается.
+    return $error->getCode() === '23000' && preg_match('/\b1062\b/', $error->getMessage()) === 1;
+}
+
 // Вставка собирается из имён колонок: значения всегда уходят плейсхолдерами.
 /** @param array<string, mixed> $row */
 function insert(string $table, array $row): void

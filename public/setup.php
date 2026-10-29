@@ -8,7 +8,6 @@ declare(strict_types=1);
 // поэтому замок обязателен, а не желателен.
 require dirname(__DIR__) . '/core/bootstrap.php';
 
-const SETUP_LOCK = __DIR__ . '/install.lock';
 const SETUP_REQUIRED_EXTENSIONS = ['pdo_mysql', 'mbstring', 'openssl', 'fileinfo', 'json', 'gd'];
 const SETUP_MIN_PHP = '8.1.0';
 const SETUP_PASSWORD_MIN = 10;
@@ -48,42 +47,8 @@ setupSeedConfig($setupRawConfig);
 
 securityHeaders();
 
-/**
- * Состояние замка читается с диска, поэтому функция нечистая: между проверкой в начале экрана и
- * попыткой захвата файл реально может появиться чужим запросом. Память о первом ответе здесь
- * запрещена — именно окно между этими двумя вызовами и закрывает атомарный захват.
- *
- * @phpstan-impure
- */
-function setupLocked(): bool
-{
-    return is_file(SETUP_LOCK);
-}
-
-// F9: замок занимается атомарно. Проверка is_file() и создание файла двумя шагами оставляют
-// окно, во втором запросе которого человек дошёл бы до setupCreateAdmin() и перезаписал
-// пароль администратора. Режим 'xb' создаёт файл исключительно когда его нет: из двух
-// параллельных POST установку продолжит только победитель.
-function setupAcquireLock(): bool
-{
-    $handle = @fopen(SETUP_LOCK, 'xb');
-    if ($handle === false) {
-        return false;
-    }
-
-    fwrite($handle, utcStamp(nowUtc()) . "\n");
-    fclose($handle);
-
-    return true;
-}
-
-// Отказ проверки не оставляет замок: повторный POST обязан проходить.
-function setupReleaseLock(): void
-{
-    if (is_file(SETUP_LOCK)) {
-        unlink(SETUP_LOCK);
-    }
-}
+// Замок установщика и вердикт по нему живут в core/setup-probe.php вместе с остальной механикой:
+// в документ-корне остаётся поток ветки, а решение по замку покрыто набором tests/unit.
 
 /** @return list<string> */
 function setupProblems(): array
@@ -336,11 +301,27 @@ if (isPost()) {
     csrfCheck();
 
     // Замок — до любой записи и атомарно (F9): между верхней проверкой setupLocked() и этим
-    // местом успевает пройти ровно один победитель, остальные получают «уже установлен».
-    $lockHeld = setupAcquireLock();
-    if (!$lockHeld && setupLocked()) {
+    // местом успевает пройти ровно один победитель, остальные получают отказ. Отказ обязан
+    // случиться при обоих исходах проигравшего: замок стоит — сайт уже установлен; замок
+    // держит чужой запрос — продолжать без замка нельзя (M1): замок в этот момент никого
+    // не исключает, и установка пошла бы параллельно победителю.
+    $verdict = setupLockVerdict();
+
+    if ($verdict === 'installed') {
         notFound('Сайт уже установлен.');
     }
+
+    if ($verdict === 'busy') {
+        // 503 с Retry-After: повторная попытка после чужого запроса проходит замок чисто,
+        // шаг идемпотентен и ничего не записал до этого места.
+        respond(503, 'Установку уже начал другой запрос — подождите минуту и повторите попытку.', [
+            'Content-Type' => 'text/plain; charset=utf-8',
+            'Retry-After' => '60',
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
+    $lockHeld = $verdict === 'proceed';
 
     $values = [
         'site_name' => postString('site_name'),

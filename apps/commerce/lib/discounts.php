@@ -247,19 +247,31 @@ function commerceCreateCoupon(array $values, ?DateTimeImmutable $now = null): ar
     $moment = $now ?? nowUtc();
     $id = newId();
 
-    insert('commerce_coupon', [
-        'id' => $id,
-        'code' => $values['code'],
-        'kind' => $values['kind'],
-        'value' => $values['value'],
-        'min_total' => $values['min_total'],
-        'expires_at' => $values['expires'] !== '' ? commerceDayStamp($values['expires'], 'end') : null,
-        'max_uses' => $values['max_uses'],
-        'used_count' => 0,
-        'active' => $values['active'],
-        'created_at' => utcStamp($moment),
-        'updated_at' => utcStamp($moment),
-    ]);
+    // Проверка «код свободен» в форме и INSERT — руки двух одновременных сохранений: если
+    // параллельное сохранение заняло код первым, наш INSERT получает отказ уникального
+    // ключа. Человеку возвращается та же причина, что и у спокойной проверки кода, а не
+    // HTTP 500 чужого PDOException.
+    try {
+        insert('commerce_coupon', [
+            'id' => $id,
+            'code' => $values['code'],
+            'kind' => $values['kind'],
+            'value' => $values['value'],
+            'min_total' => $values['min_total'],
+            'expires_at' => $values['expires'] !== '' ? commerceDayStamp($values['expires'], 'end') : null,
+            'max_uses' => $values['max_uses'],
+            'used_count' => 0,
+            'active' => $values['active'],
+            'created_at' => utcStamp($moment),
+            'updated_at' => utcStamp($moment),
+        ]);
+    } catch (Throwable $insertError) {
+        if (!duplicateInsertException($insertError)) {
+            throw $insertError;
+        }
+
+        return ['ok' => false, 'error' => 'Код уже занят другим купоном — предложите свой.', 'notice' => ''];
+    }
 
     logInfo('commerce.coupon_created', ['couponId' => $id, 'code' => $values['code'], 'kind' => $values['kind']]);
 
@@ -278,21 +290,31 @@ function commerceUpdateCoupon(string $id, array $values, ?DateTimeImmutable $now
         return ['ok' => false, 'error' => 'Купона уже нет — обновите список.', 'notice' => ''];
     }
 
-    run(
-        'UPDATE ' . t('commerce_coupon') . ' SET code = ?, kind = ?, value = ?, min_total = ?,'
-        . ' expires_at = ?, max_uses = ?, active = ?, updated_at = ? WHERE id = ?',
-        [
-            $values['code'],
-            $values['kind'],
-            $values['value'],
-            $values['min_total'],
-            $values['expires'] !== '' ? commerceDayStamp($values['expires'], 'end') : null,
-            $values['max_uses'],
-            $values['active'],
-            utcStamp($now ?? nowUtc()),
-            $id,
-        ]
-    );
+    // Правка и чужое сохранение могут претендовать на один код: проигравший UPDATE получает
+    // отказ уникального ключа, и человек видит ту же причину, что и у спокойной проверки.
+    try {
+        run(
+            'UPDATE ' . t('commerce_coupon') . ' SET code = ?, kind = ?, value = ?, min_total = ?,'
+            . ' expires_at = ?, max_uses = ?, active = ?, updated_at = ? WHERE id = ?',
+            [
+                $values['code'],
+                $values['kind'],
+                $values['value'],
+                $values['min_total'],
+                $values['expires'] !== '' ? commerceDayStamp($values['expires'], 'end') : null,
+                $values['max_uses'],
+                $values['active'],
+                utcStamp($now ?? nowUtc()),
+                $id,
+            ]
+        );
+    } catch (Throwable $updateError) {
+        if (!duplicateInsertException($updateError)) {
+            throw $updateError;
+        }
+
+        return ['ok' => false, 'error' => 'Код уже занят другим купоном — предложите свой.', 'notice' => ''];
+    }
 
     logInfo('commerce.coupon_updated', ['couponId' => $id, 'code' => $values['code']]);
 

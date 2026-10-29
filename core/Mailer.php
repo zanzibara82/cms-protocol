@@ -131,6 +131,32 @@ final class Mailer
             return 'Адрес для ответа не похож на почту.';
         }
 
+        $from = trim((string) ($message['from'] ?? ''));
+
+        if ($from === '') {
+            // Эффективный отправитель тот же, что и при сборке письма: у письма без поля «from»
+            // роль отправителя выполняет MAIL_FROM из config.php.
+            $from = trim((string) configValue('MAIL_FROM'));
+        }
+
+        if ($from === '') {
+            return 'Не указан адрес отправителя.';
+        }
+
+        // Признаются две формы: «адрес» и «Имя <адрес>» — конверт читает то, что внутри скобок
+        // (addressOf(), Смтп транспорт), а заголовок собирает fromHeader(). Чужая форма вроде
+        // «Имя <почта@site.ru str», «Имя <почта@site.ru> приписка» не распадается на адрес и
+        // отклоняется здесь, а не глухим ответом чужого SMTP-сервера после полного рукопожатия.
+        if (preg_match('/^(.+?)\s*<([^<>\s]+)>$/', $from, $sender) === 1) {
+            $senderAddress = (string) $sender[2];
+        } else {
+            $senderAddress = $from;
+        }
+
+        if (filter_var($senderAddress, FILTER_VALIDATE_EMAIL) === false) {
+            return 'Адрес отправителя не похож на почту.';
+        }
+
         return null;
     }
 
@@ -150,7 +176,7 @@ final class Mailer
 
         $lines = [
             'Date: ' . rfc2822Stamp(nowUtc()),
-            'From: <' . $headers['from'] . '>',
+            'From: ' . self::fromHeader($headers['from']),
             'To: <' . $headers['to'] . '>',
             'Subject: ' . self::encoded($headers['subject']),
             'Message-ID: <' . newId() . '@' . self::domainOf($headers['from']) . '>',
@@ -250,6 +276,21 @@ final class Mailer
     private static function headerText(string $value): string
     {
         return str_replace(["\r", "\n"], ' ', $value);
+    }
+
+    /**
+     * Заголовок From: чистый адрес идёт в скобках (так его читает testЗаголовкиСобираютсяПоСтандарту),
+     * а «Имя <адрес>» — закодированным именем, по тем же правилам, что и тема: не-ASCII имя не
+     * уезжает в заголовок сырым байтом, «Школа <school@example.ru>» собирается корректно и
+     * в конверт уходит ровно адрес.
+     */
+    private static function fromHeader(string $from): string
+    {
+        if (preg_match('/^(.+?)\s*<([^<>\s]+)>$/', $from, $sender) === 1 && trim((string) $sender[1]) !== '') {
+            return self::encoded((string) $sender[1]) . ' <' . (string) $sender[2] . '>';
+        }
+
+        return '<' . $from . '>';
     }
 
     private static function encoded(string $value): string

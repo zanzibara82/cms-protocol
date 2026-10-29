@@ -137,11 +137,20 @@ final class ClassifiedsCabinetTest extends ClassifiedsDbTestCase
         self::assertNotNull($afterEdit);
         self::assertSame('2026-01-31 10:00:00', $afterEdit['expires_at']);
 
+        // Правка истёкшего объявления срок НЕ сдвигает (M/W12): бесплатно продлевать из
+        // правки нельзя — продление это явное действие владельца.
         $renewed = classifiedsUpdateListing($created['id'], $values, $base->modify('+40 days'));
         self::assertTrue($renewed['ok']);
         $afterRenew = classifiedsListingById($created['id']);
         self::assertNotNull($afterRenew);
-        self::assertSame('2026-03-12 10:00:00', $afterRenew['expires_at']);
+        self::assertSame('2026-01-31 10:00:00', $afterRenew['expires_at'], 'Правка не продлевает истёкшее');
+
+        // Явная публикация продлевает: срок считается от момента действия.
+        $republished = classifiedsListingSetStatus($created['id'], $sellerId, 'PUBLISHED', $base->modify('+40 days'));
+        self::assertTrue($republished['ok']);
+        $afterRepublish = classifiedsListingById($created['id']);
+        self::assertNotNull($afterRepublish);
+        self::assertSame('2026-03-12 10:00:00', $afterRepublish['expires_at']);
 
         $draft = $values;
         $draft['status'] = 'DRAFT';
