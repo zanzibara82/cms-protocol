@@ -188,11 +188,11 @@ function createCategory(string $rawTitle, string $rawDescription = ''): array
             [$id, $slug, $checked['title'], $checked['description'], $last + 1, $stamp, $stamp]
         );
     } catch (Throwable $insertError) {
-        if (!duplicateKeyException($insertError)) {
-            throw $insertError;
-        }
-
-        return ['ok' => false, 'notice' => '', 'error' => 'Эту рубрику только что создали параллельным сохранением — обновите справочник.'];
+        return [
+            'ok' => false,
+            'notice' => '',
+            'error' => duplicateReason($insertError, 'Эту рубрику только что создали параллельным сохранением — обновите справочник.'),
+        ];
     }
 
     logInfo('news.category_created', ['categoryId' => $id, 'slug' => $slug]);
@@ -224,11 +224,11 @@ function renameCategory(string $id, string $rawTitle): array
             [$checked['title'], utcStamp(nowUtc()), (string) $row['id']]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateKeyException($updateError)) {
-            throw $updateError;
-        }
-
-        return ['ok' => false, 'notice' => '', 'error' => 'В это название только что вписалась другая рубрика — обновите страницу и повторите.'];
+        return [
+            'ok' => false,
+            'notice' => '',
+            'error' => duplicateReason($updateError, 'В это название только что вписалась другая рубрика — обновите страницу и повторите.'),
+        ];
     }
 
     logInfo('news.category_renamed', [
@@ -265,11 +265,11 @@ function updateCategoryDescription(string $id, string $rawTitle, string $rawDesc
             [$checked['title'], $checked['description'], utcStamp(nowUtc()), (string) $row['id']]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateKeyException($updateError)) {
-            throw $updateError;
-        }
-
-        return ['ok' => false, 'notice' => '', 'error' => 'В это название только что вписалась другая рубрика — обновите страницу и повторите.'];
+        return [
+            'ok' => false,
+            'notice' => '',
+            'error' => duplicateReason($updateError, 'В это название только что вписалась другая рубрика — обновите страницу и повторите.'),
+        ];
     }
 
     logInfo('news.category_described', ['categoryId' => (string) $row['id']]);

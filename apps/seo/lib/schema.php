@@ -227,14 +227,14 @@ function seoSchemaSave(array $values): array
             'created_at' => $stamp,
         ]));
     } catch (Throwable $insertError) {
-        if (!duplicateKeyException($insertError)) {
-            throw $insertError;
-        }
+        // Страж помощника перебрасывает чужие отказы до всякого перечитывания; формулировка
+        // отвечает за случай, когда строку меж тем удалили.
+        $reason = duplicateReason($insertError, 'Разметку на этот адрес только что правят — обновите список и повторите.');
 
         $raced = seoSchemaByPath((string) $values['path']);
 
         if ($raced === null) {
-            return ['ok' => false, 'error' => 'Разметку на этот адрес только что правят — обновите список и повторите.', 'notice' => ''];
+            return ['ok' => false, 'error' => $reason, 'notice' => ''];
         }
 
         seoSchemaRowUpdate($raced, $row);

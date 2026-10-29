@@ -376,13 +376,9 @@ function classifiedsCreateListing(string $ownerId, array $values, ?DateTimeImmut
             }
         });
     } catch (Throwable $error) {
-        if (!duplicateKeyException($error)) {
-            throw $error;
-        }
-
         return [
             'ok' => false,
-            'error' => 'По такому адресу уже есть объявление — придумайте другой.',
+            'error' => duplicateReason($error, 'По такому адресу уже есть объявление — придумайте другой.'),
             'id' => '',
             'notice' => '',
         ];
@@ -477,13 +473,9 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
             }
         });
     } catch (Throwable $error) {
-        if (!duplicateKeyException($error)) {
-            throw $error;
-        }
-
         return [
             'ok' => false,
-            'error' => 'По такому адресу уже есть объявление — придумайте другой.',
+            'error' => duplicateReason($error, 'По такому адресу уже есть объявление — придумайте другой.'),
             'notice' => '',
         ];
     }

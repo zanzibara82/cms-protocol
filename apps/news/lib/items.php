@@ -763,11 +763,7 @@ function createItem(array $input, array $editor, ?DateTimeImmutable $now = null)
             linkItemTags($id, $tagIds);
         });
     } catch (Throwable $error) {
-        if (!duplicateKeyException($error)) {
-            throw $error;
-        }
-
-        return itemFailure('Такой адрес уже занят другим материалом — предложите свой.');
+        return itemFailure(duplicateReason($error, 'Такой адрес уже занят другим материалом — предложите свой.'));
     }
 
     logInfo('news.item_created', ['itemId' => $id, 'slug' => $slug, 'status' => $status]);
@@ -849,11 +845,7 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
             }
         });
     } catch (Throwable $error) {
-        if (!duplicateKeyException($error)) {
-            throw $error;
-        }
-
-        return itemFailure('Такой адрес уже занят другим материалом — предложите свой.');
+        return itemFailure(duplicateReason($error, 'Такой адрес уже занят другим материалом — предложите свой.'));
     }
 
     logInfo('news.item_updated', [

@@ -266,11 +266,11 @@ function commerceCreateCoupon(array $values, ?DateTimeImmutable $now = null): ar
             'updated_at' => utcStamp($moment),
         ]);
     } catch (Throwable $insertError) {
-        if (!duplicateKeyException($insertError)) {
-            throw $insertError;
-        }
-
-        return ['ok' => false, 'error' => 'Код уже занят другим купоном — предложите свой.', 'notice' => ''];
+        return [
+            'ok' => false,
+            'error' => duplicateReason($insertError, 'Код уже занят другим купоном — предложите свой.'),
+            'notice' => '',
+        ];
     }
 
     logInfo('commerce.coupon_created', ['couponId' => $id, 'code' => $values['code'], 'kind' => $values['kind']]);
@@ -309,11 +309,11 @@ function commerceUpdateCoupon(string $id, array $values, ?DateTimeImmutable $now
             ]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateKeyException($updateError)) {
-            throw $updateError;
-        }
-
-        return ['ok' => false, 'error' => 'Код уже занят другим купоном — предложите свой.', 'notice' => ''];
+        return [
+            'ok' => false,
+            'error' => duplicateReason($updateError, 'Код уже занят другим купоном — предложите свой.'),
+            'notice' => '',
+        ];
     }
 
     logInfo('commerce.coupon_updated', ['couponId' => $id, 'code' => $values['code']]);

@@ -443,19 +443,22 @@ function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null): a
             }
         });
     } catch (Throwable $insertError) {
-        if (!duplicateKeyException($insertError)) {
-            throw $insertError;
-        }
-
-        $slugBusy = (int) value('SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE slug = ?', [$slug]) > 0;
-        $skuBusy = (int) value('SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE sku = ?', [(string) $fields['sku']]) > 0;
-
-        if ($skuBusy) {
-            return ['ok' => false, 'error' => 'Артикул уже занят другим товаром — предложите свой.', 'id' => '', 'slug' => '', 'notice' => ''];
-        }
-
-        // Слаг занят либо заняты оба: формулировка о слаге остаётся единственной честной.
-        return ['ok' => false, 'error' => 'Такой адрес уже занят другим товаром — предложите свой.', 'id' => '', 'slug' => '', 'notice' => ''];
+        // Причина разыменовывается пробами: артикул приоритетнее адреса. Слаг занят либо
+        // заняты оба — формулировка о слаге остаётся запасной и честной.
+        return [
+            'ok' => false,
+            'error' => duplicateReason(
+                $insertError,
+                static fn (): string => (int) value(
+                    'SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE sku = ?',
+                    [(string) $fields['sku']]
+                ) > 0 ? 'Артикул уже занят другим товаром — предложите свой.' : '',
+                'Такой адрес уже занят другим товаром — предложите свой.'
+            ),
+            'id' => '',
+            'slug' => '',
+            'notice' => '',
+        ];
     }
 
     logInfo('commerce.product_created', ['productId' => $id, 'slug' => $slug]);
@@ -529,20 +532,21 @@ function commerceUpdateProduct(string $id, array $values, string $previousSlug, 
             }
         });
     } catch (Throwable $updateError) {
-        if (!duplicateKeyException($updateError)) {
-            throw $updateError;
-        }
-
-        $skuBusy = (int) value(
-            'SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE sku = ? AND id <> ?',
-            [(string) $fields['sku'], $id]
-        ) > 0;
-
-        if ($skuBusy) {
-            return ['ok' => false, 'error' => 'Артикул уже занят другим товаром — предложите свой.', 'slug' => '', 'notice' => ''];
-        }
-
-        return ['ok' => false, 'error' => 'Такой адрес уже занят другим товаром — предложите свой.', 'slug' => '', 'notice' => ''];
+        // Причина разыменовывается пробами: артикул приоритетнее адреса, свой товар из
+        // пробы исключён (id <> ?) — правка не называет занятым собственный артикул.
+        return [
+            'ok' => false,
+            'error' => duplicateReason(
+                $updateError,
+                static fn (): string => (int) value(
+                    'SELECT COUNT(*) FROM ' . t('commerce_product') . ' WHERE sku = ? AND id <> ?',
+                    [(string) $fields['sku'], $id]
+                ) > 0 ? 'Артикул уже занят другим товаром — предложите свой.' : '',
+                'Такой адрес уже занят другим товаром — предложите свой.'
+            ),
+            'slug' => '',
+            'notice' => '',
+        ];
     }
 
     logInfo('commerce.product_updated', ['productId' => $id, 'slug' => $slug]);

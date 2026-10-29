@@ -313,14 +313,14 @@ function seoMonitorRedirectSave(array $values): array
             'updated_at' => $stamp,
         ]);
     } catch (Throwable $insertError) {
-        if (!duplicateKeyException($insertError)) {
-            throw $insertError;
-        }
+        // Страж помощника перебрасывает чужие отказы до всякого перечитывания; формулировка
+        // отвечает за случай, когда правило меж тем удалили.
+        $reason = duplicateReason($insertError, 'Это правило только что правят — обновите список и повторите.');
 
         $raced = seoMonitorRedirectByPath((string) $values['from']);
 
         if ($raced === null) {
-            return ['ok' => false, 'error' => 'Это правило только что правят — обновите список и повторите.', 'notice' => ''];
+            return ['ok' => false, 'error' => $reason, 'notice' => ''];
         }
 
         seoMonitorRedirectRowUpdate($raced, (array) $values);

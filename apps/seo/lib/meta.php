@@ -259,11 +259,11 @@ function seoMetaSave(array $values, string $id = ''): array
                 'updated_at' => $moment,
             ]);
         } catch (Throwable $insertError) {
-            if (!duplicateKeyException($insertError)) {
-                throw $insertError;
-            }
-
-            return ['ok' => false, 'error' => 'Такой адрес уже есть в метаданных — правьте ту строку.', 'notice' => ''];
+            return [
+                'ok' => false,
+                'error' => duplicateReason($insertError, 'Такой адрес уже есть в метаданных — правьте ту строку.'),
+                'notice' => '',
+            ];
         }
 
         return ['ok' => true, 'error' => '', 'notice' => 'meta_saved'];
@@ -291,11 +291,11 @@ function seoMetaSave(array $values, string $id = ''): array
             ]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateKeyException($updateError)) {
-            throw $updateError;
-        }
-
-        return ['ok' => false, 'error' => 'Такой адрес уже есть в метаданных — правьте ту строку.', 'notice' => ''];
+        return [
+            'ok' => false,
+            'error' => duplicateReason($updateError, 'Такой адрес уже есть в метаданных — правьте ту строку.'),
+            'notice' => '',
+        ];
     }
 
     return ['ok' => true, 'error' => '', 'notice' => 'meta_saved'];
