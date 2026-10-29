@@ -266,7 +266,7 @@ function commerceCreateCoupon(array $values, ?DateTimeImmutable $now = null): ar
             'updated_at' => utcStamp($moment),
         ]);
     } catch (Throwable $insertError) {
-        if (!duplicateInsertException($insertError)) {
+        if (!duplicateKeyException($insertError)) {
             throw $insertError;
         }
 
@@ -309,7 +309,7 @@ function commerceUpdateCoupon(string $id, array $values, ?DateTimeImmutable $now
             ]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateInsertException($updateError)) {
+        if (!duplicateKeyException($updateError)) {
             throw $updateError;
         }
 

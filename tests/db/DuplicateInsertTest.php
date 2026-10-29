@@ -22,7 +22,7 @@ final class DuplicateInsertTest extends NewsDbTestCase
         });
 
         self::assertNotNull($caught, 'Повторная надпись ловится настоящим отказом базы');
-        self::assertTrue(duplicateInsertException($caught), 'Приём уникального ключа распознаётся по коду и тексту');
+        self::assertTrue(duplicateKeyException($caught), 'Приём уникального ключа распознаётся по коду и тексту');
     }
 
     public function testОтказВнешнегоКлючаДубликатомНеНазывается(): void
@@ -37,7 +37,7 @@ final class DuplicateInsertTest extends NewsDbTestCase
         });
 
         self::assertNotNull($caught, 'Ссылка на несуществующий материал ловится отказом базы');
-        self::assertFalse(duplicateInsertException($caught), 'Отказ внешнего ключа — не дубликат: причина честная своя');
+        self::assertFalse(duplicateKeyException($caught), 'Отказ внешнего ключа — не дубликат: причина честная своя');
     }
 
     /** @return \Throwable|null */

@@ -236,6 +236,16 @@ function seoCollectSecret(): string
 
         optionsReset();
         $secret = trim(getOption(SEO_STATS_OPTION_SECRET, ''));
+
+        // Пустой секрет наружу не выходит: колонка option_value допускает NULL (и строки
+        // «из одних пробелов»), самоприсваивающая вставка такой хвост сохраняет, и без
+        // стража подпись жила бы ключом нулевой длины. Сценарий требует ручной правки базы,
+        // но схема его разрешает — честнее упасть громко, чем отдать ключ-пустоту.
+        if ($secret === '') {
+            logError('seo.collect_secret_empty', ['option' => SEO_STATS_OPTION_SECRET]);
+
+            throw new RuntimeException('Секрет счётчика читается пустым — проверьте строку настройки в таблице опций.');
+        }
     }
 
     return $secret;
@@ -642,7 +652,10 @@ function seoStatsSessionForBatch(string $visitor, array $first, string $stamp, s
     // одной цепочки расходится. FOR UPDATE по индексу (visitor_id, last_seen_at) ставит
     // пачки одного посетителя в очередь: проигравший дожидается фиксации победителя,
     // продлевает его сессию и параллельной строки не заводит. Чтение живёт только внутри
-    // транзакции приёма, поэтому ожидание ограничено её длиной.
+    // транзакции приёма; штатный предел ожидания — 50 с по умолчанию
+    // (innodb_lock_wait_timeout), и держателем замка может быть только такая же короткая
+    // транзакция приёма. Если на seo_visit/seo_session появятся долгие читатели, предел
+    // ожидания надо пересматривать осознанно.
     $row = one(
         'SELECT id, source, last_seen_at FROM ' . t('seo_session')
         . ' WHERE visitor_id = ? ORDER BY last_seen_at DESC LIMIT 1 FOR UPDATE',

@@ -337,39 +337,56 @@ function classifiedsCreateListing(string $ownerId, array $values, ?DateTimeImmut
     // и карточка показывает «договорная».
     $price = $values['price_float'];
 
-    tx(static function () use ($id, $ownerId, $values, $slug, $price, $moment): void {
-        insert('classifieds_listing', [
-            'id' => $id,
-            'owner_id' => $ownerId,
-            'category_id' => (string) $values['category'],
-            'slug' => $slug,
-            'title' => (string) $values['title'],
-            'body' => (string) $values['body'],
-            'price' => $price,
-            'currency' => (string) ($values['currency'] ?? CLASSIFIEDS_CURRENCY),
-            'negotiable' => (int) $values['negotiable'],
-            'location' => (string) $values['location'] !== '' ? (string) $values['location'] : null,
-            'image' => isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
-            'status' => (string) $values['status'],
-            'expires_at' => (string) $values['status'] === 'PUBLISHED' ? classifiedsListingNewExpiry($moment) : null,
-            'moderation_note' => null,
-            'submitted_at' => (string) $values['status'] === 'PENDING_REVIEW' ? utcStamp($moment) : null,
-            'seo_title' => (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
-            'seo_description' => (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
-            'noindex' => (int) $values['noindex'],
-            'views_public' => (int) ($values['views_public'] ?? 1),
-            'created_at' => utcStamp($moment),
-            'updated_at' => utcStamp($moment),
-        ]);
+    // Валидатор проверял занятость адреса спокойно, но между проверкой и вставкой сосед
+    // успел закоммититься — уникальный ключ classifieds_listing_slug ловит проигравшего
+    // отказом базы, и сырой 500 человеку не ответ. Причина — та же формулировка, что и у
+    // штатной занятости; характеристики и галерея не пишутся вовсе: транзакция откатилась.
+    try {
+        tx(static function () use ($id, $ownerId, $values, $slug, $price, $moment): void {
+            insert('classifieds_listing', [
+                'id' => $id,
+                'owner_id' => $ownerId,
+                'category_id' => (string) $values['category'],
+                'slug' => $slug,
+                'title' => (string) $values['title'],
+                'body' => (string) $values['body'],
+                'price' => $price,
+                'currency' => (string) ($values['currency'] ?? CLASSIFIEDS_CURRENCY),
+                'negotiable' => (int) $values['negotiable'],
+                'location' => (string) $values['location'] !== '' ? (string) $values['location'] : null,
+                'image' => isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
+                'status' => (string) $values['status'],
+                'expires_at' => (string) $values['status'] === 'PUBLISHED' ? classifiedsListingNewExpiry($moment) : null,
+                'moderation_note' => null,
+                'submitted_at' => (string) $values['status'] === 'PENDING_REVIEW' ? utcStamp($moment) : null,
+                'seo_title' => (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
+                'seo_description' => (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
+                'noindex' => (int) $values['noindex'],
+                'views_public' => (int) ($values['views_public'] ?? 1),
+                'created_at' => utcStamp($moment),
+                'updated_at' => utcStamp($moment),
+            ]);
 
-        if (isset($values['attributes']) && is_array($values['attributes'])) {
-            classifiedsReplaceListingAttributes($id, $values['attributes']);
+            if (isset($values['attributes']) && is_array($values['attributes'])) {
+                classifiedsReplaceListingAttributes($id, $values['attributes']);
+            }
+
+            if (isset($values['gallery']) && is_array($values['gallery'])) {
+                classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $moment);
+            }
+        });
+    } catch (Throwable $error) {
+        if (!duplicateKeyException($error)) {
+            throw $error;
         }
 
-        if (isset($values['gallery']) && is_array($values['gallery'])) {
-            classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $moment);
-        }
-    });
+        return [
+            'ok' => false,
+            'error' => 'По такому адресу уже есть объявление — придумайте другой.',
+            'id' => '',
+            'notice' => '',
+        ];
+    }
 
     logInfo('classifieds.listing_created', ['listingId' => $id, 'slug' => $slug, 'status' => (string) $values['status']]);
 
@@ -419,41 +436,57 @@ function classifiedsUpdateListing(string $id, array $values, ?DateTimeImmutable 
         $moderationNote = null;
     }
 
-    tx(static function () use ($id, $values, $status, $expiresAt, $moderationNote, $submittedAt, $moment): void {
-        run(
-            'UPDATE ' . t('classifieds_listing')
-            . ' SET category_id = ?, slug = ?, title = ?, body = ?, price = ?, negotiable = ?, location = ?,' .
-            ' image = ?, status = ?, expires_at = ?, moderation_note = ?, submitted_at = ?, seo_title = ?, seo_description = ?, noindex = ?, views_public = ?, updated_at = ? WHERE id = ?',
-            [
-                (string) $values['category'],
-                (string) $values['slug'],
-                (string) $values['title'],
-                (string) $values['body'],
-                $values['price_float'],
-                (int) $values['negotiable'],
-                (string) $values['location'] !== '' ? (string) $values['location'] : null,
-                isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
-                $status,
-                $expiresAt,
-                $moderationNote,
-                $submittedAt,
-                (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
-                (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
-                (int) $values['noindex'],
-                (int) ($values['views_public'] ?? 1),
-                utcStamp($moment),
-                $id,
-            ]
-        );
+    // Тот же слаг-конфликт, что у создания: валидатор пропустил адрес, сосед появился
+    // позже проверки. UPDATE ловит отказ уникального ключа — человеку возвращается та же
+    // причина об адресе, а правимое объявление остаётся в прежнем виде: tx() откатила
+    // всё, что успели переписать характеристики и галерея.
+    try {
+        tx(static function () use ($id, $values, $status, $expiresAt, $moderationNote, $submittedAt, $moment): void {
+            run(
+                'UPDATE ' . t('classifieds_listing')
+                . ' SET category_id = ?, slug = ?, title = ?, body = ?, price = ?, negotiable = ?, location = ?,' .
+                ' image = ?, status = ?, expires_at = ?, moderation_note = ?, submitted_at = ?, seo_title = ?, seo_description = ?, noindex = ?, views_public = ?, updated_at = ? WHERE id = ?',
+                [
+                    (string) $values['category'],
+                    (string) $values['slug'],
+                    (string) $values['title'],
+                    (string) $values['body'],
+                    $values['price_float'],
+                    (int) $values['negotiable'],
+                    (string) $values['location'] !== '' ? (string) $values['location'] : null,
+                    isset($values['image']) && (string) $values['image'] !== '' ? (string) $values['image'] : null,
+                    $status,
+                    $expiresAt,
+                    $moderationNote,
+                    $submittedAt,
+                    (string) $values['seo_title'] !== '' ? (string) $values['seo_title'] : null,
+                    (string) $values['seo_description'] !== '' ? (string) $values['seo_description'] : null,
+                    (int) $values['noindex'],
+                    (int) ($values['views_public'] ?? 1),
+                    utcStamp($moment),
+                    $id,
+                ]
+            );
 
-        if (isset($values['attributes']) && is_array($values['attributes'])) {
-            classifiedsReplaceListingAttributes($id, $values['attributes']);
+            if (isset($values['attributes']) && is_array($values['attributes'])) {
+                classifiedsReplaceListingAttributes($id, $values['attributes']);
+            }
+
+            if (isset($values['gallery']) && is_array($values['gallery'])) {
+                classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $moment);
+            }
+        });
+    } catch (Throwable $error) {
+        if (!duplicateKeyException($error)) {
+            throw $error;
         }
 
-        if (isset($values['gallery']) && is_array($values['gallery'])) {
-            classifiedsReplaceListingImages($id, array_values(array_map('strval', $values['gallery'])), $moment);
-        }
-    });
+        return [
+            'ok' => false,
+            'error' => 'По такому адресу уже есть объявление — придумайте другой.',
+            'notice' => '',
+        ];
+    }
 
     logInfo('classifieds.listing_updated', ['listingId' => $id, 'slug' => (string) $values['slug'], 'status' => $status]);
 
@@ -629,6 +662,12 @@ function classifiedsListingDelete(string $id, string $ownerId): array
         classifiedsWebhookEvent('listing.hidden', classifiedsWebhookListingData($listing));
     }
 
+    // Ниже живёт окно «событие ушло, DELETE не дошёл»: крэш процесса между этими строками
+    // оставляет подписчика с честным «скрыто» и живым объявлением. Порядком (событие раньше
+    // стирания) закрывается враньё в обратную сторону, а это окно — только полноценным
+    // outbox: событие в таблице и доставка после фиксации, схема в этом цикле не меняется.
+    // Отказ доставки сам по себе невосстановим: строка стирается, снимок уходит только в
+    // журнал с payload (classifiedsWebhookSend) — сбой досылается руками.
     run('DELETE FROM ' . t('classifieds_listing') . ' WHERE id = ?', [$id]);
     logInfo('classifieds.listing_deleted', ['listingId' => $id]);
 

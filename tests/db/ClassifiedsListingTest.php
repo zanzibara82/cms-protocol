@@ -137,6 +137,48 @@ final class ClassifiedsListingTest extends ClassifiedsDbTestCase
     }
 
     #[Test]
+    public function slugRaceAgainstCommittedNeighborEndsWithHumanReason(): void
+    {
+        // Гонка записи: валидатор проверил адрес спокойно — соседа ещё нет; сосед успел
+        // закоммититься раньше нашей вставки (соперник здесь ЗАКОММИЧЕННАЯ строка, как в
+        // реальном окне «проверка прошла — сосед успел»). Уникальный ключ слага ловит
+        // проигравшего отказом базы, и тот обязан вернуться человеку причиной об адресе,
+        // а не сырым PDOException; полусозданной строки остаться не должно.
+        $seller = self::makeSeller();
+        $category = self::makeCategory('velo', 'Велосипеды');
+
+        $check = classifiedsValidateListing(self::post(['category' => $category, 'slug' => 'velosiped']));
+        self::assertSame([], $check['errors']);
+
+        self::makeListing($seller, $category, ['slug' => 'velosiped']);
+
+        $lost = classifiedsCreateListing($seller, $check['values']);
+        self::assertFalse($lost['ok']);
+        self::assertSame('По такому адресу уже есть объявление — придумайте другой.', $lost['error']);
+        self::assertSame(
+            1,
+            (int) value('SELECT COUNT(*) FROM ' . t('classifieds_listing') . ' WHERE slug = ?', ['velosiped']),
+            'Отказ гонки не оставил полусозданную строку'
+        );
+
+        // Правка с чужим адресом: та же человеческая причина, и правимое объявление остаётся
+        // в прежнем виде — транзакция откатилась целиком вместе с характеристиками и галереей.
+        $victim = self::makeListing($seller, $category, ['slug' => 'moy-velosiped']);
+        $edit = classifiedsValidateListing(self::post(['category' => $category, 'slug' => 'svobodnyj-adres']));
+        self::assertSame([], $edit['errors']);
+
+        self::makeListing($seller, $category, ['slug' => 'svobodnyj-adres']);
+
+        $edited = classifiedsUpdateListing($victim, $edit['values']);
+        self::assertFalse($edited['ok']);
+        self::assertSame('По такому адресу уже есть объявление — придумайте другой.', $edited['error']);
+
+        $after = classifiedsListingById($victim);
+        self::assertNotNull($after);
+        self::assertSame('moy-velosiped', (string) $after['slug'], 'Отказ правки не переписал адрес');
+    }
+
+    #[Test]
     public function createKeepsDraftHiddenUntilPublished(): void
     {
         $seller = self::makeSeller();

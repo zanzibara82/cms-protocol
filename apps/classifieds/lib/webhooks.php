@@ -250,7 +250,14 @@ function classifiedsWebhookEvent(string $event, array $data): void
     try {
         classifiedsWebhookSend($event, $data);
     } catch (\Throwable $error) {
-        logWarn('classifieds.webhook_event', ['event' => $event, 'reason' => $error->getMessage()]);
+        // Снимок карточки едет в журнал вместе с причиной: если транспорт упал раньше
+        // сборки payload, тело события собирается из $data руками и досылается приёмнику.
+        // Восстановить его из базы нельзя — вызывающие могут стереть строку после события.
+        logWarn('classifieds.webhook_event', [
+            'event' => $event,
+            'reason' => $error->getMessage(),
+            'data' => $data,
+        ]);
     }
 }
 
@@ -284,9 +291,13 @@ function classifiedsWebhookSend(string $event, array $data): void
             continue;
         }
 
+        // Отказ доставки здесь невосстановим штатно: у события listing.hidden строка-источник
+        // стирается сразу после отправки (classifiedsListingDelete), и снять тело повторно
+        // неоткуда. Payload в журнале — единственная копия: по ней сбой досылается руками.
         logWarn('classifieds.webhook_failed', [
             'webhookId' => (string) $receiver['id'],
             'event' => $event,
+            'payload' => $payload,
         ]);
         classifiedsWebhookRecord((string) $receiver['id'], 'Не доставлено — проверьте адрес приёмника.');
     }

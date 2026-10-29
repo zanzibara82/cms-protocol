@@ -259,7 +259,7 @@ function seoMetaSave(array $values, string $id = ''): array
                 'updated_at' => $moment,
             ]);
         } catch (Throwable $insertError) {
-            if (!duplicateInsertException($insertError)) {
+            if (!duplicateKeyException($insertError)) {
                 throw $insertError;
             }
 
@@ -291,7 +291,7 @@ function seoMetaSave(array $values, string $id = ''): array
             ]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateInsertException($updateError)) {
+        if (!duplicateKeyException($updateError)) {
             throw $updateError;
         }
 

@@ -76,31 +76,46 @@ function classifiedsModerationDecide(
     // кончиться отказом, а не вторым уведомлением и вторым событием: два письма продавцу
     // о одном решении врут. Условный UPDATE решает гонку одной инструкцией; ноль строк
     // различается перечитыванием — строку удалили или её уже решили.
-    $rows = run(
-        'UPDATE ' . t('classifieds_listing')
-        . ' SET status = ?, expires_at = ?, moderation_note = ?, submitted_at = NULL, updated_at = ?'
-        . " WHERE id = ? AND status = 'PENDING_REVIEW'",
-        [
-            $approved ? 'PUBLISHED' : 'REJECTED',
-            $approved ? classifiedsListingNewExpiry($moment) : null,
-            $approved ? null : $note,
-            utcStamp($moment),
-            $id,
-        ]
-    );
+    //
+    // UPDATE и перечитывание обязаны жить в одной транзакции: строчный замок от UPDATE
+    // держится до фиксации, и чужой DELETE или смена статуса (владелец успел снять с
+    // публикации) встаёт в очередь, а не вклинивается в окно между инструкциями. Без
+    // транзакции бывало и так: решение уже применено, а ответ — «не найдено» без уведомления
+    // и события; либо событие уносило уже чужой статус. Уведомление и событие отправляются
+    // после фиксации: медленный вебхук-транспорт не должен держать замок строки.
+    $outcome = tx(static function () use ($id, $approved, $note, $moment): array {
+        $rows = run(
+            'UPDATE ' . t('classifieds_listing')
+            . ' SET status = ?, expires_at = ?, moderation_note = ?, submitted_at = NULL, updated_at = ?'
+            . " WHERE id = ? AND status = 'PENDING_REVIEW'",
+            [
+                $approved ? 'PUBLISHED' : 'REJECTED',
+                $approved ? classifiedsListingNewExpiry($moment) : null,
+                $approved ? null : $note,
+                utcStamp($moment),
+                $id,
+            ]
+        );
+
+        // Перечитывание под тем же замком: решение уже применено (или UPDATE промахнулся),
+        // чужих изменений между инструкциями быть не может — событие унесёт НОВЫЙ статус.
+        return ['rows' => $rows, 'listing' => classifiedsListingById($id)];
+    });
+
+    $rows = $outcome['rows'];
+    $listing = $outcome['listing'];
 
     if ($rows === 0) {
-        if (classifiedsListingById($id) === null) {
+        if ($listing === null) {
             return ['ok' => false, 'error' => 'Объявление не найдено — обновите очередь.', 'notice' => ''];
         }
 
         return ['ok' => false, 'error' => 'Объявление уже не ждёт проверки — обновите очередь.', 'notice' => ''];
     }
 
-    // Строка перечитывается после решения: событие уносит НОВЫЙ статус (подписчик получает
-    // честную пару «имя события — состояние в теле», а не старую «ждёт проверки»).
-    $listing = classifiedsListingById($id);
-
+    // Ветка последовательно недостижима: UPDATE прошёл, значит строка существует и сидит
+    // под его замком до фиксации транзакции. Оставлена страховкой — если перечитывание
+    // когда-нибудь вынесут из транзакции, отказ обязан вернуться к человеку, а не стать 500.
     if ($listing === null) {
         return ['ok' => false, 'error' => 'Объявление не найдено — обновите очередь.', 'notice' => ''];
     }

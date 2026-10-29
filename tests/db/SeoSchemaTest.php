@@ -175,7 +175,7 @@ final class SeoSchemaTest extends TestCase
         $winner = seoSchemaByPath('/obhod');
         self::assertIsArray($winner);
 
-        updateSchemaRow($winner, [
+        seoSchemaRowUpdate($winner, [
             'schema_type' => 'Article',
             'name' => 'Дообновлённая разметка',
             'description' => null,

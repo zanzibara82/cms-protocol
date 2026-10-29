@@ -161,7 +161,7 @@ final class SeoMonitorTest extends TestCase
         $winner = seoMonitorRedirectByPath('/staryy-adres');
         self::assertIsArray($winner);
 
-        updateRedirectRow($winner, ['from' => '/staryy-adres', 'to' => '/drugoy-adres', 'code' => 302]);
+        seoMonitorRedirectRowUpdate($winner, ['from' => '/staryy-adres', 'to' => '/drugoy-adres', 'code' => 302]);
 
         $rows = seoMonitorRedirects();
 

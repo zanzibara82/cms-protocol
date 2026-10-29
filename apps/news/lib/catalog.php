@@ -188,7 +188,7 @@ function createCategory(string $rawTitle, string $rawDescription = ''): array
             [$id, $slug, $checked['title'], $checked['description'], $last + 1, $stamp, $stamp]
         );
     } catch (Throwable $insertError) {
-        if (!duplicateInsertException($insertError)) {
+        if (!duplicateKeyException($insertError)) {
             throw $insertError;
         }
 
@@ -224,7 +224,7 @@ function renameCategory(string $id, string $rawTitle): array
             [$checked['title'], utcStamp(nowUtc()), (string) $row['id']]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateInsertException($updateError)) {
+        if (!duplicateKeyException($updateError)) {
             throw $updateError;
         }
 
@@ -265,7 +265,7 @@ function updateCategoryDescription(string $id, string $rawTitle, string $rawDesc
             [$checked['title'], $checked['description'], utcStamp(nowUtc()), (string) $row['id']]
         );
     } catch (Throwable $updateError) {
-        if (!duplicateInsertException($updateError)) {
+        if (!duplicateKeyException($updateError)) {
             throw $updateError;
         }
 
@@ -483,7 +483,7 @@ function resolveTagIds(array $labels): array
         try {
             run('INSERT INTO ' . t('news_tag') . ' (id, slug, label) VALUES (?, ?, ?)', [$id, $slug, $clean]);
         } catch (Throwable $insertError) {
-            if (!duplicateInsertException($insertError)) {
+            if (!duplicateKeyException($insertError)) {
                 throw $insertError;
             }
 

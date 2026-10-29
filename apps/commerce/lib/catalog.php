@@ -443,7 +443,7 @@ function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null): a
             }
         });
     } catch (Throwable $insertError) {
-        if (!duplicateInsertException($insertError)) {
+        if (!duplicateKeyException($insertError)) {
             throw $insertError;
         }
 
@@ -529,7 +529,7 @@ function commerceUpdateProduct(string $id, array $values, string $previousSlug, 
             }
         });
     } catch (Throwable $updateError) {
-        if (!duplicateInsertException($updateError)) {
+        if (!duplicateKeyException($updateError)) {
             throw $updateError;
         }
 

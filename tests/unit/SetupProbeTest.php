@@ -18,10 +18,29 @@ require_once dirname(__DIR__, 2) . '/core/setup-probe.php';
 // Здесь проверяется граница текста отказа — то, что через реальный тестовый сервер не проверяется
 // вовсе: сообщение `1045` на этом стенде однострочное и короче порога, поэтому в http-наборе
 // утверждений про вырезку нет (и появиться не должно).
+//
+// Путь замка уводится из боевого public/install.lock (М6) переопределением setupLockOverride()
+// в setUp: clearLock() стирает за собой, и прогон набора на развёрнутой копии сайта не открыл бы
+// установщик заново. Не переменная окружения: PHPUnit при обнаружении включает каждый тестовый
+// файл, и поставленная на верхнем уровне переменная протекла бы через процесс PHPUnit в
+// дочерние php -S http-набора — сервер установщика писал бы замок во временный путь.
+
 final class SetupProbeTest extends TestCase
 {
     /** Порог среза первой строки: тот же, что стоит в `setupFailureHint()`. */
     private const HINT_LIMIT = 160;
+
+    protected function setUp(): void
+    {
+        // Каждый тест ставит переопределение заново, tearDown снимает: наследие не доезжает
+        // до соседних наборов в том же прогоне.
+        setupLockOverride(sys_get_temp_dir() . '/cms-unit-install.lock');
+    }
+
+    protected function tearDown(): void
+    {
+        setupLockOverride(null);
+    }
 
     /**
      * Первая строка сообщения драйвера — единственное, что интересно оператору: в ней имя
@@ -78,17 +97,20 @@ final class SetupProbeTest extends TestCase
 
     /**
      * Убирает замок любого вида перед и после проверки: настоящий файл и мусорный каталог
-     * на его месте стираются. Тест трогает настоящий public/install.lock, поэтому прибирается
-     * сам — чужой набор после него не обязан разбираться, что здесь осталось.
+     * на его месте стираются. Путь берётся из setupLockPath(): переопределение setUp уводит
+     * замок во временный каталог, и боевой public/install.lock набором не трогается (М6) —
+     * на развёрнутой копии сайта он стоит честно.
      */
     private static function clearLock(): void
     {
-        if (is_file(SETUP_LOCK)) {
-            unlink(SETUP_LOCK);
+        $path = setupLockPath();
+
+        if (is_file($path)) {
+            unlink($path);
         }
 
-        if (is_dir(SETUP_LOCK)) {
-            @rmdir(SETUP_LOCK);
+        if (is_dir($path)) {
+            @rmdir($path);
         }
     }
 
@@ -101,24 +123,42 @@ final class SetupProbeTest extends TestCase
         self::clearLock();
 
         try {
-            self::assertSame('proceed', setupLockVerdict(), 'Свободный замок захватывается');
-            self::assertFileExists(SETUP_LOCK, 'Захват оставляет файл замка на диске');
+            self::assertSame('proceed', setupLockVerdict(false), 'Свободный замок захватывается');
+            self::assertFileExists(setupLockPath(), 'Захват оставляет файл замка на диске');
         } finally {
             self::clearLock();
         }
     }
 
     /**
-     * Стоящий замок — вердикт 'installed': сайт уже установлен, захват не происходит и файл
-     * не переписывается.
+     * Стоящий замок при поднятой схеме — вердикт 'installed': сайт уже установлен, захват
+     * не происходит и файл не переписывается. Признак установки передаётся параметром,
+     * чтобы вердикт не лез в базу из юнит-набора.
      */
     public function testСтоящийЗамокДаётInstalled(): void
     {
         self::clearLock();
-        file_put_contents(SETUP_LOCK, utcStamp(nowUtc()) . "\n");
+        file_put_contents(setupLockPath(), utcStamp(nowUtc()) . "\n");
 
         try {
-            self::assertSame('installed', setupLockVerdict(), 'Стоящий замок закрывает экран');
+            self::assertSame('installed', setupLockVerdict(true), 'Стоящий замок закрывает экран');
+        } finally {
+            self::clearLock();
+        }
+    }
+
+    /**
+     * Стоящий замок при НЕподнятой схеме — вердикт 'stale' (М7): замок без срока жизни
+     * остаётся и после смерти процесса посреди установки, и «сайт уже установлен» для
+     * полусмонтированного сайта врёт. Человеку нужен путь восстановления: стереть замок.
+     */
+    public function testСтоящийЗамокБезСхемыДаётStale(): void
+    {
+        self::clearLock();
+        file_put_contents(setupLockPath(), utcStamp(nowUtc()) . "\n");
+
+        try {
+            self::assertSame('stale', setupLockVerdict(false), 'Замок без схемы не зовётся «сайт уже установлен»');
         } finally {
             self::clearLock();
         }
@@ -129,16 +169,39 @@ final class SetupProbeTest extends TestCase
      * замка нельзя, ровно эту руку в POST-ветке встречает отказ. Гонку двух запросов
      * однопоточный тест не поднимает, поэтому предикат руки проверяется его же гранью:
      * fopen('xb') отказывает, а is_file замка ложно — мусорный каталог на месте замка
-     * даёт ровно эту пару (файл каталогом не читается).
+     * даёт ровно эту пару (файл каталогом не читается). Отказ fopen при этом «File
+     * exists» (проверено зондом на этом PHP): руке busy соответствует именно он.
      */
     public function testПроигранныйЗахватБезЗамкаНаДискеДаётBusy(): void
     {
         self::clearLock();
-        self::assertTrue(mkdir(SETUP_LOCK), 'Каталог на месте замка создан');
+        self::assertTrue(mkdir(setupLockPath()), 'Каталог на месте замка создан');
 
         try {
-            self::assertSame('busy', setupLockVerdict(), 'Захват без замка на диске — рука проигравшего');
+            self::assertSame('busy', setupLockVerdict(false), 'Захват без замка на диске — рука проигравшего');
         } finally {
+            self::clearLock();
+        }
+    }
+
+    /**
+     * Захват, проигранный не из-за замка, — вердикт 'denied' (М8): fopen('xb') падает
+     * «No such file or directory» на отсутствующем родительском каталоге (и «Permission
+     * denied» при чужих правах), а прежний вердикт звал обе руки «busy» и отправлял
+     * ждать минуту, хотя ожидание путь не оживит. Отсутствующий каталог выбран вместо
+     * chmod: под root контейнера права каталога не мешают созданию файла, а побочная
+     * рука детерминирована на любом пользователе.
+     */
+    public function testЗахватНаНедоступномПутиДаётDenied(): void
+    {
+        self::clearLock();
+        $detour = dirname(setupLockPath()) . '/missing-' . bin2hex(random_bytes(4)) . '/install.lock';
+        setupLockOverride($detour);
+
+        try {
+            self::assertSame('denied', setupLockVerdict(false), 'Захват не из-за замка не зовётся «чужой запрос»');
+        } finally {
+            setupLockOverride(null);
             self::clearLock();
         }
     }

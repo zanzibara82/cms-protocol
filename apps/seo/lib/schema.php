@@ -211,7 +211,7 @@ function seoSchemaSave(array $values): array
     ];
 
     if ($existing !== null) {
-        updateSchemaRow($existing, $row);
+        seoSchemaRowUpdate($existing, $row);
 
         return ['ok' => true, 'error' => '', 'notice' => 'schema_saved'];
     }
@@ -227,7 +227,7 @@ function seoSchemaSave(array $values): array
             'created_at' => $stamp,
         ]));
     } catch (Throwable $insertError) {
-        if (!duplicateInsertException($insertError)) {
+        if (!duplicateKeyException($insertError)) {
             throw $insertError;
         }
 
@@ -237,7 +237,7 @@ function seoSchemaSave(array $values): array
             return ['ok' => false, 'error' => 'Разметку на этот адрес только что правят — обновите список и повторите.', 'notice' => ''];
         }
 
-        updateSchemaRow($raced, $row);
+        seoSchemaRowUpdate($raced, $row);
     }
 
     return ['ok' => true, 'error' => '', 'notice' => 'schema_saved'];
@@ -250,7 +250,7 @@ function seoSchemaSave(array $values): array
  * @param array<string, mixed> $existing
  * @param array{schema_type: string, name: string, description: ?string, image: ?string, author: ?string, date_published: ?string, date_modified: ?string, updated_at: string} $row
  */
-function updateSchemaRow(array $existing, array $row): void
+function seoSchemaRowUpdate(array $existing, array $row): void
 {
     run(
         'UPDATE ' . t('seo_schema') . ' SET schema_type = ?, name = ?, description = ?, image = ?,'

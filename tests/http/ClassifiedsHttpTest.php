@@ -460,6 +460,13 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertCount(20, $garbage['items']);
         self::assertStringContainsString('|', (string) $garbage['next_after']);
 
+        // Хвост композита с мусором — тоже не курсор: подделка «штамп|id|мусор» раньше
+        // делала хвост «id|мусор», и строковое сравнение включало саму строку-границу.
+        // Форма идентификатора не сошлась — отвечает первая порция.
+        $forged = json_decode(Kernel::get('/classifieds/api/listings?after=' . rawurlencode($after . '|мусор'))['body'], true);
+        self::assertIsArray($forged);
+        self::assertCount(20, $forged['items'], 'Курсор с чужим хвостом — не курсор: отвечает первая порция');
+
         // Совместимость: чистый штамп прежнего формата листается. Все 21 строка стоят НА
         // штампе, поэтому строго-старее остаются только сидовые объявления.
         $legacy = json_decode(Kernel::get('/classifieds/api/listings?after=' . rawurlencode($stamp))['body'], true);

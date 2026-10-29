@@ -108,6 +108,17 @@ final class CommerceApiTest extends CommerceDbTestCase
         // без ярости и без пустой выборки.
         self::assertCount(COMMERCE_API_PAGE_SIZE, commerceApiProductList('это-не-курсор|чужой'));
         self::assertCount(COMMERCE_API_PAGE_SIZE, commerceApiProductList('не-штамп'));
+
+        // Хвост композита обязан быть формой идентификатора: подделка «штамп|id|мусор»
+        // раньше делала хвост «id|мусор», и строковое сравнение включало саму строку-границу
+        // — порция отдавала пару строк вперемешку. Форма не сошлась — курсор мусор целиком,
+        // отвечает первая порция, а не полуверная выборка.
+        $forged = $stamp . '|' . (string) $first[COMMERCE_API_PAGE_SIZE - 1]['id'] . '|мусор';
+        self::assertCount(
+            COMMERCE_API_PAGE_SIZE,
+            commerceApiProductList($forged),
+            'Курсор с чужим хвостом — не курсор: отвечает первая порция, а не строка-граница с хвостом'
+        );
     }
 
     public function testКартаAPIРазворачиваетВарианты(): void

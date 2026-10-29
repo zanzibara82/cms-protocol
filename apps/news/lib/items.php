@@ -763,7 +763,7 @@ function createItem(array $input, array $editor, ?DateTimeImmutable $now = null)
             linkItemTags($id, $tagIds);
         });
     } catch (Throwable $error) {
-        if (!duplicateInsertException($error)) {
+        if (!duplicateKeyException($error)) {
             throw $error;
         }
 
@@ -849,7 +849,7 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
             }
         });
     } catch (Throwable $error) {
-        if (!duplicateInsertException($error)) {
+        if (!duplicateKeyException($error)) {
             throw $error;
         }
 

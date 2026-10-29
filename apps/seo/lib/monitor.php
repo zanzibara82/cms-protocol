@@ -77,6 +77,10 @@ function seoMonitorRecordMiss(string $path): void
     // такой строки», и второй INSERT падал бы 1062-м исключением невхости — смотрющийся
     // посетителю HTTP 500 на несуществующем адресе. Повторное обращение только
     // увеличивает счётчик и обновляет отметку, referrer первой встречи остаётся.
+    // Форма VALUES() в обновлении — та же, что в setOption() (core/options.php), и по той
+    // же причине: с MySQL 8.0.20 она помечена устаревшей, а форма с псевдонимом строки
+    // работает только с MySQL 8.0.19+, проект же держит и MariaDB. Не «чинить» на
+    // псевдоним — сломается MariaDB.
     run(
         'INSERT INTO ' . t('seo_404') . ' (id, path, hits, referrer_host, first_seen_at, last_seen_at)'
         . ' VALUES (?, ?, 1, ?, ?, ?)'
@@ -290,7 +294,7 @@ function seoMonitorRedirectSave(array $values): array
     $stamp = utcStamp(nowUtc());
 
     if ($existing !== null) {
-        updateRedirectRow($existing, (array) $values);
+        seoMonitorRedirectRowUpdate($existing, (array) $values);
 
         return ['ok' => true, 'error' => '', 'notice' => 'redirect_saved'];
     }
@@ -309,7 +313,7 @@ function seoMonitorRedirectSave(array $values): array
             'updated_at' => $stamp,
         ]);
     } catch (Throwable $insertError) {
-        if (!duplicateInsertException($insertError)) {
+        if (!duplicateKeyException($insertError)) {
             throw $insertError;
         }
 
@@ -319,7 +323,7 @@ function seoMonitorRedirectSave(array $values): array
             return ['ok' => false, 'error' => 'Это правило только что правят — обновите список и повторите.', 'notice' => ''];
         }
 
-        updateRedirectRow($raced, (array) $values);
+        seoMonitorRedirectRowUpdate($raced, (array) $values);
     }
 
     return ['ok' => true, 'error' => '', 'notice' => 'redirect_saved'];
@@ -332,7 +336,7 @@ function seoMonitorRedirectSave(array $values): array
  * @param array<string, mixed> $existing
  * @param array{from: string, to: string, code: int} $values
  */
-function updateRedirectRow(array $existing, array $values): void
+function seoMonitorRedirectRowUpdate(array $existing, array $values): void
 {
     run(
         'UPDATE ' . t('seo_redirect') . ' SET to_path = ?, code = ?, updated_at = ? WHERE id = ?',
