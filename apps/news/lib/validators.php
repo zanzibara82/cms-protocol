@@ -328,7 +328,7 @@ function parseNewsForm(array $raw): array
     $values['lead'] = trim((string) preg_replace('/\s+/u', ' ', $values['lead']));
     // Адрес чистится тем же транслитом, что и заголовок: slugify() приводит пробелы к «-»,
     // отбрасывает знаки препинания и обрезает до NEWS_SLUG_MAX.
-    $values['slug'] = slugify($values['slug']);
+    $values['slug'] = slugify($values['slug'], NEWS_SLUG_MAX);
 
     $errors = [];
 

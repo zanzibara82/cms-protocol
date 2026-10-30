@@ -70,6 +70,13 @@ foreach (NEWS_BLOCK_ZONES as $regionZone) {
     addFilter('region_' . $regionZone, 'newsRegionHtml', 10);
 }
 
+// Вклад «Новости — лента» в конструкторе страниц (§5 дизайна слоя страниц): перечень видов для
+// селекта и рендер секции. Файлы разделов исполняются для всей сборки, включая неустановленные
+// (core/apps.php), поэтому сверку isAppActive ведут сами функции; замыканий здесь нет — страж
+// NewsVisibilityTest допускает в файле ровно одно, хук карты сайтов.
+addFilter('pages_block_kinds', 'newsPagesBlockKindsFilter', 10);
+addFilter('pages_block_' . NEWS_PAGES_BLOCK_KIND, 'newsPagesFeedHtml', 10);
+
 /** @param array<string, string> $params */
 function newsFeedPage(array $params = []): void
 {

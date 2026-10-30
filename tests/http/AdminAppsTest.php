@@ -329,15 +329,20 @@ final class AdminAppsTest extends TestCase
 
     public function testОбновлениеЯдраПриПустомПланеВозвращаетБезОшибки(): void
     {
-        // TestDb::reset() раскладывает схему ядра из sql/, но строку журнала пишет установщик.
-        // Без этой строки план ядра не пуст, и ветка пустого плана осталась бы непроверенной.
-        insert('app_migration', [
-            'id' => newId(),
-            'app' => 'core',
-            'name' => '0001_core_baseline.sql',
-            'checksum' => migrationChecksum(dirname(__DIR__, 2) . '/sql/0001_core_baseline.sql'),
-            'applied_at' => utcStamp(nowUtc()),
-        ]);
+        // TestDb::reset() раскладывает схему ядра из sql/, но строки журнала не пишет. Без них
+        // план ядра не пуст; релизов у ядра может быть сколько угодно — журнал заполняется по
+        // каждому файлу из sqlFilesOf('core') (0001-база и 0002-страницы на сейчас).
+        foreach (sqlFilesOf('core') as $file) {
+            insert('app_migration', [
+                'id' => newId(),
+                'app' => 'core',
+                'name' => (string) $file['name'],
+                'checksum' => migrationChecksum((string) $file['path']),
+                'applied_at' => utcStamp(nowUtc()),
+            ]);
+        }
+
+        $journal = count(sqlFilesOf('core'));
 
         $this->enter('admin@school.dev');
         $response = $this->press('update-core');
@@ -351,7 +356,7 @@ final class AdminAppsTest extends TestCase
         self::assertSame(200, $page['status']);
         self::assertStringNotContainsString('role="alert"', $page['body']);
         self::assertSame([], coreSqlPending(), 'План ядра обязан остаться пустым');
-        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('app_migration') . ' WHERE app = ?', ['core']), 'Повторного применения не было');
+        self::assertSame($journal, (int) value('SELECT COUNT(*) FROM ' . t('app_migration') . ' WHERE app = ?', ['core']), 'Повторного применения не было');
     }
 
     public function testВкладкаРазделаПоявляетсяПослеУстановки(): void

@@ -156,21 +156,11 @@ const CATALOG_NOTICE_TEXT = [
     'tagDeleted' => 'Тег удалён.',
 ];
 
-/**
- * Предел из справочника полей: у части записей это число (`paragraphs`, `perItem`), у части —
- * пара min/max (`title`, `label`). Один способ чтения убирает приведения типов из кода раздела
- * и из тестов — PHPStan на уровне 6 не пускает обращение по ключу к записи, которая может
- * оказаться числом.
- *
- * @param array<string, array<string, int>|int> $limits
- */
-function fieldLimit(array $limits, string $field, string $key = ''): int
-{
-    $entry = $limits[$field] ?? 0;
+// Вклад «Новости — лента» в конструкторе страниц (§5 дизайна слоя страниц): секция чужого вида
+// news_feed рендерится разделом по своим настройкам. Ядро настройки хранит как есть и смысла их
+// не понимает — разбор и проверка живут здесь (newsPagesFeedHtml()).
+const NEWS_PAGES_BLOCK_KIND = 'news_feed';
 
-    if (is_int($entry)) {
-        return $entry;
-    }
-
-    return is_array($entry) ? (int) ($entry[$key] ?? 0) : 0;
-}
+// Сколько материалов вклад может показать: тот же предел, что у ленты и блоков вывода, поэтому
+// подсказка формы и рендер обещают одно и то же.
+const NEWS_PAGES_FEED_COUNT_MAX = 12;

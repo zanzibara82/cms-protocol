@@ -178,14 +178,17 @@ final class MigrationsTest extends TestCase
 
     public function testЯдроУжеПримененоПоэтомуПланПуст(): void
     {
-        // Базовую схему ядра раскладывает setup.php, он же пишет строку журнала (шаг 9).
-        insert('app_migration', [
-            'id' => newId(),
-            'app' => 'core',
-            'name' => '0001_core_baseline.sql',
-            'checksum' => migrationChecksum(dirname(__DIR__, 2) . '/sql/0001_core_baseline.sql'),
-            'applied_at' => utcStamp(nowUtc()),
-        ]);
+        // Базовую схему ядра раскладывает setup.php, он же пишет строку журнала (шаг 9); дополнения
+        // ядра (0002_pages.sql) применяет кнопка «Обновить». Оба релиза в журнале — план пуст.
+        foreach (sqlFilesOf('core') as $file) {
+            insert('app_migration', [
+                'id' => newId(),
+                'app' => 'core',
+                'name' => (string) $file['name'],
+                'checksum' => migrationChecksum((string) $file['path']),
+                'applied_at' => utcStamp(nowUtc()),
+            ]);
+        }
 
         self::assertSame([], coreSqlPending());
         self::assertTrue(planApp('core')->isEmpty());

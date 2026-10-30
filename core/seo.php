@@ -12,10 +12,22 @@ function absoluteUrl(string $path): string
     return $base . $clean;
 }
 
-/** @return list<array{loc: string}> */
+/**
+ * Адреса карты сайта. Опубликованные индексируемые страницы идут после корня: черновики и
+ * noindex-страницы отсеивает читатель (publishedPageSlugs), поэтому фильтр здесь не нужен —
+ * страницы это ядро, а не вклад раздела.
+ *
+ * @return list<array{loc: string}>
+ */
 function coreSitemapUrls(): array
 {
-    return [['loc' => '/']];
+    $urls = [['loc' => '/']];
+
+    foreach (publishedPageSlugs() as $slug) {
+        $urls[] = ['loc' => '/' . $slug];
+    }
+
+    return $urls;
 }
 
 // Служебные пути ядра не индексируются: robots.txt и noindex в шаблоне обязаны совпадать,

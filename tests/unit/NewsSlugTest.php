@@ -31,32 +31,32 @@ final class NewsSlugTest extends TestCase
     public function testАдресОбрезаетсяДоПределаИНеКончаетсяДефисом(): void
     {
         $long = str_repeat('слово ', 40);
-        $slug = slugify($long);
+        $slug = slugify($long, NEWS_SLUG_MAX);
 
         self::assertLessThanOrEqual(NEWS_SLUG_MAX, mb_strlen($slug));
         self::assertStringNotContainsString('--', $slug);
         self::assertStringEndsNotWith('-', $slug);
-        self::assertSame(NEWS_SLUG_MAX, mb_strlen(slugify(str_repeat('а', 200))));
+        self::assertSame(NEWS_SLUG_MAX, mb_strlen(slugify(str_repeat('а', 200), NEWS_SLUG_MAX)));
     }
 
     public function testПустойИНечитаемыйЗаголовокДаютПустойАдрес(): void
     {
-        self::assertSame('', slugify(''));
-        self::assertSame('', slugify('   '));
-        self::assertSame('', slugify('!!! ???'));
+        self::assertSame('', slugify('', NEWS_SLUG_MAX));
+        self::assertSame('', slugify('   ', NEWS_SLUG_MAX));
+        self::assertSame('', slugify('!!! ???', NEWS_SLUG_MAX));
     }
 
     public function testКоллизияРешаетсяНумерацией(): void
     {
         $taken = static fn (string $slug): bool => in_array($slug, ['novost', 'novost-2', 'novost-3'], true);
 
-        self::assertSame('novost-4', ensureUniqueSlug('novost', $taken));
-        self::assertSame('svobodnyj', ensureUniqueSlug('svobodnyj', $taken));
+        self::assertSame('novost-4', ensureUniqueSlug('novost', $taken, 'novost'));
+        self::assertSame('svobodnyj', ensureUniqueSlug('svobodnyj', $taken, 'novost'));
     }
 
     public function testПустаяОсноваЗаменяетсяЗапаснымСловом(): void
     {
-        self::assertSame('novost', ensureUniqueSlug('', static fn (): bool => false));
+        self::assertSame('novost', ensureUniqueSlug('', static fn (): bool => false, 'novost'));
         self::assertSame('zagolovok', ensureUniqueSlug('', static fn (): bool => false, 'zagolovok'));
     }
 

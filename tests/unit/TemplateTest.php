@@ -100,12 +100,14 @@ final class TemplateTest extends TestCase
     {
         // Разметка из хука page_head и значение $page['head'] обязаны попасть в <head> сырьём;
         // порядок фиксирован: сначала хук, затем значение страницы (каскад читает их в этом порядке).
+        // Слою страниц главная собирается секциями (задача 4): пустой список — прежняя заглушка,
+        // контракт шаблона честно передаём данными.
         addAction('page_head', static function (): void {
             echo '<meta name="generator" content="cms">';
         });
 
         ob_start();
-        render('home', [], [
+        render('home', ['sections' => []], [
             'title' => 'Проверка',
             'head' => '<meta property="og:type" content="website">',
         ]);

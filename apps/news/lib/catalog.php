@@ -77,7 +77,7 @@ function checkCategoryTitle(string $rawTitle, string $rawDescription = ''): arra
         return ['title' => '', 'slugBase' => '', 'description' => null, 'error' => 'Название короче ' . $min . ' символов — напишите его целиком.'];
     }
 
-    $slugBase = slugify($title);
+    $slugBase = slugify($title, NEWS_SLUG_MAX);
     if ($slugBase === '') {
         return [
             'title' => $title,
@@ -365,7 +365,7 @@ function moveCategory(string $id, string $direction): array
 // Тегу адрес транслитерируется, русская надпись остаётся в `label`.
 function tagSlugBase(string $label): string
 {
-    return slugify(mb_substr(collapseSpace($label), 0, fieldLimit(TAG_FIELDS, 'label', 'max')));
+    return slugify(mb_substr(collapseSpace($label), 0, fieldLimit(TAG_FIELDS, 'label', 'max')), NEWS_SLUG_MAX);
 }
 
 /** @return array{id: string, slug: string, label: string}|null */

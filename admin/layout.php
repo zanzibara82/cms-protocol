@@ -7,6 +7,7 @@ declare(strict_types=1);
 // core/templates/admin/ и вызывают adminShell(), поэтому вкладки и уведомление собраны в одном месте.
 const ADMIN_CORE_TABS = [
     ['href' => '/admin', 'label' => 'Сводка'],
+    ['href' => '/admin/pages', 'label' => 'Страницы'],
     ['href' => '/admin/apps', 'label' => 'Приложения'],
 ];
 

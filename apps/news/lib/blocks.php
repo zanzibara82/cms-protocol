@@ -639,3 +639,92 @@ function blockTargetOptions(): array
 
     return $out;
 }
+
+// ── Вклад в конструкторе страниц ─────────────────────────
+
+/**
+ * Перечень вкладов раздела для конструктора страниц: вид «Новости — лента» и поля его настроек.
+ * Ядро рисует поля формой из этого ответа, а хранит значения как есть — разбор на рендере здесь
+ * (§5 дизайна слоя страниц, механика region()).
+ *
+ * @return list<array{kind: string, name: string, fields: list<array{key: string, label: string, hint: string}>}>
+ */
+function newsPagesBlockKinds(): array
+{
+    return [
+        [
+            'kind' => NEWS_PAGES_BLOCK_KIND,
+            'name' => 'Новости — лента',
+            'fields' => [
+                ['key' => 'count', 'label' => 'Сколько материалов', 'hint' => 'От 1 до ' . NEWS_PAGES_FEED_COUNT_MAX . '.'],
+                ['key' => 'category', 'label' => 'Рубрика', 'hint' => 'Адрес рубрики; пусто — вся лента.'],
+                ['key' => 'layout', 'label' => 'Вариант вёрстки', 'hint' => 'Пока один вид — поле про запас.'],
+            ],
+        ],
+    ];
+}
+
+/**
+ * Фильтр перечня вкладов: раздел выключен — вклада в селекте нет и поля настроек конструктор
+ * не рисует. Именованная функция, а не замыкание: в routes.php страж NewsVisibilityTest
+ * допускает ровно одно замыкание — хук карты сайтов.
+ *
+ * @param list<array{kind: string, name: string, fields: list<array{key: string, label: string, hint: string}>}> $kinds
+ * @return list<array{kind: string, name: string, fields: list<array{key: string, label: string, hint: string}>}>
+ */
+function newsPagesBlockKindsFilter(array $kinds): array
+{
+    if (!isAppActive('news')) {
+        return $kinds;
+    }
+
+    return array_merge($kinds, newsPagesBlockKinds());
+}
+
+/**
+ * Рендер вклада «Новости — лента»: карточки по настройкам {count, category} поверх тех же имён
+ * читателя ленты, что у блоков вывода (blockFeedRows, вердикт Р8). Настройки ядро хранит как
+ * есть, поэтому сверяет их вклад: кривое число или несуществующая рубрика — пустое место и
+ * запись в журнал, а не падение страницы и не молчаливая подмена значения. Пустая подборка при
+ * честных настройках — материалов просто нет: блок молчит без записи в журнал.
+ *
+ * @param array<string, string> $settings
+ * @param array<string, string> $head
+ */
+function newsPagesFeedHtml(string $html, array $settings, array $head): string
+{
+    if (!isAppActive('news')) {
+        return $html;
+    }
+
+    $rawCount = trim((string) ($settings['count'] ?? ''));
+    $category = trim((string) ($settings['category'] ?? ''));
+
+    if (!ctype_digit($rawCount) || (int) $rawCount < 1 || (int) $rawCount > NEWS_PAGES_FEED_COUNT_MAX) {
+        logWarn('news.pages_feed_count', ['path' => requestPath(), 'count' => $rawCount]);
+
+        return $html;
+    }
+
+    $filter = [];
+
+    if ($category !== '') {
+        if (findCategory($category) === null) {
+            logWarn('news.pages_feed_category', ['path' => requestPath(), 'category' => $category]);
+
+            return $html;
+        }
+
+        $filter['category'] = $category;
+    }
+
+    $cards = blockFeedRows($filter, '', (int) $rawCount);
+
+    if ($cards === []) {
+        return $html;
+    }
+
+    $title = trim((string) ($head['title'] ?? ''));
+
+    return $html . partial('news/partials/block', ['title' => $title !== '' ? $title : 'Новости', 'cards' => $cards]);
+}

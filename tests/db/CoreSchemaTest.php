@@ -16,7 +16,7 @@ final class CoreSchemaTest extends TestCase
 
     public function testВсеТаблицыЯдраНаМесте(): void
     {
-        $expected = ['user', 'login_attempt', 'option', 'app_installation', 'app_migration'];
+        $expected = ['user', 'login_attempt', 'option', 'app_installation', 'app_migration', 'page', 'page_section', 'page_old_slug'];
 
         foreach ($expected as $name) {
             self::assertSame(1, (int) value('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?', [t($name)]), 'Нет таблицы ' . t($name));
@@ -49,6 +49,24 @@ final class CoreSchemaTest extends TestCase
 
         self::assertSame('InnoDB', $row['ENGINE']);
         self::assertSame('utf8mb4_unicode_ci', $row['TABLE_COLLATION']);
+    }
+
+    public function testРелизСтраницИдемпотентен(): void
+    {
+        // MySQL фиксирует DDL сразу, поэтому кнопка «Обновить» может доехать до уже созданных
+        // таблиц недочитанным файлом: второй прогон по живым таблицам обязан пройти молча.
+        $statements = splitSql((string) file_get_contents(dirname(__DIR__, 2) . '/sql/0002_pages.sql'));
+
+        self::assertGreaterThan(0, count($statements));
+
+        foreach ($statements as $statement) {
+            run($statement);
+        }
+
+        // Повторный прогон без сброса: IF NOT EXISTS пропускает живые таблицы.
+        foreach ($statements as $statement) {
+            run($statement);
+        }
     }
 
     public function testДатаСозданияХранитсяВUtc(): void

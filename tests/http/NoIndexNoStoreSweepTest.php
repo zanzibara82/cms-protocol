@@ -63,7 +63,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // экраны целей и конверсий, контентной аналитики и воронок — все помечены: всего 111
     // вариантов, помеченных 89. S6 добавляет экран экспорта, скачивание файла, экран API-ключей
     // (под редактором — 403) и машинный адрес отчётов (без ключа — 401, но пара запретов та же) —
-    // всего 116 вариантов, помеченных 94.
+    // всего 116 вариантов, помеченных 94. Слой страниц добавляет три экрана конструктора (список,
+    // редактор главной, правка страницы — все помечены) и витрину /{slug} (опубликованная открыта,
+    // черновик-предпросмотр и промах notFound() помечены): всего 123 варианта, помеченных 100.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -75,13 +77,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 117;
-    private const MARKED_TOTAL = 95;
+    private const VARIANTS_TOTAL = 123;
+    private const MARKED_TOTAL = 100;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (117 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 116;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (123 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 122;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -283,6 +285,25 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'created_at' => utcStamp(nowUtc()),
             'updated_at' => utcStamp(nowUtc()),
         ]);
+
+        // Слой страниц в обход: опубликованная страница открывает витрину /{slug} без метки,
+        // черновик под сеансом редактора — предпросмотр с меткой (его же номер питает экран
+        // правки конструктора). Секции не садим: заглушка «пока нет блоков» — тоже открытый
+        // исход, и она не должна выпасть из обхода.
+        createPage([
+            'title' => 'Страница обхода',
+            'slug' => 'obhod-stranitsa',
+            'description' => 'Страница для плана обхода.',
+            'status' => PAGES_STATUS_PUBLISHED,
+            'noindex' => '0',
+        ], nowUtc());
+        createPage([
+            'title' => 'Черновик обхода',
+            'slug' => 'obhod-chernovik',
+            'description' => '',
+            'status' => PAGES_STATUS_DRAFT,
+            'noindex' => '0',
+        ], nowUtc());
 
         self::$tokens = self::buildTokens($items);
         // Отметка CMS_TEST_OMITTED_HANDLER поднимает в фикстуре маршрут с отсутствующим
@@ -603,6 +624,25 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /robots.txt' => [
                 ['path' => '/robots.txt', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+
+            // Конструктор страниц: список, редакторы и правка — приватные экраны админки с меткой;
+            // витрина страниц — открытые исходы: опубликованная страница 200 без метки, черновик
+            // под сеансом редактора — предпросмотр с меткой (обработчик ставит noindex сам),
+            // чужой адрес — помеченный 404 notFound().
+            'GET /admin/pages' => [
+                ['path' => '/admin/pages', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /admin/pages/home' => [
+                ['path' => '/admin/pages/home', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /admin/pages/{id}' => [
+                ['path' => '/admin/pages/{pageid}', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /{slug}' => [
+                ['path' => '/{pageslug}', 'outcome' => self::OPEN, 'status' => 200],
+                ['path' => '/{pagedraft}', 'outcome' => self::MARKED, 'status' => 200],
+                ['path' => '/net-takoy-stranitsy-obhoda', 'outcome' => self::MARKED, 'status' => 404],
             ],
 
             // Раздел «Новости»: ветки, где метку ставит сам обработчик из параметра запроса,
@@ -1176,6 +1216,12 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $seoSchema = one('SELECT id FROM ' . t('seo_schema') . " WHERE path = '/obhod-razmetka'");
         self::assertIsArray($seoSchema, 'Фикстура: строки разметки нет — экран правки недоступен');
 
+        $pagePublished = one('SELECT id, slug FROM ' . t('page') . " WHERE slug = 'obhod-stranitsa'");
+        self::assertIsArray($pagePublished, 'Фикстура: опубликованной страницы нет — витрина страниц недоступна обходу');
+
+        $pageDraft = one('SELECT id, slug FROM ' . t('page') . " WHERE slug = 'obhod-chernovik'");
+        self::assertIsArray($pageDraft, 'Фикстура: черновика страницы нет — предпросмотр и экран правки не проверить');
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
@@ -1199,6 +1245,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'seometa' => (string) $seoMeta['id'],
             // Разметка: экран правки выбранной строки справочника.
             'seoschema' => (string) $seoSchema['id'],
+            // Страницы: экран правки конструктора, витрина опубликованной и черновика.
+            'pageid' => (string) $pagePublished['id'],
+            'pageslug' => (string) $pagePublished['slug'],
+            'pagedraft' => (string) $pageDraft['slug'],
         ] + self::buildDiscountTokens();
     }
 

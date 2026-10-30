@@ -2,56 +2,9 @@
 
 declare(strict_types=1);
 
-// Транслит для адресов — 33 буквы русского алфавита. Список перенесён из src/lib/slug.ts
-// Next.js-портала без изменений, чтобы при переносе содержимого адреса материалов совпали.
-/** @var array<string, string> */
-const NEWS_TRANSLIT = [
-    'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'g', 'д' => 'd', 'е' => 'e', 'ё' => 'yo',
-    'ж' => 'zh', 'з' => 'z', 'и' => 'i', 'й' => 'y', 'к' => 'k', 'л' => 'l', 'м' => 'm',
-    'н' => 'n', 'о' => 'o', 'п' => 'p', 'р' => 'r', 'с' => 's', 'т' => 't', 'у' => 'u',
-    'ф' => 'f', 'х' => 'h', 'ц' => 'ts', 'ч' => 'ch', 'ш' => 'sh', 'щ' => 'sch', 'ъ' => '',
-    'ы' => 'y', 'ь' => '', 'э' => 'e', 'ю' => 'yu', 'я' => 'ya',
-];
-
-function slugify(string $input): string
-{
-    $lowered = trim(mb_strtolower($input));
-    $out = '';
-
-    foreach (preg_split('//u', $lowered, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $char) {
-        if (array_key_exists($char, NEWS_TRANSLIT)) {
-            $out .= NEWS_TRANSLIT[$char];
-        } elseif (preg_match('/[a-z0-9]/', $char) === 1) {
-            $out .= $char;
-        } elseif (preg_match('/[\s\-_.\/]/', $char) === 1) {
-            $out .= '-';
-        }
-        // Прочие символы — знаки препинания и прочая графика — отбрасываются.
-    }
-
-    $out = trim((string) preg_replace('/-+/', '-', $out), '-');
-
-    return rtrim(mb_substr($out, 0, NEWS_SLUG_MAX), '-');
-}
-
-/**
- * Свободный адрес на основе base: при коллизии добавляет -2, -3… Пустую основу меняет на
- * fallback — у раздела новостей он свой, чтобы материал не назывался уроком.
- *
- * Проверка занятости приходит вызывающим кодом: правило не ходит в базу, поэтому его одинаково
- * проверяют и лента, и форма, и тест без подключения.
- */
-function ensureUniqueSlug(string $base, callable $exists, string $fallback = 'novost'): string
-{
-    $root = $base !== '' ? $base : $fallback;
-    $candidate = $root;
-
-    for ($n = 2; $exists($candidate); $n++) {
-        $candidate = $root . '-' . $n;
-    }
-
-    return $candidate;
-}
+// Адреса материалов. Транслит и нормализация переехали в ядро (core/text.php): список букв тот
+// же, что в src/lib/slug.ts портала, а предел длины раздел передаёт сам — NEWS_SLUG_MAX держит
+// ширину колонки tbl_news_item.slug.
 
 /**
  * План адреса материала: что положить в базу и что сказать человеку.
@@ -64,7 +17,7 @@ function ensureUniqueSlug(string $base, callable $exists, string $fallback = 'no
  */
 function newsSlugPlan(string $typedSlug, string $title, callable $taken): array
 {
-    $typed = slugify($typedSlug);
+    $typed = slugify($typedSlug, NEWS_SLUG_MAX);
 
     if ($typed !== '') {
         // Занятость служебного сегмента проверяется до длины: однобуквенные адреса «c» и «t»
@@ -91,7 +44,7 @@ function newsSlugPlan(string $typedSlug, string $title, callable $taken): array
         return ['slug' => $typed, 'error' => ''];
     }
 
-    $base = slugify($title);
+    $base = slugify($title, NEWS_SLUG_MAX);
 
     if (mb_strlen($base) < NEWS_SLUG_MIN) {
         return [
@@ -101,7 +54,7 @@ function newsSlugPlan(string $typedSlug, string $title, callable $taken): array
         ];
     }
 
-    return ['slug' => ensureUniqueSlug($base, $taken), 'error' => ''];
+    return ['slug' => ensureUniqueSlug($base, $taken, 'novost'), 'error' => ''];
 }
 
 /**

@@ -45,7 +45,7 @@ final class ConfigLoaderTest extends TestCase
         // Отдельного assertTrue(defined('CORE_VERSION')) здесь нет: PHPStan знает файл константы
         // и считает такое утверждение всегда истинным (находка alreadyNarrowedType). Следующая
         // строка проверяет и определение, и значение: без константы самого обращения не будет.
-        self::assertSame('1.1.0', CORE_VERSION);
+        self::assertSame('1.2.0', CORE_VERSION);
     }
 
     public function testПустоеЗначениеКлючаНеСчитаетсяЗаданным(): void

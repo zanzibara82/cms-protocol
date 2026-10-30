@@ -12,16 +12,73 @@ function registerCoreRoutes(): void
     addRoute('GET', '/admin', 'coreAdminSummary', ['private' => true, 'permission' => 'login']);
     addRoute('GET', '/admin/apps', 'coreAdminApps', ['private' => true, 'permission' => 'manage']);
     addRoute('POST', '/admin/apps', 'coreAdminAppsAction', ['private' => true, 'permission' => 'manage']);
+    // Конструктор — контент, а не установка приложений: право «кто правит контентом» (редактор и
+    // администратор), как у админки новостей. Метка permission => 'manage' здесь не годится: гейт
+    // читает её как grantsAppManage() — право установки, только администратор (core/auth.php).
+    addRoute('GET', '/admin/pages', 'coreAdminPages', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/pages', 'coreAdminPagesAction', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/pages/home', 'coreAdminPagesHome', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/pages/home', 'coreAdminPagesAction', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/pages/{id}', 'coreAdminPageEdit', ['private' => true, 'permission' => 'login']);
+    // Все действия конструктора — один POST-обработчик (op): точка проверки CSRF одна, как на
+    // экране «Приложения». Адрес выбирает контекст: список, главная или страница.
+    addRoute('POST', '/admin/pages/{id}', 'coreAdminPagesAction', ['private' => true, 'permission' => 'login']);
     addRoute('GET', '/sitemap.xml', 'coreSitemap');
     addRoute('GET', '/robots.txt', 'coreRobots');
+    // Страницы живут на /{slug} одним сегментом, поэтому маршрут идёт в конец реестра: точные
+    // пути ядра и разделов выигрывают по построению сортировки (router.php ставит статические
+    // раньше параметрических), а {slug} ограничен «[^/]+» и не отбирает у разделов их подразделы.
+    addRoute('GET', '/{slug}', 'corePage');
 }
 
 /** @param array<string, string> $params */
 function coreHome(array $params = []): void
 {
-    render('home', [], [
+    render('home', ['sections' => homeSections(true)], [
         'title' => (string) configValue('SITE_NAME', 'Школа'),
         'description' => 'Новости, курсы и объявления школы английского языка.',
+    ]);
+}
+
+/**
+ * Публичная страница /{slug}: блоки, черновик-предпросмотр и 301 прежнего адреса.
+ *
+ * @param array<string, string> $params
+ */
+function corePage(array $params = []): void
+{
+    $slug = (string) ($params['slug'] ?? '');
+
+    // Прежний адрес ведёт на живой адрес страницы. Черновик-владелец отвечает как несуществующий:
+    // 301 выдал бы существование скрытой страницы.
+    $owner = pageByOldSlug($slug);
+
+    if ($owner !== null && (string) $owner['status'] === PAGES_STATUS_PUBLISHED) {
+        redirect('/' . (string) $owner['slug'], 301);
+    }
+
+    $page = findPage($slug);
+
+    if ($page === null) {
+        notFound();
+    }
+
+    $published = (string) $page['status'] === PAGES_STATUS_PUBLISHED;
+
+    // Черновик виден редактору прямым адресом — предпросмотр; всем остальным страница отвечает
+    // ровно как несуществующая (notFound(): фильтры приложений на not_found остаются живыми).
+    if (!$published && !roleGrantsManage(currentUser())) {
+        notFound();
+    }
+
+    render('page', [
+        'sections' => pageSections((string) $page['id'], true),
+        'page' => $page,
+        'preview' => !$published,
+    ], [
+        'title' => (string) $page['title'],
+        'description' => (string) $page['description'],
+        'noindex' => !$published || (int) $page['noindex'] === 1,
     ]);
 }
 
@@ -203,6 +260,197 @@ function coreAdminAppsAction(array $params = []): void
     };
 
     finishAppAction($result, '/admin/apps', $notice);
+}
+
+// ---------------------------------------------------------------------------
+// Конструктор страниц: список, редакторы, один POST-обработчик действий
+// ---------------------------------------------------------------------------
+
+/** @return list<array{id: string, title: string, slug: string, status: string, noindex: string, updated: string}> */
+function pagesAdminList(): array
+{
+    // Список конструктора ограничен сверху, как справочники новостей (рубрики, теги, блоки):
+    // страж производительности требует у однострочного all() предел выгрузки.
+    $rows = [];
+    foreach (all('SELECT id, title, slug, status, noindex, updated_at FROM ' . t('page') . ' ORDER BY updated_at DESC, id ASC LIMIT 500') as $row) {
+        $rows[] = [
+            'id' => (string) $row['id'],
+            'title' => (string) $row['title'],
+            'slug' => (string) $row['slug'],
+            'status' => (string) $row['status'] === PAGES_STATUS_PUBLISHED ? 'Опубликовано' : 'Черновик',
+            'noindex' => (int) $row['noindex'] === 1 ? 'Да' : 'Нет',
+            'updated' => (string) $row['updated_at'],
+        ];
+    }
+
+    return $rows;
+}
+
+/**
+ * Поля страницы из формы конструктора. Статус не доверяет POST: чужое значение означало бы
+ * черновик, который никто не выбирал.
+ *
+ * @return array<string, mixed>
+ */
+function pagesPageValuesFromPost(): array
+{
+    $status = postString('status');
+
+    return [
+        'title' => postString('title'),
+        'slug' => postString('slug'),
+        'description' => postString('description'),
+        'status' => in_array($status, PAGES_STATUSES, true) ? $status : PAGES_STATUS_DRAFT,
+        'noindex' => postString('noindex'),
+    ];
+}
+
+/**
+ * Поля секции из формы конструктора: списки кнопок и items собираются из строк с индексами
+ * (образец — характеристики доски), пустые строки отбрасываются в pagesFormRows; настройки
+ * вклада едут в JSON как есть — их смысл знает вклад приложения, не ядро.
+ *
+ * @return array<string, mixed>
+ */
+function pagesSectionValuesFromPost(): array
+{
+    $post = postAll();
+
+    return [
+        'kind' => postString('kind'),
+        'anchor' => postString('anchor'),
+        'badge' => postString('badge'),
+        'title' => postString('title'),
+        'lead_text' => postString('lead_text'),
+        'note' => postString('note'),
+        'image' => postString('image'),
+        'image_alt' => postString('image_alt'),
+        'buttons' => pagesFormRows($post['buttons'] ?? null, ['label', 'href', 'blank']),
+        'items' => pagesFormRows($post['items'] ?? null, ['title', 'text', 'href', 'image', 'note']),
+        'settings' => pagesSettingsOf($post['settings'] ?? null),
+        'visible' => postString('visible') !== '0',
+    ];
+}
+
+/** @param array<string, string> $params */
+function coreAdminPages(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+
+    render('admin/pages', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => pagesAdminList(),
+    ], ['title' => 'Страницы — админка', 'noindex' => true]);
+}
+
+/** Экран блоков главной: секции с page_id = '', полей страницы у главной нет.
+ * @param array<string, string> $params
+ */
+function coreAdminPagesHome(array $params = []): void
+{
+    coreAdminPageScreen(PAGES_HOME_ID);
+}
+
+/**
+ * @param array<string, string> $params
+ */
+function coreAdminPageEdit(array $params = []): void
+{
+    coreAdminPageScreen((string) ($params['id'] ?? ''));
+}
+
+/**
+ * Экран редактора: у главной — только секции, у страницы — поля страницы плюс секции.
+ * Несуществующая страница ведёт в список: актуальный состав там, а не в мёртвой форме.
+ */
+function coreAdminPageScreen(string $pageId): void
+{
+    $page = $pageId === PAGES_HOME_ID ? null : pageById($pageId);
+
+    if ($pageId !== PAGES_HOME_ID && $page === null) {
+        redirect('/admin/pages');
+    }
+
+    $data = [
+        'kinds' => pagesKindOptions(),
+        'sections' => pageSections($pageId),
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+    ];
+
+    if ($page === null) {
+        $alertReason = takeAdminFlashReason();
+        $data['alertTitle'] = adminFailureTitle($alertReason);
+        $data['alertReason'] = $alertReason;
+
+        render('admin/pages-home', $data, ['title' => 'Блоки главной — админка', 'noindex' => true]);
+
+        return;
+    }
+
+    $alertReason = takeAdminFlashReason();
+    $data['page'] = $page;
+    $data['alertTitle'] = adminFailureTitle($alertReason);
+    $data['alertReason'] = $alertReason;
+
+    render('admin/pages-edit', $data, ['title' => 'Страницы — админка', 'noindex' => true]);
+}
+
+// Все действия раздела — один обработчик: намерение приходит полем op, а не адресом. Так страж
+// CsrfCoverageTest видит одну точку проверки, а журнал — одно событие на действие (механика
+// экрана «Приложения»).
+/** @param array<string, string> $params */
+function coreAdminPagesAction(array $params = []): void
+{
+    csrfCheck();
+
+    $op = postString('op');
+
+    // Контекст: у главной секции живут с page_id = '' (параметров у точного маршрута нет),
+    // у страницы идемпотент адрес маршрута — правки вне своего редактора невозможны.
+    $pageId = (string) ($params['id'] ?? PAGES_HOME_ID);
+    $to = $pageId === PAGES_HOME_ID ? '/admin/pages/home' : '/admin/pages/' . $pageId;
+
+    if ($op === 'create-page') {
+        // Создание приходит со списка: успех ведёт в редактор новой страницы, отказ — в список
+        // с человеческой причиной в flash.
+        $result = createPage(pagesPageValuesFromPost(), nowUtc());
+        $created = ($result['ok'] ?? false) === true;
+
+        finishAppAction($result, $created ? '/admin/pages/' . (string) $result['id'] : '/admin/pages', $created ? 'page_created' : '');
+
+        return;
+    }
+
+    $result = match ($op) {
+        'save-page' => updatePage($pageId, pagesPageValuesFromPost(), nowUtc()),
+        'create-section' => createSection($pageId, pagesSectionValuesFromPost(), nowUtc()),
+        'save-section' => updateSection(postString('section'), pagesSectionValuesFromPost(), nowUtc()),
+        'move-section' => sectionMove(postString('section'), postString('dir')),
+        'toggle-section' => sectionToggle(postString('section'), postString('visible') !== '0'),
+        'delete-section' => sectionDelete(postString('section')),
+        'delete-page' => deletePage($pageId),
+        default => ['ok' => false, 'error' => 'Неизвестное действие.'],
+    };
+
+    // Успех у страницы уводит в список — страницы больше нет. Остальные действия остаются
+    // на своём экране.
+    if ($op === 'delete-page' && ($result['ok'] ?? false) === true) {
+        $to = '/admin/pages';
+    }
+
+    $notice = match ($op) {
+        'save-page' => 'page_saved',
+        'create-section' => 'section_created',
+        'save-section', 'toggle-section' => 'section_saved',
+        'move-section' => 'section_moved',
+        'delete-section' => 'section_deleted',
+        'delete-page' => 'page_deleted',
+        default => '',
+    };
+
+    finishAppAction($result, $to, $notice);
 }
 
 /**
