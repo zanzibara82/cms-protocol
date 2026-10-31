@@ -179,3 +179,251 @@ function menuPublicLinksOf(array $manifest, bool $active): array
 
     return $links;
 }
+
+/** Пункт по идентификатору: операции правят живую строку, а не воображаемую.
+ * @return array<string, mixed>|null
+ */
+function menuById(string $id): ?array
+{
+    return one(
+        'SELECT id, slot, section, label, href, blank, sort, visible, updated_at FROM '
+        . t('menu_item') . ' WHERE id = ?',
+        [$id]
+    );
+}
+
+/**
+ * Строки одного слота для карты админки, включая скрытые: конструктор видит и правит их все.
+ * Порядок чтения — порталово byOrder (sort, затем подпись): сида с одинаковым sort не ломает
+ * список. Публичные читатели берут из этого же порядка только видимые строки.
+ *
+ * @return list<array<string, mixed>>
+ */
+function menuRowsForAdmin(string $slot): array
+{
+    // Обороны перечнем MENU_SLOTS здесь нет: чужой слот и так отдаёт пустой перечень
+    // параметризованным запросом, а единый возврат читается без объединённых типов.
+    return all(
+        'SELECT id, slot, section, label, href, blank, sort, visible, updated_at FROM '
+        . t('menu_item') . ' WHERE slot = ? ORDER BY sort ASC, label ASC LIMIT ' . MENU_READ_LIMIT,
+        [$slot]
+    );
+}
+
+/**
+ * Шапка публичной страницы: видимые пункты слота HEADER по порядку, следом ссылки разделов
+ * из publicNav манифестов ВКЛЮЧЁННЫХ приложений (решение 5: администратор не обязан помнить,
+ * что доска включена, а пункт вести на 404). Пустое меню день-1 отдаёт пустой список.
+ *
+ * @return list<array{label: string, href: string, blank: bool}>
+ */
+function menuHeaderLinks(): array
+{
+    $links = [];
+    foreach (menuRowsForAdmin('HEADER') as $row) {
+        if ((int) $row['visible'] === 1) {
+            $links[] = ['label' => (string) $row['label'], 'href' => (string) $row['href'], 'blank' => (bool) $row['blank']];
+        }
+    }
+
+    foreach (appManifests() as $appId => $manifest) {
+        foreach (menuPublicLinksOf($manifest, isAppActive((string) $appId)) as $link) {
+            $links[] = ['label' => (string) $link['label'], 'href' => (string) $link['href'], 'blank' => (bool) $link['blank']];
+        }
+    }
+
+    return $links;
+}
+
+/**
+ * Подвал публичной страницы: видимые пункты слота FOOTER, сгруппированные по подписи колонки
+ * (решение 2). Строки уже отсортированы читателем, поэтому колонка занимает место своего
+ * первого пункта — той же структурой кормит тему.
+ *
+ * @return list<array{title: string, links: list<array{label: string, href: string, blank: bool}>}>
+ */
+function menuFooterSections(): array
+{
+    $rows = [];
+    foreach (menuRowsForAdmin('FOOTER') as $row) {
+        if ((int) $row['visible'] === 1) {
+            $rows[] = [
+                'section' => (string) $row['section'],
+                'label' => (string) $row['label'],
+                'href' => (string) $row['href'],
+                'blank' => (bool) $row['blank'],
+            ];
+        }
+    }
+
+    return menuFooterGroups($rows);
+}
+
+/**
+ * Добавление пункта в конец слота. Порядок перечитывается внутри транзакции — у вставок
+ * в «конец» нет гонки, у которой хватило бы проверки до вставки. Слот — отдельного аргумента:
+ * форма шлёт его скрытым полем карты, а нормализатор молча снимает раздел у шапки.
+ *
+ * @param array<string, mixed> $raw поля формы: label, href, section, blank
+ * @return array{ok: bool, error: string, id: string, notice: string}
+ */
+function createMenuItem(string $slot, array $raw, ?DateTimeImmutable $now = null): array
+{
+    // Аргумент слота — главный: чужое поле формы его не переписывает.
+    $values = menuItemValuesOf(['slot' => $slot] + $raw);
+
+    if ($values['error'] !== '') {
+        return ['ok' => false, 'error' => $values['error'], 'id' => '', 'notice' => ''];
+    }
+
+    $id = newId();
+    $moment = utcStamp($now ?? nowUtc());
+
+    tx(static function () use ($slot, $id, $moment, $values): void {
+        insert('menu_item', [
+            'id' => $id,
+            'slot' => $slot,
+            'section' => $values['section'],
+            'label' => $values['label'],
+            'href' => $values['href'],
+            'blank' => $values['blank'],
+            'sort' => (int) value('SELECT COALESCE(MAX(sort), -1) + 1 FROM ' . t('menu_item') . ' WHERE slot = ?', [$slot]),
+            'visible' => 1,
+            'updated_at' => $moment,
+        ]);
+    });
+
+    logInfo('menu.item_created', ['id' => $id, 'slot' => $slot]);
+
+    return ['ok' => true, 'error' => '', 'id' => $id, 'notice' => 'menu_created'];
+}
+
+/**
+ * Правка полей пункта. Слот меняется только пере-созданием пункта: сохранение держит родную
+ * карту, поэтому нормализатор работает по слоту строки, а по слоту чужой формы не смотрит.
+ * Порядок и видимость правкой полей не трогаются — своя операция на каждое.
+ *
+ * @param array<string, mixed> $raw поля формы: label, href, section, blank
+ * @return array{ok: bool, error: string, notice: string}
+ */
+function updateMenuItem(string $id, array $raw, ?DateTimeImmutable $now = null): array
+{
+    $row = menuById($id);
+
+    if ($row === null) {
+        return ['ok' => false, 'error' => 'Строка меню исчезла — обновите список.', 'notice' => ''];
+    }
+
+    $values = menuItemValuesOf(['slot' => (string) $row['slot']] + $raw);
+
+    if ($values['error'] !== '') {
+        return ['ok' => false, 'error' => $values['error'], 'notice' => ''];
+    }
+
+    run(
+        'UPDATE ' . t('menu_item') . ' SET section = ?, label = ?, href = ?, blank = ?, updated_at = ? WHERE id = ?',
+        [$values['section'], $values['label'], $values['href'], $values['blank'], utcStamp($now ?? nowUtc()), $id]
+    );
+
+    logInfo('menu.item_updated', ['id' => $id, 'slot' => (string) $row['slot']]);
+
+    return ['ok' => true, 'error' => '', 'notice' => 'menu_saved'];
+}
+
+/**
+ * Видимость пункта: скрытый остаётся в базе и виден конструктору. Переворот выражением
+ * «1 - visible», как у порталово setMenuItemVisible: флаг верен и при повторном вызове,
+ * а rowCount здесь не лжёт (у UPDATE видимости есть что менять всегда).
+ *
+ * @return array{ok: bool, error: string, notice: string}
+ */
+function toggleMenuItem(string $id): array
+{
+    $changed = run(
+        'UPDATE ' . t('menu_item') . ' SET visible = 1 - visible, updated_at = ? WHERE id = ?',
+        [utcStamp(nowUtc()), $id]
+    );
+
+    if ($changed === 0) {
+        return ['ok' => false, 'error' => 'Строка меню исчезла — обновите список.', 'notice' => ''];
+    }
+
+    logInfo('menu.item_toggled', ['id' => $id]);
+
+    return ['ok' => true, 'error' => '', 'notice' => 'menu_saved'];
+}
+
+/**
+ * Перестановка пункта: читается весь список слота, пункт переезжает к соседу и порядок
+ * пишется подряд 0..n одной транзакцией (решение 8). Не опирается на числа sort — сида
+ * с одинаковым sort обязан переставляться так же, как упорядоченный список. Отказ края —
+ * человеческая причина, список не трогается.
+ *
+ * @return array{ok: bool, error: string, notice: string}
+ */
+function moveMenuItem(string $id, string $direction): array
+{
+    if (!in_array($direction, ['up', 'down'], true)) {
+        return ['ok' => false, 'error' => 'Направление перестановки — «вверх» или «вниз».', 'notice' => ''];
+    }
+
+    $row = menuById($id);
+
+    if ($row === null) {
+        return ['ok' => false, 'error' => 'Строка меню исчезла — обновите список.', 'notice' => ''];
+    }
+
+    $order = array_map(static fn (array $item): string => (string) $item['id'], menuRowsForAdmin((string) $row['slot']));
+    $from = array_search($id, $order, true);
+
+    if ($from === false) {
+        return ['ok' => false, 'error' => 'Строка меню исчезла — обновите список.', 'notice' => ''];
+    }
+
+    $to = $direction === 'up' ? $from - 1 : $from + 1;
+
+    if ($to < 0 || $to >= count($order)) {
+        return ['ok' => false, 'error' => 'Пункт уже крайний.', 'notice' => ''];
+    }
+
+    $moved = array_splice($order, $from, 1);
+    array_splice($order, $to, 0, $moved);
+
+    $moment = utcStamp(nowUtc());
+    tx(static function () use ($order, $id, $moment): void {
+        foreach ($order as $index => $itemId) {
+            // Метку правки получает только переставленный пункт: пересборка соседей меняет
+            // их место в списке, но «какой пункт последний раз редактировали» не меняет.
+            if ($itemId === $id) {
+                run('UPDATE ' . t('menu_item') . ' SET sort = ?, updated_at = ? WHERE id = ?', [$index, $moment, $itemId]);
+
+                continue;
+            }
+
+            run('UPDATE ' . t('menu_item') . ' SET sort = ? WHERE id = ?', [$index, $itemId]);
+        }
+    });
+
+    logInfo('menu.item_moved', ['id' => $id, 'direction' => $direction, 'slot' => (string) $row['slot']]);
+
+    return ['ok' => true, 'error' => '', 'notice' => 'menu_moved'];
+}
+
+/**
+ * Удаление пункта: строка уходит целиком, порядок остальных не трогается (следующее чтение
+ * пересортирует список само).
+ *
+ * @return array{ok: bool, error: string, notice: string}
+ */
+function deleteMenuItem(string $id): array
+{
+    $deleted = run('DELETE FROM ' . t('menu_item') . ' WHERE id = ?', [$id]);
+
+    if ($deleted === 0) {
+        return ['ok' => false, 'error' => 'Строка меню исчезла — обновите список.', 'notice' => ''];
+    }
+
+    logInfo('menu.item_deleted', ['id' => $id]);
+
+    return ['ok' => true, 'error' => '', 'notice' => 'menu_deleted'];
+}
