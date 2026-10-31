@@ -23,6 +23,10 @@ function registerCoreRoutes(): void
     // Все действия конструктора — один POST-обработчик (op): точка проверки CSRF одна, как на
     // экране «Приложения». Адрес выбирает контекст: список, главная или страница.
     addRoute('POST', '/admin/pages/{id}', 'coreAdminPagesAction', ['private' => true, 'permission' => 'login']);
+    // Меню шапки и подвала — тот же род контента (право login, как конструктор): экран с двумя
+    // картами и один POST-обработчик (op) для всех пяти действий пунктов.
+    addRoute('GET', '/admin/menu', 'coreAdminMenu', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/menu', 'coreAdminMenuAction', ['private' => true, 'permission' => 'login']);
     addRoute('GET', '/sitemap.xml', 'coreSitemap');
     addRoute('GET', '/robots.txt', 'coreRobots');
     // Страницы живут на /{slug} одним сегментом, поэтому маршрут идёт в конец реестра: точные
@@ -478,6 +482,73 @@ function finishAppAction(array $result, string $to, string $notice): void
     }
 
     redirectWithNotice($to, $notice);
+}
+
+/** Экран «Меню»: две карты слотов, штрихи пунктов правятся на месте.
+ * @param array<string, string> $params
+ */
+function coreAdminMenu(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+
+    render('admin/menu', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'headerRows' => menuRowsForAdmin('HEADER'),
+        'footerRows' => menuRowsForAdmin('FOOTER'),
+    ], ['title' => 'Меню — админка', 'noindex' => true]);
+}
+
+/**
+ * Действия пунктов меню — один POST-обработчик (op): точка проверки CSRF одна, как у конструктора.
+ * Успех — PRG на свой экран с ключом уведомления; видимость делит ключ с сохранением — и то и
+ * другое сохранение пункта. Отказ (кривой адрес, призрачный пункт) уходит картой migration-failed
+ * с человеческой причиной в сессионный flash.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminMenuAction(array $params = []): void
+{
+    csrfCheck();
+
+    $op = postString('op');
+    $itemId = postString('item');
+
+    $result = match ($op) {
+        'create-item' => createMenuItem(postString('slot'), menuRawFromPost(), nowUtc()),
+        'save-item' => updateMenuItem($itemId, menuRawFromPost(), nowUtc()),
+        'move-item' => moveMenuItem($itemId, postString('dir')),
+        'toggle-item' => toggleMenuItem($itemId),
+        'delete-item' => deleteMenuItem($itemId),
+        default => ['ok' => false, 'error' => 'Неизвестное действие.'],
+    };
+
+    $notice = match ($op) {
+        'create-item' => 'menu_created',
+        'save-item', 'toggle-item' => 'menu_saved',
+        'move-item' => 'menu_moved',
+        'delete-item' => 'menu_deleted',
+        default => '',
+    };
+
+    finishAppAction($result, '/admin/menu', $notice);
+}
+
+/**
+ * Поля пункта из формы карты. Слот — только у формы добавления: в правке он и так игнорируется
+ * нормализатором по слоту строки, а лишнее поле не мешает.
+ *
+ * @return array<string, mixed>
+ */
+function menuRawFromPost(): array
+{
+    return [
+        'label' => postString('label'),
+        'href' => postString('href'),
+        'section' => postString('section'),
+        'blank' => postString('blank'),
+    ];
 }
 
 // Куда пускаем после входа: только внутренний путь, который начинается с одного «/» и дальше не
