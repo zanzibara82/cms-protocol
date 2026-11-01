@@ -12,5 +12,6 @@ return [
     'requiresCore' => '1.1.0',
     'privatePaths' => ['/commerce/admin'],
     'sql' => __DIR__ . '/sql',
+    'publicNav' => [['/shop', 'Магазин']],
     'adminNav' => [['href' => '/commerce/admin', 'label' => 'Магазин']],
 ];

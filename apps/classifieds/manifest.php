@@ -13,5 +13,6 @@ return [
     'requiresCore' => '1.1.0',
     'privatePaths' => ['/classifieds/admin'],
     'sql' => __DIR__ . '/sql',
+    'publicNav' => [['/classifieds', 'Доска']],
     'adminNav' => [['href' => '/classifieds/admin', 'label' => 'Доска']],
 ];

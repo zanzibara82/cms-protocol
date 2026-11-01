@@ -63,7 +63,13 @@ function notFound(string $message = ''): never
     if (!headers_sent()) {
         http_response_code(404);
     }
-    render('404', ['message' => $message], ['title' => 'Страницы нет', 'noindex' => true]);
+    render('404', ['message' => $message], [
+        'title' => 'Страницы нет',
+        'noindex' => true,
+        // В установщике (SETUP_FLOW) сайта ещё нет, и отказа печатается без шапки и подвала:
+        // их читатели тянули бы базу, которой нет, а соединение рвалось бы посреди разметки.
+        'chrome' => !defined('SETUP_FLOW'),
+    ]);
     exit;
 }
 
@@ -75,7 +81,12 @@ function forbidden(string $message = ''): never
     // поэтому каркас собирается строкой и передаётся в respond().
     respond(
         403,
-        renderToString('403', ['message' => $message], ['title' => 'Сюда нельзя', 'noindex' => true]),
+        renderToString('403', ['message' => $message], [
+            'title' => 'Сюда нельзя',
+            'noindex' => true,
+            // В установщике (SETUP_FLOW) сайта ещё нет, и отказ печатается без шапки и подвала.
+            'chrome' => !defined('SETUP_FLOW'),
+        ]),
         ['Content-Type' => 'text/html; charset=utf-8', 'X-Robots-Tag' => 'noindex, nofollow']
     );
 }

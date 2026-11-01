@@ -11,7 +11,9 @@ $user = function_exists('currentUser') ? currentUser() : null;
             <span><?= e((string) configValue('SITE_NAME', 'Школа')) ?></span>
         </a>
         <nav class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <a class="inline-flex min-h-[44px] items-center hover:underline" href="/news">Новости</a>
+            <?php foreach (menuHeaderLinks() as $link): ?>
+                <a class="inline-flex min-h-[44px] items-center hover:underline" href="<?= e((string) $link['href']) ?>"<?php if ((bool) $link['blank']): ?> target="_blank" rel="noopener noreferrer"<?php endif; ?>><?= e((string) $link['label']) ?></a>
+            <?php endforeach; ?>
             <?php if ($user !== null): ?>
                 <a class="inline-flex min-h-[44px] items-center hover:underline" href="/admin">Админка</a>
             <?php else: ?>

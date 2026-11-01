@@ -9,6 +9,7 @@ declare(strict_types=1);
 /** @var string $footer */
 /** @var bool $noindex */
 /** @var string $robots */
+/** @var bool $chrome сайтовая обвязка: установщик рисует каркас без шапки и подвала */
 ?>
 <!doctype html>
 <html lang="ru">
@@ -28,11 +29,11 @@ declare(strict_types=1);
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
 <a class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:px-4 focus:py-2" href="#main">К содержимому</a>
-<?= partial('partials/header') /* @safe html */ ?>
+<?php if ($chrome): ?><?= partial('partials/header') /* @safe html */ ?><?php endif; ?>
 <main id="main" class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
     <?= $content /* @safe html */ ?>
 </main>
-<?= partial('partials/footer') /* @safe html */ ?>
+<?php if ($chrome): ?><?= partial('partials/footer') /* @safe html */ ?><?php endif; ?>
 <?= $footer /* @safe html */ ?>
 </body>
 </html>
