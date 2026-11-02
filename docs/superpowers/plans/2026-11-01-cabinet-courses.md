@@ -106,7 +106,7 @@ PRG. Кабинет `/dashboard`, прогресс `/progress`, онбордин
 
 ## Задача 2: прогресс и серия на живой базе
 
-- [ ] Красный: `tests/db/LearnTest.php` — `learnRecordExerciseAttempt` (первая верная
+- [x] Красный: `tests/db/LearnTest.php` — `learnRecordExerciseAttempt` (первая верная
       начисляет `xp_reward`, повторная верная и неверная — ноль, попытка записана),
       `learnAddXp`, `learnTouchStreak` (сегодня — без изменений, вчера — +1, пропуск —
       сброс на 1, longest растёт; UTC-дни), `learnCompleteLesson` (идемпотентность,
