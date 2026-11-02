@@ -118,6 +118,12 @@ function utcDayKey(DateTimeImmutable $date): string
     return $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d');
 }
 
+// Час по UTC: кабинет здоровается по серверному времени, а оно в UTC.
+function utcHour(DateTimeImmutable $date): int
+{
+    return (int) $date->setTimezone(new DateTimeZone('UTC'))->format('G');
+}
+
 // Разбор календарного дня «ГГГГ-ММ-ДД» в UTC. null — дата не понята: календарность
 // проверяется, чтобы 2026-02-31 не превратился в март.
 function parseUtcDay(string $raw): ?DateTimeImmutable

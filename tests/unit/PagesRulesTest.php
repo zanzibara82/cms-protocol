@@ -50,7 +50,7 @@ final class PagesRulesTest extends TestCase
     {
         // Первый сегмент страницы не может занять вход, админку, отдаваемые файлами каталоги
         // и префиксы разделов: точный маршрут всегда выигрывает, и страница была бы недоступна.
-        foreach (['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'assets', 'uploads'] as $slug) {
+        foreach (['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'assets', 'uploads'] as $slug) {
             self::assertContains($slug, PAGES_RESERVED_SLUGS, 'Резерв без сегмента ' . $slug);
         }
     }
