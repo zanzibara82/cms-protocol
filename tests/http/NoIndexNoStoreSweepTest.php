@@ -67,7 +67,8 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // редактор главной, правка страницы — все помечены) и витрину /{slug} (опубликованная открыта,
     // черновик-предпросмотр и промах notFound() помечены): всего 123 варианта, помеченных 100.
     // Слой меню добавляет экран настроек навигации /admin/menu с меткой: всего 124 варианта,
-    // помеченных 101.
+    // помеченных 101. Слой курсов добавляет дерево /learn, модуль с промахом и урок с промахом —
+    // все пять вариантов помечены: всего 129 вариантов, помеченных 106.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -79,13 +80,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 124;
-    private const MARKED_TOTAL = 101;
+    private const VARIANTS_TOTAL = 129;
+    private const MARKED_TOTAL = 106;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (124 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 123;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (129 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 128;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -306,6 +307,42 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'status' => PAGES_STATUS_DRAFT,
             'noindex' => '0',
         ], nowUtc());
+
+        // Раздел «Курсы» в обход: опубликованный курс, модуль и первый урок. Первый урок
+        // открыт, поэтому проверяет открытый экран; замок и промахи по адресам остаются
+        // в ученическом наборе LearnStudentTest.
+        installApp('learn');
+        $learnLevel = one('SELECT id FROM ' . t('learn_level') . ' WHERE code = ? LIMIT 1', ['A1']);
+        self::assertIsArray($learnLevel, 'Фикстура: уровня A1 нет — курс обхода не посадить');
+
+        $learnCourseId = newId();
+        insert('learn_course', [
+            'id' => $learnCourseId,
+            'level_id' => (string) $learnLevel['id'],
+            'title' => 'Курс обхода',
+            'description' => 'Курс для плана обхода.',
+            'status' => 'PUBLISHED',
+            'sort' => 1,
+        ]);
+        insert('learn_module', [
+            'id' => newId(),
+            'course_id' => $learnCourseId,
+            'title' => 'Модуль обхода',
+            'description' => 'Модуль для плана обхода.',
+            'status' => 'PUBLISHED',
+            'sort' => 1,
+        ]);
+        $learnModule = one('SELECT id FROM ' . t('learn_module') . " WHERE title = 'Модуль обхода' LIMIT 1");
+        self::assertIsArray($learnModule, 'Фикстура: модуль обхода не найден');
+        insert('learn_lesson', [
+            'id' => newId(),
+            'module_id' => (string) $learnModule['id'],
+            'slug' => 'obhod-urok',
+            'title' => 'Урок обхода',
+            'description' => 'Урок для плана обхода.',
+            'status' => 'PUBLISHED',
+            'sort' => 1,
+        ]);
 
         self::$tokens = self::buildTokens($items);
         // Отметка CMS_TEST_OMITTED_HANDLER поднимает в фикстуре маршрут с отсутствующим
@@ -643,6 +680,20 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /admin/menu' => [
                 ['path' => '/admin/menu', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            // Ученический контур: дерево курса, модуль и урок. Все три экрана помечены —
+            // это личный кабинет ученика. Неизвестный модуль и неизвестный урок отвечают
+            // тем же помеченным 404.
+            'GET /learn' => [
+                ['path' => '/learn', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /learn/module/{id}' => [
+                ['path' => '/learn/module/{learnmodule}', 'outcome' => self::MARKED, 'status' => 200],
+                ['path' => '/learn/module/net-takogo-modulya', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /lesson/{slug}' => [
+                ['path' => '/lesson/{learnlesson}', 'outcome' => self::MARKED, 'status' => 200],
+                ['path' => '/lesson/net-takogo-uroka', 'outcome' => self::MARKED, 'status' => 404],
             ],
             'GET /{slug}' => [
                 ['path' => '/{pageslug}', 'outcome' => self::OPEN, 'status' => 200],
@@ -1227,6 +1278,12 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $pageDraft = one('SELECT id, slug FROM ' . t('page') . " WHERE slug = 'obhod-chernovik'");
         self::assertIsArray($pageDraft, 'Фикстура: черновика страницы нет — предпросмотр и экран правки не проверить');
 
+        $learnModule = one('SELECT id FROM ' . t('learn_module') . " WHERE title = 'Модуль обхода' LIMIT 1");
+        self::assertIsArray($learnModule, 'Фикстура: модуля курса нет — экран модуля недоступен обходу');
+
+        $learnLesson = one('SELECT slug FROM ' . t('learn_lesson') . " WHERE slug = 'obhod-urok' LIMIT 1");
+        self::assertIsArray($learnLesson, 'Фикстура: урока курса нет — экран урока недоступен обходу');
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
@@ -1254,6 +1311,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'pageid' => (string) $pagePublished['id'],
             'pageslug' => (string) $pagePublished['slug'],
             'pagedraft' => (string) $pageDraft['slug'],
+            // Курсы: экран модуля и экран урока.
+            'learnmodule' => (string) $learnModule['id'],
+            'learnlesson' => (string) $learnLesson['slug'],
         ] + self::buildDiscountTokens();
     }
 
