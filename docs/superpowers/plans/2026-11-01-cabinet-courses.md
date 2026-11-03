@@ -124,7 +124,7 @@ PRG. Кабинет `/dashboard`, прогресс `/progress`, онбордин
 
 ## Задача 4: POST-жизнь урока
 
-- [ ] Красный: `tests/http/LearnStudentTest.php` (вторая пачка) — POST `op=answer` на
+- [x] Красный: `tests/http/LearnStudentTest.php` (вторая пачка) — POST `op=answer` на
       адресе урока с `csrfCheck()`: верная попытка — flash-карта и плашка XP, повторная
       верная — без XP; неверная — разбор с правильным ответом; POST `op=test` — сдача
       мини-теста: итоговая разметка (score/passed/XP/разбор вопросов), пересдача без
