@@ -8,8 +8,8 @@ use Cms\Tests\TestDb;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Ученический контур через настоящий HTTP: вход в раздел, дерево курса, модуль с замками
- * и урок шагами. POST-жизнь урока (попытки, мини-тест) добавляется следующей задачей слоя.
+ * Ученический контур через настоящий HTTP: вход в раздел, дерево курса, модуль с замками,
+ * урок шагами и его POST-жизнь (попытки упражнений, мини-тест и пересдача).
  */
 final class LearnStudentTest extends TestCase
 {
@@ -62,6 +62,8 @@ final class LearnStudentTest extends TestCase
 
         self::addLessonContent(self::$lessonOneId);
         self::addMiniTest(self::$lessonOneId);
+        // Последнему уроку модуля тоже нужен тест: на нём проверяется бонус закрытия модуля.
+        self::addMiniTest(self::$lessonTwoId);
 
         Kernel::start();
     }
@@ -276,6 +278,246 @@ final class LearnStudentTest extends TestCase
         }
     }
 
+    public function testВернаяПопыткаУпражненияДаётПлашкуИОпытОдинРаз(): void
+    {
+        $this->login();
+
+        $page = Kernel::get('/lesson/hello?step=exercises&exercise=' . self::$exerciseChoiceId);
+        $token = Kernel::tokenFrom($page['body']);
+        self::assertNotSame('', $token, 'Форма упражнения не напечатала CSRF-токен');
+
+        $post = Kernel::post('/lesson/hello', [
+            '_token' => $token,
+            'op' => 'answer',
+            'exercise' => self::$exerciseChoiceId,
+            'answer' => '0',
+        ]);
+
+        self::assertSame(302, $post['status']);
+        $location = (string) ($post['headers']['location'] ?? '');
+        self::assertStringContainsString('/lesson/hello?step=exercises', $location);
+        self::assertStringContainsString('exercise=' . self::$exerciseChoiceId, $location);
+
+        $follow = Kernel::get($location);
+
+        self::assertSame(200, $follow['status']);
+        self::assertStringContainsString('Верно', $follow['body']);
+        self::assertStringContainsString('+7 XP', $follow['body']);
+        self::assertStringContainsString('Дальше', $follow['body']);
+        self::assertSame(7, $this->xpTotal());
+        self::assertSame(1, $this->attemptCount(self::$exerciseChoiceId, true));
+
+        // Повторная верная попытка проходит, но опыт не начисляет: плашки XP больше нет.
+        $again = Kernel::post('/lesson/hello', [
+            '_token' => $token,
+            'op' => 'answer',
+            'exercise' => self::$exerciseChoiceId,
+            'answer' => '0',
+        ]);
+
+        self::assertSame(302, $again['status']);
+
+        $againPage = Kernel::get((string) ($again['headers']['location'] ?? ''));
+
+        self::assertSame(200, $againPage['status']);
+        self::assertStringContainsString('Ответ засчитан', $againPage['body']);
+        self::assertStringNotContainsString('+7 XP', $againPage['body']);
+        self::assertSame(7, $this->xpTotal());
+        self::assertSame(1, (int) value(
+            'SELECT COUNT(*) FROM ' . t('learn_attempt') . ' WHERE user_id = ? AND exercise_id = ? AND xp_awarded > 0',
+            [self::$studentId, self::$exerciseChoiceId]
+        ));
+    }
+
+    public function testНевернаяПопыткаПоказываетПравильныйОтветИРазбор(): void
+    {
+        $this->login();
+
+        $page = Kernel::get('/lesson/hello?step=exercises&exercise=' . self::$exerciseChoiceId);
+        $token = Kernel::tokenFrom($page['body']);
+
+        $post = Kernel::post('/lesson/hello', [
+            '_token' => $token,
+            'op' => 'answer',
+            'exercise' => self::$exerciseChoiceId,
+            'answer' => '1',
+        ]);
+
+        self::assertSame(302, $post['status']);
+
+        $follow = Kernel::get((string) ($post['headers']['location'] ?? ''));
+
+        self::assertSame(200, $follow['status']);
+        self::assertStringContainsString('Не верно', $follow['body']);
+        self::assertStringContainsString('Правильный ответ', $follow['body']);
+        self::assertStringContainsString('Hello', $follow['body']);
+        self::assertStringContainsString('Разбор упражнения.', $follow['body']);
+        self::assertSame(0, $this->xpTotal());
+        self::assertSame(1, $this->attemptCount(self::$exerciseChoiceId, false));
+    }
+
+    public function testСдачаМиниТестаПоказываетИтогИРазборВопросов(): void
+    {
+        $this->login();
+
+        $page = Kernel::get('/lesson/hello?step=test');
+        $token = Kernel::tokenFrom($page['body']);
+        self::assertNotSame('', $token, 'Форма мини-теста не напечатала CSRF-токен');
+
+        $answers = [];
+        foreach ($this->questionIds(self::$lessonOneId) as $questionId) {
+            $answers['answer[' . $questionId . ']'] = '0';
+        }
+
+        $post = Kernel::post('/lesson/hello', array_merge([
+            '_token' => $token,
+            'op' => 'test',
+        ], $answers));
+
+        self::assertSame(302, $post['status']);
+        self::assertStringContainsString('/lesson/hello?step=test', (string) ($post['headers']['location'] ?? ''));
+
+        $follow = Kernel::get((string) ($post['headers']['location'] ?? ''));
+
+        self::assertSame(200, $follow['status']);
+        self::assertStringContainsString('100%', $follow['body']);
+        self::assertStringContainsString('Тест сдан', $follow['body']);
+        self::assertStringContainsString('+60 XP', $follow['body']);
+        self::assertStringContainsString('Hello — приветствие.', $follow['body']);
+        self::assertStringContainsString('С I глагол to be стоит в форме am.', $follow['body']);
+        self::assertStringContainsString('К результату урока', $follow['body']);
+        self::assertStringContainsString('Пройти заново', $follow['body']);
+
+        self::assertSame(60, $this->xpTotal());
+        self::assertSame(1, $this->completedLessonCount());
+
+        $attempt = one(
+            'SELECT score, passed, answers FROM ' . t('learn_test_attempt') . ' WHERE user_id = ? LIMIT 1',
+            [self::$studentId]
+        );
+
+        self::assertNotNull($attempt);
+        self::assertSame(100, (int) $attempt['score']);
+        self::assertSame(1, (int) $attempt['passed']);
+        $detailed = json_decode((string) $attempt['answers'], true);
+        self::assertIsArray($detailed);
+        self::assertCount(2, $detailed);
+        self::assertTrue($detailed[0]['correct'] ?? false);
+
+        $result = Kernel::get('/lesson/hello?step=result');
+
+        self::assertSame(200, $result['status']);
+        self::assertStringContainsString('Урок засчитан.', $result['body']);
+        self::assertStringContainsString('Бронзовый кубок', $result['body']);
+        self::assertStringContainsString('Начислено за урок: +60 XP', $result['body']);
+        self::assertStringContainsString('Мини-тест урока: 100%', $result['body']);
+        self::assertStringContainsString('/lesson/how-are-you', $result['body']);
+    }
+
+    public function testПересдачаМиниТестаНеНачисляетОпытПовторно(): void
+    {
+        $this->login();
+
+        $first = Kernel::get('/lesson/hello?step=test');
+        $token = Kernel::tokenFrom($first['body']);
+        $answers = [];
+        foreach ($this->questionIds(self::$lessonOneId) as $questionId) {
+            $answers['answer[' . $questionId . ']'] = '0';
+        }
+
+        $fields = array_merge([
+            '_token' => $token,
+            'op' => 'test',
+        ], $answers);
+
+        $first = Kernel::post('/lesson/hello', $fields);
+        self::assertSame(302, $first['status']);
+        $firstResult = Kernel::get((string) ($first['headers']['location'] ?? ''));
+        self::assertStringContainsString('Тест сдан', $firstResult['body']);
+
+        // Следующий GET уже без flash: форма снова открыта, токен тот же.
+        $secondPage = Kernel::get('/lesson/hello?step=test');
+        $secondToken = Kernel::tokenFrom($secondPage['body']);
+        self::assertNotSame('', $secondToken);
+
+        $second = Kernel::post('/lesson/hello', array_merge($fields, ['_token' => $secondToken]));
+
+        self::assertSame(302, $second['status']);
+
+        $follow = Kernel::get((string) ($second['headers']['location'] ?? ''));
+
+        self::assertSame(200, $follow['status']);
+        self::assertStringContainsString('Повторная сдача урока опыт не начисляет.', $follow['body']);
+        self::assertSame(60, $this->xpTotal());
+        self::assertSame(1, $this->completedLessonCount());
+        self::assertSame(2, (int) value(
+            'SELECT COUNT(*) FROM ' . t('learn_test_attempt') . ' WHERE user_id = ?',
+            [self::$studentId]
+        ));
+    }
+
+    public function testПоследнийУрокМодуляЗакрываетМодульИДаётБонус(): void
+    {
+        $this->login();
+        $this->markCompleted([self::$lessonOneId]);
+
+        $page = Kernel::get('/lesson/how-are-you?step=test');
+        self::assertSame(200, $page['status']);
+        $token = Kernel::tokenFrom($page['body']);
+
+        $answers = [];
+        foreach ($this->questionIds(self::$lessonTwoId) as $questionId) {
+            $answers['answer[' . $questionId . ']'] = '0';
+        }
+
+        $post = Kernel::post('/lesson/how-are-you', array_merge([
+            '_token' => $token,
+            'op' => 'test',
+        ], $answers));
+
+        self::assertSame(302, $post['status']);
+
+        $follow = Kernel::get((string) ($post['headers']['location'] ?? ''));
+
+        self::assertSame(200, $follow['status']);
+        self::assertStringContainsString('Тест сдан', $follow['body']);
+        self::assertStringContainsString('+160 XP', $follow['body']);
+        self::assertStringContainsString('Бонус модуля', $follow['body']);
+        self::assertSame(160, $this->xpTotal());
+
+        $progress = one(
+            'SELECT completed_lessons, completed_modules FROM ' . t('learn_progress') . ' WHERE user_id = ? LIMIT 1',
+            [self::$studentId]
+        );
+
+        self::assertNotNull($progress);
+        $modules = json_decode((string) $progress['completed_modules'], true);
+        self::assertIsArray($modules);
+        self::assertCount(1, $modules);
+        self::assertSame(self::$moduleAId, (string) ($modules[0]['moduleId'] ?? ''));
+
+        $result = Kernel::get('/lesson/how-are-you?step=result');
+
+        self::assertSame(200, $result['status']);
+        self::assertStringContainsString('Модуль закрыт целиком', $result['body']);
+    }
+
+    public function testОтказПроверкиCsrfНаПостеУрока(): void
+    {
+        $this->login();
+
+        $post = Kernel::post('/lesson/hello', [
+            'op' => 'answer',
+            'exercise' => self::$exerciseChoiceId,
+            'answer' => '0',
+        ]);
+
+        self::assertSame(403, $post['status']);
+        self::assertStringContainsString('Проверка формы не прошла', $post['body']);
+        self::assertSame(0, $this->attemptCount(self::$exerciseChoiceId, true));
+        self::assertSame(0, $this->xpTotal());
+    }
+
     private function login(): void
     {
         $page = Kernel::get('/login');
@@ -307,6 +549,51 @@ final class LearnStudentTest extends TestCase
             'current_module_order' => 1,
             'current_lesson_order' => 1,
         ]);
+    }
+
+    private function xpTotal(): int
+    {
+        return (int) value(
+            'SELECT total FROM ' . t('learn_xp') . ' WHERE user_id = ? LIMIT 1',
+            [self::$studentId]
+        );
+    }
+
+    private function attemptCount(string $exerciseId, bool $correct): int
+    {
+        return (int) value(
+            'SELECT COUNT(*) FROM ' . t('learn_attempt') . ' WHERE user_id = ? AND exercise_id = ? AND is_correct = ?',
+            [self::$studentId, $exerciseId, $correct ? 1 : 0]
+        );
+    }
+
+    private function completedLessonCount(): int
+    {
+        $raw = value(
+            'SELECT completed_lessons FROM ' . t('learn_progress') . ' WHERE user_id = ? LIMIT 1',
+            [self::$studentId]
+        );
+        $completed = is_string($raw) ? json_decode($raw, true) : null;
+
+        return is_array($completed) ? count($completed) : 0;
+    }
+
+    /** @return list<string> */
+    private function questionIds(string $lessonId): array
+    {
+        $rows = all(
+            'SELECT question.id FROM ' . t('learn_test_question') . ' AS question'
+                . ' JOIN ' . t('learn_test') . ' AS test ON test.id = question.test_id'
+                . ' WHERE test.lesson_id = ? ORDER BY question.sort, question.id LIMIT 100',
+            [$lessonId]
+        );
+
+        $ids = [];
+        foreach ($rows as $row) {
+            $ids[] = (string) $row['id'];
+        }
+
+        return $ids;
     }
 
     private function addAttempt(string $exerciseId, bool $correct): void

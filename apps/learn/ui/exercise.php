@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-// Отрисовка упражнения по типу: одна функция на все формы, чтобы шаг урока и будущая
-// проверка попытки говорили одинаковой разметкой. Правильный ответ сюда не попадает —
-// в массиве упражнения его нет, его отдаёт только проверка после ответа.
+// Отрисовка упражнения по типу: одна функция на все формы, чтобы шаг урока и проверка
+// попытки говорили одинаковой разметкой. Правильный ответ сюда не попадает — в массиве
+// упражнения его нет, его отдаёт только проверка после ответа.
 
 /**
  * Варианты выбора из публичной формы: список или объект с ключом `choices`
@@ -82,8 +82,41 @@ function learnExerciseWordHints(mixed $options): array
 }
 
 /**
- * Форма упражнения. Замок ответа и плашка попытки появятся в POST-жизни урока;
- * здесь важна честная форма по типу задания.
+ * Правильный ответ для плашки попытки: у выбора — текст варианта, у пар — «слева — справа»,
+ * у списков — через запятую. Пустая строка означает, что показывать нечего.
+ *
+ * @param array<string, mixed> $exercise
+ */
+function learnExerciseRevealText(array $exercise, mixed $revealed): string
+{
+    $type = (string) ($exercise['type'] ?? '');
+    if (in_array($type, ['MULTIPLE_CHOICE', 'LISTENING_CHOICE', 'TIMED_QUIZ'], true)) {
+        $choices = learnExerciseChoiceValues($exercise['options'] ?? null);
+        $index = is_numeric($revealed) ? (int) $revealed : -1;
+        if (isset($choices[$index])) {
+            return $choices[$index];
+        }
+    }
+
+    if (is_array($revealed)) {
+        $parts = [];
+        foreach ($revealed as $left => $right) {
+            if (is_string($left)) {
+                $parts[] = $left . ' — ' . (is_scalar($right) ? (string) $right : '');
+            } elseif (is_scalar($right)) {
+                $parts[] = (string) $right;
+            }
+        }
+
+        return implode(', ', $parts);
+    }
+
+    return is_scalar($revealed) ? (string) $revealed : '';
+}
+
+/**
+ * Форма упражнения и плашка попытки. После верного ответа поле замыкается: второй отправки
+ * нет, «Дальше» рисует шаблон урока — функция не знает адреса следующего упражнения.
  *
  * @param array<string, mixed> $exercise
  * @param array<string, mixed> $attempt
@@ -95,6 +128,45 @@ function learnRenderExercise(array $exercise, array $attempt = []): string
     $question = (string) ($exercise['question'] ?? '');
     $options = $exercise['options'] ?? null;
     $input = 'min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2';
+
+    $correct = $attempt === [] ? null : ($attempt['correct'] ?? false) === true;
+    $xp = (int) ($attempt['xp'] ?? 0);
+    $locked = ($exercise['done'] ?? false) === true || $correct === true;
+
+    $panel = '';
+    if ($attempt !== []) {
+        $panel = '<div class="space-y-2 rounded-xl border p-4 '
+            . ($correct ? 'border-ink/10 bg-cream' : 'border-red-300 bg-red-50') . '">'
+            . '<p class="font-medium ' . ($correct ? 'text-emerald-700' : 'text-red-700') . '">'
+            . ($correct === true ? 'Верно' : 'Не верно')
+            . ($xp > 0 ? ' · +' . (string) $xp . ' XP' : '')
+            . '</p>';
+
+        if ($correct !== true) {
+            $revealed = learnExerciseRevealText($exercise, $attempt['revealed'] ?? null);
+            if ($revealed !== '') {
+                $panel .= '<p class="text-sm">Правильный ответ: ' . e($revealed) . '</p>';
+            }
+
+            $matched = $attempt['matched'] ?? null;
+            $required = (int) ($attempt['required'] ?? 0);
+            if (is_array($matched) && $required > 0) {
+                $panel .= '<p class="text-sm">Совпало: ' . e((string) count($matched)) . ' из '
+                    . e((string) $required) . '.</p>';
+            }
+
+            $explanation = (string) ($attempt['explanation'] ?? '');
+            if ($explanation !== '') {
+                $panel .= '<p class="text-sm">' . e($explanation) . '</p>';
+            }
+        }
+
+        $panel .= '</div>';
+    }
+
+    if ($locked) {
+        return $panel . '<p class="rounded-lg border border-ink/10 bg-cream p-3 text-sm">Ответ засчитан.</p>';
+    }
 
     $fields = '';
 
@@ -168,7 +240,7 @@ function learnRenderExercise(array $exercise, array $attempt = []): string
             break;
     }
 
-    return '<form class="space-y-4" method="post" action="' . e(requestPath()) . '">'
+    return $panel . '<form class="space-y-4" method="post" action="' . e(requestPath()) . '">'
         . '<input type="hidden" name="op" value="answer">'
         . '<input type="hidden" name="exercise" value="' . e($id) . '">'
         . csrfField()

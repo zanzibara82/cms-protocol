@@ -20,6 +20,7 @@ declare(strict_types=1);
  *     meta: array{
  *         unlocked: bool, completed: bool,
  *         module: array{id: string, title: string, sort: int, lesson_count: int},
+ *         module_all_done: bool, module_completed: bool, completed_test_score: int|null,
  *         level_code: string, course_title: string,
  *         next_lesson: array{id: string, slug: string, title: string, sort: int}|null,
  *         done_count: int, total_exercises: int
@@ -30,6 +31,10 @@ declare(strict_types=1);
  * @var array<string, mixed>|null $exercise
  * @var int $exerciseIndex
  * @var int $exerciseTotal
+ * @var array<string, mixed>|null $attempt
+ * @var array<string, mixed>|null $testResult
+ * @var array<string, mixed>|null $award
+ * @var string $nextExerciseUrl
  * @var string $moduleUrl
  */
 $lesson = $payload['lesson'];
@@ -128,11 +133,18 @@ if ($step === 'intro') {
             . '</div>';
     } else {
         $position = 'Упражнение ' . (string) $exerciseIndex . ' из ' . (string) $exerciseTotal;
+        $locked = ($exercise['done'] ?? false) === true || (($attempt['correct'] ?? false) === true);
         $body = '<div class="space-y-4">'
             . '<p class="text-sm tabular-nums text-ink/60">' . e($position) . '</p>'
-            . learnRenderExercise($exercise)
-            . '<div><a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5"'
-            . ' href="' . e('/lesson/' . rawurlencode($lesson['slug']) . '?step=grammar') . '">К грамматике</a></div>'
+            . learnRenderExercise($exercise, $attempt ?? [])
+            . '<div class="flex flex-wrap gap-2">'
+            . '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5"'
+            . ' href="' . e('/lesson/' . rawurlencode($lesson['slug']) . '?step=grammar') . '">К грамматике</a>'
+            . ($locked && $nextExerciseUrl !== ''
+                ? '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90"'
+                    . ' href="' . e($nextExerciseUrl) . '">Дальше</a>'
+                : '')
+            . '</div>'
             . '</div>';
     }
 } elseif ($step === 'test') {
@@ -142,6 +154,73 @@ if ($step === 'intro') {
         $body = '<div class="space-y-3">'
             . '<h2 class="text-xl font-semibold">Мини-тест урока</h2>'
             . '<p class="text-sm text-ink/60">У этого урока нет мини-теста.</p>'
+            . '</div>';
+    } elseif ($testResult !== null) {
+        $score = (int) ($testResult['score'] ?? 0);
+        $passed = ($testResult['passed'] ?? false) === true;
+        $passScore = (int) ($testResult['pass_score'] ?? 0);
+        $xp = (int) ($testResult['xp'] ?? 0);
+        $moduleXp = (int) ($testResult['module_xp'] ?? 0);
+        $alreadyCompleted = ($testResult['already_completed'] ?? false) === true;
+
+        $detailRows = '';
+        $details = $testResult['details'] ?? null;
+        if (is_array($details)) {
+            foreach ($details as $detail) {
+                if (!is_array($detail)) {
+                    continue;
+                }
+
+                $options = [];
+                $rawOptions = $detail['options'] ?? null;
+                if (is_array($rawOptions)) {
+                    foreach ($rawOptions as $option) {
+                        if (is_scalar($option)) {
+                            $options[] = (string) $option;
+                        }
+                    }
+                }
+
+                $selected = (int) ($detail['selected'] ?? -1);
+                $correctIndex = (int) ($detail['correct_index'] ?? -1);
+                $isCorrect = ($detail['correct'] ?? false) === true;
+                $selectedText = isset($options[$selected]) ? $options[$selected] : 'Нет ответа';
+                $correctText = isset($options[$correctIndex]) ? $options[$correctIndex] : '';
+                $explanation = (string) ($detail['explanation'] ?? '');
+
+                $detailRows .= '<article class="space-y-1 rounded-xl border border-ink/10 bg-white p-4">'
+                    . '<p class="font-medium">' . e((string) ($detail['question'] ?? '')) . '</p>'
+                    . '<p class="text-sm font-medium ' . ($isCorrect ? 'text-emerald-700' : 'text-red-700') . '">'
+                    . ($isCorrect ? 'Верно' : 'Не верно') . '</p>'
+                    . '<p class="text-sm">Ваш ответ: ' . e($selectedText) . '</p>'
+                    . (!$isCorrect && $correctText !== ''
+                        ? '<p class="text-sm">Правильный ответ: ' . e($correctText) . '</p>'
+                        : '')
+                    . ($explanation !== '' ? '<p class="text-sm text-ink/60">' . e($explanation) . '</p>' : '')
+                    . '</article>';
+            }
+        }
+
+        $body = '<div class="space-y-4">'
+            . '<div class="space-y-2 rounded-xl border border-ink/10 bg-cream p-6">'
+            . '<h2 class="text-xl font-semibold">' . e($test['title']) . '</h2>'
+            . '<p class="text-3xl font-bold tabular-nums">' . e((string) $score) . '%</p>'
+            . '<p class="font-medium ' . ($passed ? 'text-emerald-700' : 'text-red-700') . '">'
+            . ($passed ? 'Тест сдан' : 'Тест не сдан') . '</p>'
+            . '<p class="text-sm text-ink/60">Порог: ' . e((string) $passScore) . '%.</p>'
+            . ($xp > 0 ? '<p>Начислено: +' . e((string) $xp) . ' XP</p>' : '')
+            . ($moduleXp > 0 ? '<p>Бонус модуля: +' . e((string) $moduleXp) . ' XP</p>' : '')
+            . ($alreadyCompleted
+                ? '<p class="text-sm text-ink/60">Повторная сдача урока опыт не начисляет.</p>'
+                : '')
+            . '<div class="flex flex-wrap gap-2">'
+            . '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90"'
+            . ' href="?step=result">К результату урока</a>'
+            . '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5"'
+            . ' href="?step=test">Пройти заново</a>'
+            . '</div>'
+            . '</div>'
+            . ($detailRows !== '' ? '<div class="space-y-3">' . $detailRows . '</div>' : '')
             . '</div>';
     } else {
         $questions = '';
@@ -175,12 +254,70 @@ if ($step === 'intro') {
     }
 } else {
     $next = $meta['next_lesson'];
+    $awardHtml = '';
+
+    if ($award !== null) {
+        $trophy = (string) ($award['trophy'] ?? 'bronze');
+        $trophyLabel = match ($trophy) {
+            'gold' => 'Золотой кубок',
+            'silver' => 'Серебряный кубок',
+            default => 'Бронзовый кубок',
+        };
+        $trophyTone = match ($trophy) {
+            'gold' => 'text-amber-700',
+            'silver' => 'text-ink/70',
+            default => 'text-ink/60',
+        };
+
+        $wins = '';
+        $winsRaw = $award['wins'] ?? null;
+        if (is_array($winsRaw)) {
+            foreach ($winsRaw as $win) {
+                if (is_scalar($win)) {
+                    $wins .= '<li class="flex min-h-[44px] items-center gap-2"><span aria-hidden="true">✓</span>'
+                        . '<span>' . e((string) $win) . '</span></li>';
+                }
+            }
+        }
+
+        $focusHtml = '<p class="text-sm text-ink/60">Слабого места не видно: все навыки урока закрыты верно.</p>';
+        $focus = $award['focus'] ?? null;
+        if (is_array($focus)) {
+            $focusHtml = '<div class="space-y-1 rounded-lg border border-ink/10 bg-cream p-3">'
+                . '<p class="font-medium">На что обратить внимание: ' . e((string) ($focus['label'] ?? '')) . '</p>'
+                . '<p class="text-sm">Верно ' . e((string) (int) ($focus['right'] ?? 0)) . ' из '
+                . e((string) (int) ($focus['total'] ?? 0)) . '.</p>'
+                . '<p class="text-sm text-ink/60">' . e((string) ($focus['hint'] ?? '')) . '</p>'
+                . '</div>';
+        }
+
+        $strengthHtml = '';
+        $strength = $award['strength'] ?? null;
+        if (is_array($strength)) {
+            $strengthHtml = '<p class="text-sm text-emerald-700">Сильная сторона: '
+                . e((string) ($strength['label'] ?? '')) . ' — '
+                . e((string) (int) ($strength['right'] ?? 0)) . ' из '
+                . e((string) (int) ($strength['total'] ?? 0)) . '.</p>';
+        }
+
+        $awardHtml = '<div class="space-y-3 rounded-xl border border-ink/10 bg-white p-4">'
+            . '<p class="font-medium ' . $trophyTone . '">' . e($trophyLabel) . ' · '
+            . e((string) ($award['title'] ?? '')) . '</p>'
+            . '<p>Начислено за урок: +' . e((string) (int) ($award['xp'] ?? 0)) . ' XP</p>'
+            . ($wins !== '' ? '<ul class="space-y-1 text-sm">' . $wins . '</ul>' : '')
+            . $focusHtml
+            . $strengthHtml
+            . '</div>';
+    }
+
     $body = '<div class="space-y-3 rounded-xl border border-ink/10 bg-cream p-6">'
         . '<h2 class="text-xl font-semibold">Результат урока</h2>'
         . '<p>Пройдено упражнений: ' . e((string) $meta['done_count']) . ' из ' . e((string) $meta['total_exercises']) . '.</p>'
         . ($meta['completed']
             ? '<p class="font-medium">Урок засчитан.</p>'
             : '<p class="text-sm text-ink/60">Засчитайте урок, завершив упражнения и мини-тест.</p>')
+        . ($meta['module_completed'] ? '<p class="font-medium">Модуль закрыт целиком.</p>' : '')
+        . $awardHtml
         . ($next !== null
             ? '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90"'
                 . ' href="' . e('/lesson/' . rawurlencode($next['slug'])) . '">Следующий урок</a>'

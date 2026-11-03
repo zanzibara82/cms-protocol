@@ -58,6 +58,24 @@ function learnCompletedSet(string $raw): array
     return $set;
 }
 
+/**
+ * Закрытые модули множеством: бонус модуля не должен начисляться дважды.
+ *
+ * @return array<string, true>
+ */
+function learnCompletedModuleSet(string $raw): array
+{
+    $set = [];
+    foreach (learnJsonList($raw) as $entry) {
+        $id = (string) ($entry['moduleId'] ?? '');
+        if ($id !== '') {
+            $set[$id] = true;
+        }
+    }
+
+    return $set;
+}
+
 /** @return array{id: string, code: string, title: string, sort: int}|null */
 function learnLevelById(string $id): ?array
 {
@@ -313,6 +331,7 @@ function learnModulePayload(string $userId, string $moduleId): ?array
  *     meta: array{
  *         unlocked: bool, completed: bool,
  *         module: array{id: string, title: string, sort: int, lesson_count: int},
+ *         module_all_done: bool, module_completed: bool, completed_test_score: int|null,
  *         level_code: string, course_title: string,
  *         next_lesson: array{id: string, slug: string, title: string, sort: int}|null,
  *         done_count: int, total_exercises: int
@@ -368,6 +387,25 @@ function learnLessonPayload(string $userId, string $slugOrId): ?array
 
     if ($currentModule === null || $currentLesson === null) {
         return null;
+    }
+
+    // Урок закрывает модуль, когда все его уроки уже закрыты, а текущий — последний
+    // незакрытый. Считаем по списку, а не по позиции: так правило переживает правку порядка.
+    $moduleAllDone = true;
+    foreach ($currentModule['lessons'] as $lesson) {
+        if ($lesson['id'] !== $lessonId && $lesson['completed'] !== true) {
+            $moduleAllDone = false;
+            break;
+        }
+    }
+
+    $completedModules = learnCompletedModuleSet($progress['completed_modules']);
+    $completedTestScore = null;
+    foreach (learnJsonList($progress['completed_lessons']) as $entry) {
+        if ((string) ($entry['lessonId'] ?? '') === $lessonId) {
+            $completedTestScore = (int) ($entry['testScore'] ?? 0);
+            break;
+        }
     }
 
     $objectives = [];
@@ -523,6 +561,9 @@ function learnLessonPayload(string $userId, string $slugOrId): ?array
                 'sort' => $currentModule['sort'],
                 'lesson_count' => count($currentModule['lessons']),
             ],
+            'module_all_done' => $moduleAllDone,
+            'module_completed' => isset($completedModules[$currentModule['id']]),
+            'completed_test_score' => $completedTestScore,
             'level_code' => (string) $row['level_code'],
             'course_title' => (string) $row['course_title'],
             'next_lesson' => $nextLesson === null ? null : [

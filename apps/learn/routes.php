@@ -13,3 +13,4 @@ require_once __DIR__ . '/ui/exercise.php';
 addRoute('GET', '/learn', 'learnCoursePage', ['app' => 'learn']);
 addRoute('GET', '/learn/module/{id}', 'learnModulePage', ['app' => 'learn']);
 addRoute('GET', '/lesson/{slug}', 'learnLessonPage', ['app' => 'learn']);
+addRoute('POST', '/lesson/{slug}', 'learnLessonAction', ['app' => 'learn']);

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 // Правила школы подключаются одним файлом: тесты читают их без HTTP-запроса,
-// а routes.php подключит этот же файл, когда появятся контроллеры.
+// а routes.php подключает этот же файл для контроллеров.
 require_once __DIR__ . '/constants.php';
 require_once __DIR__ . '/draft.php';
 require_once __DIR__ . '/grading.php';
