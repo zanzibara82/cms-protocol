@@ -10,6 +10,7 @@ require_once __DIR__ . '/access.php';
 require_once __DIR__ . '/student.php';
 require_once __DIR__ . '/ui/exercise.php';
 require_once __DIR__ . '/cabinet.php';
+require_once __DIR__ . '/admin.php';
 
 addRoute('GET', '/learn', 'learnCoursePage', ['app' => 'learn']);
 addRoute('GET', '/learn/module/{id}', 'learnModulePage', ['app' => 'learn']);
@@ -23,3 +24,16 @@ addRoute('GET', '/placement-test', 'learnPlacementPage', ['app' => 'learn']);
 addRoute('POST', '/placement-test', 'learnPlacementAction', ['app' => 'learn']);
 addRoute('GET', '/dashboard', 'learnDashboardPage', ['app' => 'learn']);
 addRoute('GET', '/progress', 'learnProgressPage', ['app' => 'learn']);
+
+// Контент-админка раздела «Курсы»: права проверяет learnUser() в каждом контроллере,
+// а затем roleGrantsManage() — только редактор и администратор. Пути — строковые литералы,
+// один POST-обработчик с op на экране курсов и уроков.
+addRoute('GET', '/learn/admin', 'learnAdminSummary', ['app' => 'learn']);
+addRoute('GET', '/learn/admin/courses', 'learnAdminCourses', ['app' => 'learn']);
+addRoute('POST', '/learn/admin/courses', 'learnAdminCoursesAction', ['app' => 'learn']);
+addRoute('GET', '/learn/admin/lessons', 'learnAdminLessons', ['app' => 'learn']);
+addRoute('POST', '/learn/admin/lessons', 'learnAdminLessonsAction', ['app' => 'learn']);
+addRoute('GET', '/learn/admin/lessons/new', 'learnAdminLessonNew', ['app' => 'learn']);
+addRoute('POST', '/learn/admin/lessons/new', 'learnAdminLessonSaveAction', ['app' => 'learn']);
+addRoute('GET', '/learn/admin/lessons/{id}', 'learnAdminLessonEdit', ['app' => 'learn']);
+addRoute('POST', '/learn/admin/lessons/{id}', 'learnAdminLessonSaveAction', ['app' => 'learn']);

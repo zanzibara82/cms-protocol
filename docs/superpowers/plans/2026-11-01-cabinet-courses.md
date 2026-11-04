@@ -133,7 +133,7 @@ PRG. Кабинет `/dashboard`, прогресс `/progress`, онбордин
 
 ## Задача 5: кабинет, прогресс, вход и placement
 
-- [ ] Красный: `tests/http/LearnStudentTest.php` (третья пачка) — регистрация `/learn/register`
+- [x] Красный: `tests/http/LearnStudentTest.php` (третья пачка) — регистрация `/learn/register`
       (создаёт `student`, входит, гард попыток по IP, отказы кривых полей), онбординг
       `/onboarding` (пишет профиль, PRG `?notice=learn_onboarded`), `/placement-test`
       (GET — тест, POST — TestAttempt с разбивкой по навыкам, профиль и progress
