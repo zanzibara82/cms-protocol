@@ -151,11 +151,11 @@ PRG. Кабинет `/dashboard`, прогресс `/progress`, онбордин
 
 ## Задача 7: стражи, Sweep, полный гейт и запись
 
-- [ ] Стражи: `NoticeKeyTest` (ключи `learn_*`), `CsrfCoverageTest` (новые POST-литералы),
+- [x] Стражи: `NoticeKeyTest` (ключи `learn_*`), `CsrfCoverageTest` (новые POST-литералы),
       `TapTargetTest`, `OutputEscapingTest`, `StyleSourceTest`, `AppSqlTest`/`SqlSafetyTest`,
       `PerformanceTest` (LIMIT в новых чтениях), `PrivatePathsRobotsTest` +
       `NoIndexNoStoreSourceTest` (приватность `/learn/admin*`, noindex ученических),
       `NoIndexNoStoreSweepTest` (план обхода, числа, хроника).
-- [ ] Полный гейт через Git Bash зелёный; прирост тестов назван.
-- [ ] Ledger-запись в `cms/.superpowers/sdd/part1/progress.md`: решения, красные и зелёные
+- [x] Полный гейт через Git Bash зелёный; прирост тестов назван.
+- [x] Ledger-запись в `cms/.superpowers/sdd/part1/progress.md`: решения, красные и зелёные
       прогоны по пачкам, вердикты, коммит и пуш.
