@@ -31,7 +31,7 @@ const PAGES_HOME_ID = '';
  *
  * @var list<string>
  */
-const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads'];
+const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress'];
 
 // Виды секций первого захода (решение 3 штурма): каркас + семь видов, остальные добором пачками.
 // Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).

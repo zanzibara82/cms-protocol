@@ -68,7 +68,10 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // черновик-предпросмотр и промах notFound() помечены): всего 123 варианта, помеченных 100.
     // Слой меню добавляет экран настроек навигации /admin/menu с меткой: всего 124 варианта,
     // помеченных 101. Слой курсов добавляет дерево /learn, модуль с промахом и урок с промахом —
-    // все пять вариантов помечены: всего 129 вариантов, помеченных 106.
+    // все пять вариантов помечены: всего 129 вариантов, помеченных 106. Слой кабинета
+    // добавляет регистрацию (редирект под сеансом), онбординг, placement, кабинет и
+    // прогресс — пять вариантов, из них четыре помечены: всего 134 варианта,
+    // помеченных 110.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -80,13 +83,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 129;
-    private const MARKED_TOTAL = 106;
+    private const VARIANTS_TOTAL = 134;
+    private const MARKED_TOTAL = 110;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (129 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 128;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (134 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 133;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -342,6 +345,21 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'description' => 'Урок для плана обхода.',
             'status' => 'PUBLISHED',
             'sort' => 1,
+        ]);
+
+        // Профиль редактора готов к кабинету: онбординг и placement пройдены,
+        // иначе /dashboard ушёл бы на /onboarding вместо помеченного 200.
+        $editor = one('SELECT id FROM ' . t('user') . ' WHERE email = ? LIMIT 1', [self::EDITOR_EMAIL]);
+        self::assertIsArray($editor, 'Фикстура: редактор не найден для профиля обхода');
+        insert('learn_profile', [
+            'user_id' => (string) $editor['id'],
+            'onboarding_done' => 1,
+            'placement_done' => 1,
+            'self_assessment' => 'SCHOOL',
+            'goal' => 'TRAVEL',
+            'daily_minutes' => 20,
+            'start_level_id' => null,
+            'created_at' => utcStamp(nowUtc()),
         ]);
 
         self::$tokens = self::buildTokens($items);
@@ -694,6 +712,23 @@ final class NoIndexNoStoreSweepTest extends TestCase
             'GET /lesson/{slug}' => [
                 ['path' => '/lesson/{learnlesson}', 'outcome' => self::MARKED, 'status' => 200],
                 ['path' => '/lesson/net-takogo-uroka', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            // Кабинет и тест на уровень — личные экраны ученика, все помечены.
+            // Регистрация под сеансом редактора уходит на кабинет (редирект).
+            'GET /learn/register' => [
+                ['path' => '/learn/register', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/dashboard'],
+            ],
+            'GET /onboarding' => [
+                ['path' => '/onboarding', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /placement-test' => [
+                ['path' => '/placement-test', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /dashboard' => [
+                ['path' => '/dashboard', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /progress' => [
+                ['path' => '/progress', 'outcome' => self::MARKED, 'status' => 200],
             ],
             'GET /{slug}' => [
                 ['path' => '/{pageslug}', 'outcome' => self::OPEN, 'status' => 200],

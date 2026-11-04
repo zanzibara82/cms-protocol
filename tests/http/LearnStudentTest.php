@@ -9,7 +9,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Ученический контур через настоящий HTTP: вход в раздел, дерево курса, модуль с замками,
- * урок шагами и его POST-жизнь (попытки упражнений, мини-тест и пересдача).
+ * урок шагами и его POST-жизнь (попытки упражнений, мини-тест и пересдача), регистрация,
+ * онбординг, тест на уровень, кабинет и прогресс.
  */
 final class LearnStudentTest extends TestCase
 {
@@ -80,7 +81,15 @@ final class LearnStudentTest extends TestCase
     {
         Kernel::freshCookies();
 
-        foreach (['learn_attempt', 'learn_test_attempt', 'learn_xp', 'learn_streak', 'learn_statistics'] as $table) {
+        foreach ([
+            'learn_attempt',
+            'learn_test_attempt',
+            'learn_xp',
+            'learn_streak',
+            'learn_statistics',
+            'learn_profile',
+            'learn_registration_attempt',
+        ] as $table) {
             run('DELETE FROM ' . t($table));
         }
 
@@ -518,6 +527,409 @@ final class LearnStudentTest extends TestCase
         self::assertSame(0, $this->xpTotal());
     }
 
+    public function testРегистрацияСоздаётУченикаИВедётНаОнбординг(): void
+    {
+        $page = Kernel::get('/learn/register');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Регистрация ученика', $page['body']);
+        $token = Kernel::tokenFrom($page['body']);
+        self::assertNotSame('', $token, 'Форма регистрации не напечатала CSRF-токен');
+
+        $post = Kernel::post('/learn/register', [
+            '_token' => $token,
+            'email' => 'Novyy@Example.ru',
+            'name' => 'Новый ученик',
+            'password' => 'parol-novogo-1',
+        ]);
+
+        self::assertSame(302, $post['status']);
+        $location = (string) ($post['headers']['location'] ?? '');
+        self::assertStringContainsString('/onboarding', $location);
+        self::assertStringContainsString('notice=learn_registered', $location);
+
+        $user = one(
+            'SELECT id, email, name, role, password_hash FROM ' . t('user') . ' WHERE email = ? LIMIT 1',
+            ['novyy@example.ru']
+        );
+        self::assertIsArray($user, 'Регистрация не создала строку ученика с нормализованной почтой');
+        self::assertSame('student', (string) $user['role']);
+        self::assertSame('Новый ученик', (string) $user['name']);
+        self::assertTrue(verifyPassword('parol-novogo-1', (string) $user['password_hash']));
+
+        // Регистрация сразу входит: следующий GET уже личный экран, а не редирект на вход.
+        $onboarding = Kernel::get($location);
+        self::assertSame(200, $onboarding['status']);
+        self::assertStringContainsString('Аккаунт создан', $onboarding['body']);
+        self::assertStringContainsString('Как вы учили английский?', $onboarding['body']);
+    }
+
+    public function testРегистрацияОтклоняетКривыеПоляИЗанятуюПочту(): void
+    {
+        $page = Kernel::get('/learn/register');
+        $token = Kernel::tokenFrom($page['body']);
+
+        $bad = Kernel::post('/learn/register', [
+            '_token' => $token,
+            'email' => '',
+            'name' => '',
+            'password' => '123',
+        ]);
+
+        self::assertSame(200, $bad['status']);
+        self::assertStringContainsString('Почта пустая', $bad['body']);
+        self::assertStringContainsString('Напишите имя', $bad['body']);
+        self::assertStringContainsString('Пароль короче 8', $bad['body']);
+
+        $taken = Kernel::post('/learn/register', [
+            '_token' => $token,
+            'email' => self::STUDENT_EMAIL,
+            'name' => 'Дубль',
+            'password' => 'parol-dublya-1',
+        ]);
+
+        self::assertSame(200, $taken['status']);
+        self::assertStringContainsString('уже зарегистрирована', $taken['body']);
+    }
+
+    public function testРегистрацияБлокируетсяПослеДесятиПопытокСАдреса(): void
+    {
+        for ($i = 0; $i < 10; $i++) {
+            insert('learn_registration_attempt', [
+                'id' => newId(),
+                'ip' => '127.0.0.1',
+                'email' => 'spam' . (string) $i . '@example.ru',
+                'attempted_at' => utcStamp(nowUtc()),
+            ]);
+        }
+
+        $page = Kernel::get('/learn/register');
+        $token = Kernel::tokenFrom($page['body']);
+
+        $post = Kernel::post('/learn/register', [
+            '_token' => $token,
+            'email' => 'blok@example.ru',
+            'name' => 'Заблокированный',
+            'password' => 'parol-blokirovki-1',
+        ]);
+
+        self::assertSame(200, $post['status']);
+        self::assertStringContainsString('Слишком много попыток регистрации', $post['body']);
+        self::assertNull(
+            one('SELECT id FROM ' . t('user') . ' WHERE email = ? LIMIT 1', ['blok@example.ru']),
+            'Гард попыток обязан отказать до вставки ученика'
+        );
+    }
+
+    public function testОнбордингПишетПрофильИВедётКТестуНаУровень(): void
+    {
+        $this->login();
+
+        $page = Kernel::get('/onboarding');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Как вы учили английский?', $page['body']);
+        self::assertStringContainsString('Никогда не изучал', $page['body']);
+        self::assertStringContainsString('Путешествия', $page['body']);
+        self::assertStringContainsString('20 минут', $page['body']);
+
+        $post = Kernel::post('/onboarding', [
+            '_token' => Kernel::tokenFrom($page['body']),
+            'self_assessment' => 'SCHOOL',
+            'goal' => 'TRAVEL',
+            'daily_minutes' => '20',
+        ]);
+
+        self::assertSame(302, $post['status']);
+        $location = (string) ($post['headers']['location'] ?? '');
+        self::assertStringContainsString('/placement-test', $location);
+        self::assertStringContainsString('notice=learn_onboarded', $location);
+
+        $profile = one(
+            'SELECT onboarding_done, placement_done, self_assessment, goal, daily_minutes FROM ' . t('learn_profile')
+                . ' WHERE user_id = ? LIMIT 1',
+            [self::$studentId]
+        );
+
+        self::assertIsArray($profile);
+        self::assertSame(1, (int) $profile['onboarding_done']);
+        self::assertSame(0, (int) $profile['placement_done']);
+        self::assertSame('SCHOOL', (string) $profile['self_assessment']);
+        self::assertSame('TRAVEL', (string) $profile['goal']);
+        self::assertSame(20, (int) $profile['daily_minutes']);
+
+        $follow = Kernel::get($location);
+
+        self::assertSame(200, $follow['status']);
+        self::assertStringContainsString('Ответы сохранены', $follow['body']);
+        self::assertStringContainsString('Тест на уровень', $follow['body']);
+        self::assertStringContainsString('Что означает слово «apple»?', $follow['body']);
+    }
+
+    public function testОнбордингОтклоняетНеизвестныеОтветы(): void
+    {
+        $this->login();
+
+        $page = Kernel::get('/onboarding');
+        $post = Kernel::post('/onboarding', [
+            '_token' => Kernel::tokenFrom($page['body']),
+            'self_assessment' => 'НЕТ-ТАКОГО',
+            'goal' => 'НЕТ-ТАКОГО',
+            'daily_minutes' => '7',
+        ]);
+
+        self::assertSame(200, $post['status']);
+        self::assertStringContainsString('Выберите вариант из списка', $post['body']);
+        self::assertStringContainsString('Выберите нагрузку из списка', $post['body']);
+        self::assertSame(0, (int) value(
+            'SELECT COUNT(*) FROM ' . t('learn_profile') . ' WHERE user_id = ?',
+            [self::$studentId]
+        ), 'Отказ онбординга не должен создавать профиль');
+    }
+
+    public function testТестНаУровеньПишетПопыткуИНазначаетКурс(): void
+    {
+        $this->login();
+        $this->saveProfile(true, false);
+
+        $page = Kernel::get('/placement-test');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Тест на уровень', $page['body']);
+        self::assertStringContainsString('Что означает слово «apple»?', $page['body']);
+        self::assertStringContainsString('type="radio"', $page['body']);
+
+        $test = one(
+            'SELECT id, pass_score FROM ' . t('learn_test') . ' WHERE kind = ? AND status = ? LIMIT 1',
+            ['PLACEMENT', 'PUBLISHED']
+        );
+        self::assertIsArray($test, 'Фикстура: закладка школы не положила опубликованный тест на уровень');
+
+        $questions = all(
+            'SELECT id, correct_option_index FROM ' . t('learn_test_question')
+                . ' WHERE test_id = ? ORDER BY sort, id LIMIT 100',
+            [(string) $test['id']]
+        );
+        self::assertCount(30, $questions, 'Тест на уровень обязан состоять из тридцати вопросов закладки');
+
+        $fields = ['_token' => Kernel::tokenFrom($page['body'])];
+        foreach ($questions as $index => $question) {
+            $correct = (int) $question['correct_option_index'];
+            // Первые двенадцать ответов верны — 40%, ровно порог уровня A1.
+            $selected = $index < 12 ? $correct : ($correct + 1) % 4;
+            $fields['answer[' . (string) $question['id'] . ']'] = (string) $selected;
+        }
+
+        $post = Kernel::post('/placement-test', $fields);
+
+        self::assertSame(302, $post['status']);
+        $location = (string) ($post['headers']['location'] ?? '');
+        self::assertStringContainsString('/placement-test', $location);
+        self::assertStringContainsString('notice=learn_placed', $location);
+
+        $follow = Kernel::get($location);
+
+        self::assertSame(200, $follow['status']);
+        self::assertStringContainsString('Тест пройден', $follow['body']);
+        self::assertStringContainsString('Балл: 40%', $follow['body']);
+        self::assertStringContainsString('A1', $follow['body']);
+        self::assertStringContainsString('Начальный', $follow['body']);
+        self::assertStringContainsString('Английский шаг за шагом', $follow['body']);
+        self::assertStringContainsString('Лексика — 100%', $follow['body']);
+        self::assertStringContainsString('Грамматика — 20%', $follow['body']);
+        self::assertStringContainsString('apple переводится как яблоко', $follow['body']);
+        self::assertStringContainsString('В кабинет', $follow['body']);
+
+        $attempt = one(
+            'SELECT score, passed, vocabulary_score, grammar_score, recommended_level_code,'
+                . ' recommended_start_module_id FROM ' . t('learn_test_attempt')
+                . ' WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+            [self::$studentId]
+        );
+
+        self::assertIsArray($attempt);
+        self::assertSame(40, (int) $attempt['score']);
+        self::assertSame(1, (int) $attempt['passed']);
+        self::assertSame(100, (int) $attempt['vocabulary_score']);
+        self::assertSame(20, (int) $attempt['grammar_score']);
+        self::assertSame('A1', (string) $attempt['recommended_level_code']);
+        self::assertSame(self::$moduleAId, (string) $attempt['recommended_start_module_id']);
+
+        $profile = one(
+            'SELECT placement_done, start_level_id FROM ' . t('learn_profile') . ' WHERE user_id = ? LIMIT 1',
+            [self::$studentId]
+        );
+        $level = one('SELECT id FROM ' . t('learn_level') . ' WHERE code = ? LIMIT 1', ['A1']);
+
+        self::assertIsArray($profile);
+        self::assertIsArray($level);
+        self::assertSame(1, (int) $profile['placement_done']);
+        self::assertSame((string) $level['id'], (string) $profile['start_level_id']);
+
+        $progress = one(
+            'SELECT current_level_id FROM ' . t('learn_progress') . ' WHERE user_id = ? LIMIT 1',
+            [self::$studentId]
+        );
+
+        self::assertIsArray($progress);
+        self::assertSame((string) $level['id'], (string) $progress['current_level_id']);
+
+        $dashboard = Kernel::get('/dashboard');
+
+        self::assertSame(200, $dashboard['status']);
+        self::assertStringContainsString('Английский шаг за шагом', $dashboard['body']);
+    }
+
+    public function testКабинетВедётНаОнбордингИТестПоГотовности(): void
+    {
+        $this->login();
+
+        $dashboard = Kernel::get('/dashboard');
+        self::assertSame(302, $dashboard['status']);
+        self::assertSame('/onboarding', (string) ($dashboard['headers']['location'] ?? ''));
+
+        $this->saveProfile(true, false);
+        $dashboard = Kernel::get('/dashboard');
+        self::assertSame(302, $dashboard['status']);
+        self::assertSame('/placement-test', (string) ($dashboard['headers']['location'] ?? ''));
+
+        $this->saveProfile(true, true);
+        $dashboard = Kernel::get('/dashboard');
+
+        self::assertSame(200, $dashboard['status']);
+        self::assertMatchesRegularExpression('/Добр(ое утро|ый день|ый вечер|ая ночь)/u', $dashboard['body']);
+        self::assertStringContainsString('Серии пока нет', $dashboard['body']);
+        self::assertStringContainsString('Слабого места не видно', $dashboard['body']);
+        self::assertStringContainsString('Модуль 1: Знакомство', $dashboard['body']);
+        self::assertStringContainsString('/lesson/hello', $dashboard['body']);
+        self::assertStringContainsString('Продолжить урок', $dashboard['body']);
+        self::assertStringContainsString('0 XP', $dashboard['body']);
+    }
+
+    public function testПрогрессПоказываетНавыкиИИсториюТестов(): void
+    {
+        $this->login();
+
+        insert('learn_xp', ['user_id' => self::$studentId, 'total' => 420]);
+        insert('learn_streak', [
+            'user_id' => self::$studentId,
+            'current_days' => 3,
+            'longest_days' => 5,
+            'last_study_at' => utcDayKey(nowUtc()),
+        ]);
+        insert('learn_statistics', [
+            'user_id' => self::$studentId,
+            'lessons_completed' => 4,
+            'tests_taken' => 12,
+            'exercises_done' => 16,
+            'correct_rate' => 0.875,
+        ]);
+
+        // Лексика: восемь попыток, шесть верных — 75%.
+        for ($i = 0; $i < 8; $i++) {
+            $this->addAttempt(self::$exerciseChoiceId, $i < 6);
+        }
+
+        // Грамматика: отдельное упражнение с восемью верными попытками — 100%.
+        $grammarExerciseId = newId();
+        insert('learn_exercise', [
+            'id' => $grammarExerciseId,
+            'lesson_id' => self::$lessonOneId,
+            'type' => 'FILL_IN_THE_BLANK',
+            'question' => 'Грамматическая проба',
+            'options' => null,
+            'correct_answer' => '["x"]',
+            'explanation' => '',
+            'difficulty' => 1,
+            'skill' => 'GRAMMAR',
+            'xp_reward' => 5,
+            'audio_url' => null,
+            'sort' => 10,
+        ]);
+
+        try {
+            for ($i = 0; $i < 8; $i++) {
+                $this->addAttempt($grammarExerciseId, true);
+            }
+
+            $test = one('SELECT id FROM ' . t('learn_test') . ' WHERE lesson_id = ? LIMIT 1', [self::$lessonOneId]);
+            self::assertIsArray($test);
+
+            // Двенадцать попыток истории: на экран обязаны попасть последние десять.
+            for ($i = 0; $i < 12; $i++) {
+                insert('learn_test_attempt', [
+                    'id' => newId(),
+                    'user_id' => self::$studentId,
+                    'test_id' => (string) $test['id'],
+                    'score' => 61 + $i,
+                    'vocabulary_score' => 61 + $i,
+                    'grammar_score' => null,
+                    'reading_score' => null,
+                    'listening_score' => null,
+                    'passed' => 1,
+                    'recommended_level_code' => null,
+                    'recommended_start_module_id' => null,
+                    'answers' => '[]',
+                    'created_at' => utcStamp(shiftSeconds(nowUtc(), -60 * (12 - $i))),
+                ]);
+            }
+
+            $page = Kernel::get('/progress');
+
+            self::assertSame(200, $page['status']);
+            self::assertStringContainsString('420 XP', $page['body']);
+            self::assertStringContainsString('3 дня', $page['body']);
+            self::assertStringContainsString('data-stat="lessons">4<', $page['body']);
+            self::assertStringContainsString('data-stat="tests">12<', $page['body']);
+            self::assertStringContainsString('data-stat="exercises">16<', $page['body']);
+            self::assertStringContainsString('6 из 8 · 75%', $page['body']);
+            self::assertStringContainsString('8 из 8 · 100%', $page['body']);
+            self::assertStringContainsString('Чтение', $page['body']);
+            self::assertStringContainsString('нет данных', $page['body']);
+            self::assertStringContainsString('72%', $page['body']);
+            self::assertStringContainsString('63%', $page['body']);
+            self::assertStringNotContainsString('62%', $page['body']);
+            self::assertStringNotContainsString('61%', $page['body']);
+            self::assertSame(10, substr_count($page['body'], 'data-attempt='), 'История тестов обязана резаться на десяти строках');
+        } finally {
+            run('DELETE FROM ' . t('learn_exercise') . ' WHERE id = ?', [$grammarExerciseId]);
+        }
+    }
+
+    public function testНовыеЭкраныЗапрещаютИндексациюИХранение(): void
+    {
+        $register = Kernel::get('/learn/register');
+
+        self::assertSame(200, $register['status']);
+        self::assertStringContainsString('name="robots" content="noindex', $register['body']);
+        self::assertSame('no-store', $register['headers']['cache-control'] ?? '');
+
+        $this->login();
+        $this->saveProfile(true, true);
+
+        foreach (['/onboarding', '/placement-test', '/dashboard', '/progress'] as $path) {
+            $page = Kernel::get($path);
+
+            self::assertSame(200, $page['status'], $path);
+            self::assertStringContainsString('name="robots" content="noindex', $page['body'], $path);
+            self::assertSame('no-store', $page['headers']['cache-control'] ?? '', $path);
+        }
+    }
+
+    public function testВыключенноеПриложениеСнимаетАдресаИСсылкуШапки(): void
+    {
+        $this->login();
+        self::assertTrue(setAppEnabled('learn', false)['ok']);
+
+        try {
+            self::assertSame(404, Kernel::get('/dashboard')['status']);
+            self::assertSame(404, Kernel::get('/learn/register')['status']);
+            self::assertStringNotContainsString('>Курсы</a>', Kernel::get('/')['body']);
+        } finally {
+            self::assertTrue(setAppEnabled('learn', true)['ok']);
+        }
+    }
+
     private function login(): void
     {
         $page = Kernel::get('/login');
@@ -529,6 +941,22 @@ final class LearnStudentTest extends TestCase
         ]);
 
         self::assertSame(302, $entered['status'], 'Ученик не вошёл: ' . (string) ($entered['headers']['location'] ?? ''));
+    }
+
+    private function saveProfile(bool $onboarding, bool $placement): void
+    {
+        run('DELETE FROM ' . t('learn_profile') . ' WHERE user_id = ?', [self::$studentId]);
+
+        insert('learn_profile', [
+            'user_id' => self::$studentId,
+            'onboarding_done' => $onboarding ? 1 : 0,
+            'placement_done' => $placement ? 1 : 0,
+            'self_assessment' => 'SCHOOL',
+            'goal' => 'TRAVEL',
+            'daily_minutes' => 20,
+            'start_level_id' => null,
+            'created_at' => utcStamp(nowUtc()),
+        ]);
     }
 
     /** @param list<string> $lessonIds */

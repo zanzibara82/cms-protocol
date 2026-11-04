@@ -13,3 +13,4 @@ require_once __DIR__ . '/award.php';
 require_once __DIR__ . '/focus.php';
 require_once __DIR__ . '/progress.php';
 require_once __DIR__ . '/catalog.php';
+require_once __DIR__ . '/validators.php';

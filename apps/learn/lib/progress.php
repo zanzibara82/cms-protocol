@@ -361,3 +361,184 @@ function learnSaveProfile(string $userId, array $fields): void
         $args
     );
 }
+
+/**
+ * Строка профиля без записи в базу: чтение кабинета не должно создавать данные.
+ * Возвращает null, если профиля ещё нет.
+ *
+ * @return array{user_id: string, onboarding_done: int, placement_done: int, self_assessment: string, goal: string, daily_minutes: int, start_level_id: string|null, created_at: string}|null
+ */
+function learnProfileRead(string $userId): ?array
+{
+    $row = one(
+        'SELECT user_id, onboarding_done, placement_done, self_assessment, goal, daily_minutes,'
+            . ' start_level_id, created_at FROM ' . t('learn_profile') . ' WHERE user_id = ? LIMIT 1',
+        [$userId]
+    );
+
+    if ($row === null) {
+        return null;
+    }
+
+    return [
+        'user_id' => (string) $row['user_id'],
+        'onboarding_done' => (int) $row['onboarding_done'],
+        'placement_done' => (int) $row['placement_done'],
+        'self_assessment' => (string) $row['self_assessment'],
+        'goal' => (string) $row['goal'],
+        'daily_minutes' => (int) $row['daily_minutes'],
+        'start_level_id' => $row['start_level_id'] === null ? null : (string) $row['start_level_id'],
+        'created_at' => (string) $row['created_at'],
+    ];
+}
+
+/**
+ * Статистика по четырём навыкам кабинета из попыток упражнений. Навык без попыток —
+ * ноль попыток и ноль верных; шаблон показывает «нет данных».
+ *
+ * @return list<array{skill: string, label: string, right: int, total: int}>
+ */
+function learnSkillStats(string $userId): array
+{
+    $stats = [];
+    foreach (LEARN_SKILL_TITLES as $skill) {
+        $stats[] = [
+            'skill' => $skill,
+            'label' => LEARN_SKILL_LABELS[$skill],
+            'right' => 0,
+            'total' => 0,
+        ];
+    }
+
+    $rows = all(
+        'SELECT e.skill AS skill, COUNT(*) AS total, COALESCE(SUM(a.is_correct), 0) AS `right`'
+            . ' FROM ' . t('learn_attempt') . ' AS a'
+            . ' JOIN ' . t('learn_exercise') . ' AS e ON e.id = a.exercise_id'
+            . ' WHERE a.user_id = ? GROUP BY e.skill',
+        [$userId]
+    );
+
+    foreach ($rows as $row) {
+        $skill = (string) ($row['skill'] ?? '');
+        foreach ($stats as &$stat) {
+            if ((string) $stat['skill'] === $skill) {
+                $stat['right'] = (int) ($row['right'] ?? 0);
+                $stat['total'] = (int) ($row['total'] ?? 0);
+                break;
+            }
+        }
+    }
+    unset($stat);
+
+    return $stats;
+}
+
+/**
+ * История попыток тестов — последние десять по дате, параметром LIMIT.
+ *
+ * @return list<array<string, mixed>>
+ */
+function learnTestHistory(string $userId): array
+{
+    return all(
+        'SELECT score, vocabulary_score, grammar_score, reading_score, listening_score, created_at'
+            . ' FROM ' . t('learn_test_attempt') . ' WHERE user_id = ?'
+            . ' ORDER BY created_at DESC, id DESC LIMIT 10',
+        [$userId]
+    );
+}
+
+/**
+ * Сводка кабинета: приветствие, серия, статистика, слабый и сильный навык,
+ * текущий модуль со следующим уроком. Чтение не пишет в базу.
+ *
+ * @return array{
+ *     greeting: string,
+ *     streak: array{days: int, today: bool, nudge: string},
+ *     stats: array{xp: int, streak: int, lessons: int, tests: int, exercises: int},
+ *     weak: array{label: string, right: int, percent: int, advice: string, total: int}|null,
+ *     strong: array{skill: string, label: string, right: int, total: int}|null,
+ *     currentModule: array<string, mixed>|null,
+ *     modulePercent: int,
+ *     nextLesson: array<string, mixed>|null,
+ *     courseTitle: string
+ * }
+ */
+function learnCabinetSummary(string $userId): array
+{
+    $now = nowUtc();
+
+    $streakRow = one(
+        'SELECT current_days, longest_days, last_study_at FROM ' . t('learn_streak') . ' WHERE user_id = ? LIMIT 1',
+        [$userId]
+    );
+
+    $days = $streakRow === null ? 0 : (int) ($streakRow['current_days'] ?? 0);
+    $today = $streakRow !== null
+        && (string) ($streakRow['last_study_at'] ?? '') === utcDayKey($now);
+
+    $xpRow = one('SELECT total FROM ' . t('learn_xp') . ' WHERE user_id = ? LIMIT 1', [$userId]);
+
+    $xp = $xpRow === null ? 0 : (int) ($xpRow['total'] ?? 0);
+
+    $statRow = one(
+        'SELECT lessons_completed, tests_taken, exercises_done FROM ' . t('learn_statistics') . ' WHERE user_id = ? LIMIT 1',
+        [$userId]
+    );
+
+    $lessons = $statRow === null ? 0 : (int) ($statRow['lessons_completed'] ?? 0);
+    $tests = $statRow === null ? 0 : (int) ($statRow['tests_taken'] ?? 0);
+    $exercises = $statRow === null ? 0 : (int) ($statRow['exercises_done'] ?? 0);
+
+    $skillStats = learnSkillStats($userId);
+
+    $weak = learnWeakSkill($skillStats, LEARN_SKILL_SAMPLE_MIN);
+
+    $strong = $weak === null ? null : learnStrongSkill(
+        $skillStats,
+        (string) ($weak['skill'] ?? ''),
+        LEARN_SKILL_SAMPLE_MIN
+    );
+
+    $tree = learnCourseTree($userId);
+    $courseTitle = (string) (($tree['course'] ?? null)['title'] ?? '');
+    $currentModule = null;
+    $modulePercent = 0;
+    $nextLesson = null;
+
+    foreach ($tree['modules'] as $module) {
+        if ($module['completed_count'] < $module['lesson_count']) {
+            $currentModule = $module;
+            $modulePercent = (int) ($module['percent'] ?? 0);
+            foreach ($module['lessons'] as $lesson) {
+                if (($lesson['unlocked'] ?? false) === true && ($lesson['completed'] ?? false) !== true) {
+                    $nextLesson = $lesson;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    return [
+        'greeting' => learnDayGreeting($now),
+        'streak' => [
+            'days' => $days,
+            'today' => $today,
+            'nudge' => learnStreakNudge($days, $today),
+        ],
+        'stats' => [
+            'xp' => $xp,
+            'streak' => $days,
+            'lessons' => $lessons,
+            'tests' => $tests,
+            'exercises' => $exercises,
+        ],
+        'weak' => $weak === null ? null : learnFocusOf($weak),
+        'strong' => $strong,
+        'currentModule' => $currentModule,
+        'modulePercent' => $modulePercent,
+        'nextLesson' => $nextLesson,
+        'courseTitle' => $courseTitle,
+    ];
+}

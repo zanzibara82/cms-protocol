@@ -138,6 +138,83 @@ function learnCourseRow(array $row): array
 }
 
 /**
+ * Непройденный открытый урок модуля, в котором есть упражнения данного навыка.
+ * Нужно для карточки фокуса кабинета: ссылка на урок, где можно подтянуть слабое.
+ *
+ * @return array{lesson: array{id: string, slug: string, title: string, sort: int, unlocked: bool, completed: bool, skill: string}, module: array{id: string, title: string, sort: int, lesson_count: int, completed_count: int, percent: int}}|null
+ */
+function learnLessonWithSkill(string $userId, string $moduleId, string $skill): ?array
+{
+    $moduleRow = one(
+        'SELECT id, course_id, title, sort FROM ' . t('learn_module') . ' WHERE id = ? LIMIT 1',
+        [$moduleId]
+    );
+
+    if ($moduleRow === null) {
+        return null;
+    }
+
+    $courseId = (string) $moduleRow['course_id'];
+    $progress = learnProgressRead($userId);
+    $completed = learnCompletedSet($progress['completed_lessons']);
+    $modules = learnModulesWithLocks($courseId, $completed);
+
+    $targetModule = null;
+    foreach ($modules as $module) {
+        if ($module['id'] === $moduleId) {
+            $targetModule = $module;
+            break;
+        }
+    }
+
+    if ($targetModule === null) {
+        return null;
+    }
+
+    $targetModuleShort = [
+        'id' => (string) $targetModule['id'],
+        'title' => (string) $targetModule['title'],
+        'sort' => (int) $targetModule['sort'],
+        'lesson_count' => (int) ($targetModule['lesson_count'] ?? 0),
+        'completed_count' => (int) ($targetModule['completed_count'] ?? 0),
+        'percent' => (int) ($targetModule['percent'] ?? 0),
+    ];
+
+    foreach ($targetModule['lessons'] as $lesson) {
+        if (($lesson['unlocked'] ?? false) !== true || ($lesson['completed'] ?? false) === true) {
+            continue;
+        }
+
+        $exercises = is_array($lesson['exercises'] ?? null) ? $lesson['exercises'] : [];
+        /** @phpstan-ignore-next-line */
+        foreach ($exercises as $exercise) {
+            /** @phpstan-ignore-next-line */
+            if (!is_array($exercise)) {
+                continue;
+            }
+
+            /** @phpstan-ignore-next-line */
+            if ((string) ($exercise['skill'] ?? '') === $skill) {
+                return [
+                    'lesson' => [
+                        'id' => (string) ($lesson['id'] ?? ''),
+                        'slug' => (string) ($lesson['slug'] ?? ''),
+                        'title' => (string) ($lesson['title'] ?? ''),
+                        'sort' => (int) ($lesson['sort'] ?? 0),
+                        'unlocked' => (bool) ($lesson['unlocked'] ?? false),
+                        'completed' => (bool) ($lesson['completed'] ?? false),
+                        'skill' => $skill,
+                    ],
+                    'module' => $targetModuleShort,
+                ];
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
  * Модули курса с уроками и сквозными замками. `$prevDone` переживает границу модуля:
  * первый урок следующего модуля открывается только после последнего урока предыдущего.
  *

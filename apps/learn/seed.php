@@ -241,50 +241,35 @@ $questions = [
     [
         'skill' => 'LISTENING',
         'text' => 'Послушайте фразу и выберите её запись:',
-        'options' => [
-            'speak' => 'I am from Canada.',
-            'choices' => ['I am from Canada.', 'I am from Cuba.', 'I am from China.', 'I am from Colombia.'],
-        ],
+        'options' => ['I am from Canada.', 'I am from Cuba.', 'I am from China.', 'I am from Colombia.'],
         'correct' => 0,
         'explanation' => 'звучит фраза о Канаде: I am from Canada',
     ],
     [
         'skill' => 'LISTENING',
         'text' => 'Послушайте и выберите правильный вариант:',
-        'options' => [
-            'speak' => 'She has got three sisters.',
-            'choices' => ['She has got three sisters.', 'He has got three sisters.', 'She has got two sisters.', 'She likes sisters.'],
-        ],
+        'options' => ['She has got three sisters.', 'He has got three sisters.', 'She has got two sisters.', 'She likes sisters.'],
         'correct' => 0,
         'explanation' => 'говорят о ней и о трёх сёстрах',
     ],
     [
         'skill' => 'LISTENING',
         'text' => 'Послушайте число:',
-        'options' => [
-            'speak' => 'My phone number is seven three nine.',
-            'choices' => ['739', '731', '793', '379'],
-        ],
+        'options' => ['739', '731', '793', '379'],
         'correct' => 0,
         'explanation' => 'seven three nine — это 739, порядок цифр важен',
     ],
     [
         'skill' => 'LISTENING',
         'text' => 'Послушайте вопрос и выберите ответ:',
-        'options' => [
-            'speak' => '«Where do you live?»',
-            'choices' => ['I am 20.', 'In Moscow.', 'By bus.', 'Yes, I do.'],
-        ],
+        'options' => ['I am 20.', 'In Moscow.', 'By bus.', 'Yes, I do.'],
         'correct' => 1,
         'explanation' => 'вопрос о месте жительства, отвечает название города',
     ],
     [
         'skill' => 'LISTENING',
         'text' => 'Послушайте предложение:',
-        'options' => [
-            'speak' => 'We usually have breakfast at eight.',
-            'choices' => ['We have lunch at eight.', 'We have breakfast at eight.', 'We wake up at eight.', 'We have dinner at eight.'],
-        ],
+        'options' => ['We have lunch at eight.', 'We have breakfast at eight.', 'We wake up at eight.', 'We have dinner at eight.'],
         'correct' => 1,
         'explanation' => 'звучит have breakfast — завтрак в восемь',
     ],
