@@ -25,15 +25,15 @@ addRoute('POST', '/placement-test', 'learnPlacementAction', ['app' => 'learn']);
 addRoute('GET', '/dashboard', 'learnDashboardPage', ['app' => 'learn']);
 addRoute('GET', '/progress', 'learnProgressPage', ['app' => 'learn']);
 
-// Контент-админка раздела «Курсы»: права проверяет learnUser() в каждом контроллере,
-// а затем roleGrantsManage() — только редактор и администратор. Пути — строковые литералы,
-// один POST-обработчик с op на экране курсов и уроков.
-addRoute('GET', '/learn/admin', 'learnAdminSummary', ['app' => 'learn']);
-addRoute('GET', '/learn/admin/courses', 'learnAdminCourses', ['app' => 'learn']);
-addRoute('POST', '/learn/admin/courses', 'learnAdminCoursesAction', ['app' => 'learn']);
-addRoute('GET', '/learn/admin/lessons', 'learnAdminLessons', ['app' => 'learn']);
-addRoute('POST', '/learn/admin/lessons', 'learnAdminLessonsAction', ['app' => 'learn']);
-addRoute('GET', '/learn/admin/lessons/new', 'learnAdminLessonNew', ['app' => 'learn']);
-addRoute('POST', '/learn/admin/lessons/new', 'learnAdminLessonSaveAction', ['app' => 'learn']);
-addRoute('GET', '/learn/admin/lessons/{id}', 'learnAdminLessonEdit', ['app' => 'learn']);
-addRoute('POST', '/learn/admin/lessons/{id}', 'learnAdminLessonSaveAction', ['app' => 'learn']);
+// Контент-админка раздела «Курсы»: права проверяет гейт маршрута (private, permission => 'login'),
+// а затем roleGrantsManage() в контроллере — только редактор и администратор. Пути — строковые
+// литералы, один POST-обработчик с op на экране курсов и уроков.
+addRoute('GET', '/learn/admin', 'learnAdminSummary', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/learn/admin/courses', 'learnAdminCourses', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/learn/admin/courses', 'learnAdminCoursesAction', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/learn/admin/lessons', 'learnAdminLessons', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/learn/admin/lessons', 'learnAdminLessonsAction', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/learn/admin/lessons/new', 'learnAdminLessonNew', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/learn/admin/lessons/new', 'learnAdminLessonSaveAction', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('GET', '/learn/admin/lessons/{id}', 'learnAdminLessonEdit', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+addRoute('POST', '/learn/admin/lessons/{id}', 'learnAdminLessonSaveAction', ['app' => 'learn', 'private' => true, 'permission' => 'login']);

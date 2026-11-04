@@ -71,7 +71,7 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // все пять вариантов помечены: всего 129 вариантов, помеченных 106. Слой кабинета
     // добавляет регистрацию (редирект под сеансом), онбординг, placement, кабинет и
     // прогресс — пять вариантов, из них четыре помечены. Слой админки добавляет обзор, курсы и
-    // уроки — три варианта, все помечены: всего 137 вариантов, помеченных 113.
+    // уроки — шесть вариантов, все помечены: всего 139 вариантов, помеченных 115.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -83,13 +83,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 137;
-    private const MARKED_TOTAL = 113;
+    private const VARIANTS_TOTAL = 139;
+    private const MARKED_TOTAL = 115;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
     // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (137 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 136;
+    private const MARKED_ON_NOT_INSTALLED = 138;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -739,6 +739,12 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /learn/admin/lessons' => [
                 ['path' => '/learn/admin/lessons', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /learn/admin/lessons/new' => [
+                ['path' => '/learn/admin/lessons/new', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /learn/admin/lessons/{id}' => [
+                ['path' => '/learn/admin/lessons/{learnlesson}', 'outcome' => self::MARKED, 'status' => 200],
             ],
             'GET /{slug}' => [
                 ['path' => '/{pageslug}', 'outcome' => self::OPEN, 'status' => 200],

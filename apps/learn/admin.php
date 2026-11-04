@@ -189,12 +189,12 @@ function learnAdminCourses(array $params = []): void
 /** @param array<string, string> $params */
 function learnAdminCoursesAction(array $params = []): void
 {
+    csrfCheck();
+
     $user = learnUser();
     if (!roleGrantsManage(['role' => (string) $user['role'], 'blocked' => $user['blocked_at'] !== null])) {
         forbidden('Раздел доступен только редактору и администратору.');
     }
-
-    csrfCheck();
 
     $op = postString('op');
 
@@ -215,18 +215,18 @@ function learnAdminCoursesAction(array $params = []): void
     };
 
     $notice = match ($op) {
-        'create-level' => 'menu_created',
-        'save-level', 'toggle-level' => 'menu_saved',
-        'move-level' => 'menu_moved',
-        'delete-level' => 'menu_deleted',
-        'create-course' => 'menu_created',
-        'save-course', 'toggle-course' => 'menu_saved',
-        'move-course' => 'menu_moved',
-        'delete-course' => 'menu_deleted',
-        'create-module' => 'menu_created',
-        'save-module', 'toggle-module' => 'menu_saved',
-        'move-module' => 'menu_moved',
-        'delete-module' => 'menu_deleted',
+        'create-level' => 'learn_saved',
+        'save-level', 'toggle-level' => 'learn_saved',
+        'move-level' => 'learn_moved',
+        'delete-level' => 'learn_deleted',
+        'create-course' => 'learn_saved',
+        'save-course', 'toggle-course' => 'learn_saved',
+        'move-course' => 'learn_moved',
+        'delete-course' => 'learn_deleted',
+        'create-module' => 'learn_saved',
+        'save-module', 'toggle-module' => 'learn_saved',
+        'move-module' => 'learn_moved',
+        'delete-module' => 'learn_deleted',
         default => '',
     };
 
@@ -284,12 +284,12 @@ function learnAdminLessons(array $params = []): void
 /** @param array<string, string> $params */
 function learnAdminLessonsAction(array $params = []): void
 {
+    csrfCheck();
+
     $user = learnUser();
     if (!roleGrantsManage(['role' => (string) $user['role'], 'blocked' => $user['blocked_at'] !== null])) {
         forbidden('Раздел доступен только редактору и администратору.');
     }
-
-    csrfCheck();
 
     $op = postString('op');
 
@@ -325,7 +325,11 @@ function learnAdminLessonEdit(array $params = []): void
     }
 
     $id = mb_substr(trim((string) ($params['id'] ?? '')), 0, 26);
-    $lesson = learnAdminLessonById($id);
+    $lesson = one(
+        'SELECT id, module_id, slug, title, description, status, sort FROM ' . t('learn_lesson')
+            . ' WHERE (id = ? OR slug = ?) LIMIT 1',
+        [$id, $id]
+    );
 
     if ($lesson === null) {
         finishAppAction(
@@ -350,12 +354,12 @@ function learnAdminLessonEdit(array $params = []): void
 /** @param array<string, string> $params */
 function learnAdminLessonSaveAction(array $params = []): void
 {
+    csrfCheck();
+
     $user = learnUser();
     if (!roleGrantsManage(['role' => (string) $user['role'], 'blocked' => $user['blocked_at'] !== null])) {
         forbidden('Раздел доступен только редактору и администратору.');
     }
-
-    csrfCheck();
 
     $id = postString('id');
     $isNew = $id === '';
@@ -964,7 +968,7 @@ function learnAdminDeleteLesson(string $id): array
  * @param array<string, string> $errors
  * @param string $error
  * @param bool $isNew
- * @param array<string, mixed> $modules
+ * @param list<array<string, mixed>> $modules
  */
 function learnAdminLessonForm(
     array $lesson,
@@ -972,9 +976,8 @@ function learnAdminLessonForm(
     array $errors,
     string $error,
     bool $isNew,
-    array<string, mixed> $modules
+    array $modules
 ): void {
-    file_put_contents('/app/lesson_debug.txt', 'LESSON FORM: isNew=' . var_export($isNew, true) . ' lessonId=' . var_export($lesson['id'] ?? 'NONE', true) . ' modulesCount=' . count($modules) . "\n", FILE_APPEND);
     $isNew = $isNew || $lesson === [];
 
     $values = [

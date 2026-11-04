@@ -151,7 +151,8 @@ final class LearnAdminTest extends TestCase
         self::assertSame(302, $entered['status']);
 
         $courses = Kernel::get('/learn/admin/courses');
-        self::assertSame(403, $courses['status'], 'Ученик не должен попасть на приватный адрес админки');
+        self::assertSame(302, $courses['status'], 'Ученик не должен попасть на приватный адрес админки');
+        self::assertStringContainsString('/login?next=', (string) ($courses['headers']['location'] ?? ''));
 
         run('DELETE FROM ' . t('user') . ' WHERE id = ?', [$studentId]);
     }
@@ -174,7 +175,7 @@ final class LearnAdminTest extends TestCase
         self::assertSame(302, $post['status']);
         $location = (string) ($post['headers']['location'] ?? '');
         self::assertStringContainsString('/learn/admin/courses', $location);
-        self::assertStringContainsString('notice=menu_created', $location);
+        self::assertStringContainsString('notice=learn_saved', $location);
 
         $level = one('SELECT code, title, sort FROM ' . t('learn_level') . ' WHERE code = ? LIMIT 1', ['C2-Test']);
         self::assertIsArray($level);
@@ -201,7 +202,7 @@ final class LearnAdminTest extends TestCase
 
         self::assertSame(302, $post['status']);
         $location = (string) ($post['headers']['location'] ?? '');
-        self::assertStringContainsString('notice=menu_saved', $location);
+        self::assertStringContainsString('notice=learn_saved', $location);
 
         $level = one('SELECT code, title, sort FROM ' . t('learn_level') . ' WHERE id = ? LIMIT 1', [self::$levelId]);
         self::assertIsArray($level);
@@ -219,7 +220,7 @@ final class LearnAdminTest extends TestCase
 
         self::assertSame(302, $post['status']);
         $location = (string) ($post['headers']['location'] ?? '');
-        self::assertStringContainsString('notice=menu_moved', $location);
+        self::assertStringContainsString('notice=learn_moved', $location);
 
         $level = one('SELECT sort FROM ' . t('learn_level') . ' WHERE id = ? LIMIT 1', [self::$levelId]);
         self::assertIsArray($level);
@@ -250,7 +251,7 @@ final class LearnAdminTest extends TestCase
 
             self::assertSame(302, $post['status']);
             $location = (string) ($post['headers']['location'] ?? '');
-            self::assertStringContainsString('notice=menu_deleted', $location);
+            self::assertStringContainsString('notice=learn_deleted', $location);
 
             $level = one('SELECT id FROM ' . t('learn_level') . ' WHERE id = ? LIMIT 1', [$freeLevelId]);
             self::assertNull($level, 'Уровень без курсов должен быть удалён');
@@ -300,7 +301,7 @@ final class LearnAdminTest extends TestCase
 
         self::assertSame(302, $post['status']);
         $location = (string) ($post['headers']['location'] ?? '');
-        self::assertStringContainsString('notice=menu_created', $location);
+        self::assertStringContainsString('notice=learn_saved', $location);
 
         $course = one('SELECT id, title, status FROM ' . t('learn_course') . ' WHERE title = ? LIMIT 1', ['New Course']);
         self::assertIsArray($course);
@@ -319,7 +320,7 @@ final class LearnAdminTest extends TestCase
 
         self::assertSame(302, $post['status']);
         $location = (string) ($post['headers']['location'] ?? '');
-        self::assertStringContainsString('notice=menu_created', $location);
+        self::assertStringContainsString('notice=learn_saved', $location);
 
         $module = one('SELECT id, title, status FROM ' . t('learn_module') . ' WHERE title = ? LIMIT 1', ['New Module']);
         self::assertIsArray($module);
