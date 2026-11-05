@@ -183,7 +183,7 @@ final class SqlSafetyTest extends TestCase
     // Пункт М284-Г2-4: обход расширен на весь раздел `apps/news`. Прежний `apps/news/lib`
     // обещал «раздел», а читал только `lib`: запрос `LIKE ?` в `apps/news/actions`,
     // `apps/news/templates` или в новом подкаталоге вне `lib` проходил ворота незамеченным.
-    public function testКаждыйLikeВРазделеНовостиОбъявляетEscape(): void
+    public function testКаждыйЛайкВРазделеНовостиОбъявляетEscape(): void
     {
         $violations = [];
 

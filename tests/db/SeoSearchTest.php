@@ -234,7 +234,7 @@ final class SeoSearchTest extends TestCase
         self::assertSame(12, (int) value('SELECT COUNT(*) FROM ' . t('seo_search_row')));
     }
 
-    public function testОтчётСчитаетCtrКликамиКПоказам(): void
+    public function testОтчётСчитаетКтрКликамиКПоказам(): void
     {
         self::connectTestSource();
         seoSearchImport('2026-10-01', '2026-10-03', 'query');

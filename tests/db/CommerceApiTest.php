@@ -32,7 +32,7 @@ final class CommerceApiTest extends CommerceDbTestCase
         self::assertNotSame('', (string) $line['created_at']);
     }
 
-    public function testПотокВедётсяОтметкойCreated_at(): void
+    public function testПотокВедётсяОтметкойСоздания(): void
     {
         self::makeProduct(['slug' => 'pervyi', 'sku' => 'C-1', 'title' => 'Первый']);
         self::makeProduct(['slug' => 'vtoroi', 'sku' => 'C-2', 'title' => 'Второй']);
