@@ -41,7 +41,7 @@ final class CommerceVariantTest extends CommerceDbTestCase
         self::assertArrayNotHasKey('stock', $result['errors']);
     }
 
-    public function testАртикулВариантаCAParentSKUStrict(): void
+    public function testАртикулВариантаРодительSku(): void
     {
         $product = self::makeProduct(['slug' => 'kolonka', 'sku' => 'SPK-1']);
 

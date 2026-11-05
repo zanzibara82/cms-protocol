@@ -21,7 +21,7 @@ final class CommerceCatalogTest extends CommerceDbTestCase
         self::assertSame('Кола', (string) $list['rows'][0]['title']);
     }
 
-    public function testПоискPodNameAndSku(): void
+    public function testПоискПоИмениИАртикулу(): void
     {
         self::makeProduct(['slug' => 'kola', 'sku' => 'DRINK-1', 'title' => 'Кола']);
         self::makeProduct(['slug' => 'hleb', 'sku' => 'FOOD-1', 'title' => 'Хлеб']);

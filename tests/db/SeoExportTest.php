@@ -225,7 +225,7 @@ final class SeoExportTest extends TestCase
 
     // ── CSV ────────────────────────────────────────────────
 
-    public function testCsvНесётBomРазделительИКонцыСтрок(): void
+    public function testCsvНесётБомРазделительИКонцыСтрок(): void
     {
         $csv = seoExportCsv([
             'title' => 'Проверка',

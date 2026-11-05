@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Руководство по установке CMS «Школа английского» на виртуальный хостинг</title>
+<style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }
+    h1 { color: #1a237e; border-bottom: 2px solid #1a237e; padding-bottom: 10px; }
+    h2 { color: #283593; margin-top: 30px; border-left: 4px solid #3f51b5; padding-left: 12px; }
+    h3 { color: #303f9f; margin-top: 25px; }
+    .step { background: #f5f5ff; border: 1px solid #e0e0ff; border-radius: 8px; padding: 20px; margin: 20px 0; page-break-inside: avoid; }
+    .step-number { display: inline-block; background: #3f51b5; color: white; width: 30px; height: 30px; text-align: center; line-height: 30px; border-radius: 50%; margin-right: 10px; font-weight: bold; }
+    .warning { background: #fff3e0; border: 1px solid #ffb74d; border-radius: 6px; padding: 15px; margin: 15px 0; }
+    .success { background: #e8f5e9; border: 1px solid #81c784; border-radius: 6px; padding: 15px; margin: 15px 0; }
+    .info { background: #e3f2fd; border: 1px solid #64b5f6; border-radius: 6px; padding: 15px; margin: 15px 0; }
+    code { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
+    pre { background: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; padding: 15px; overflow-x: auto; }
+    .placeholder { background: #fafafa; border: 2px dashed #9e9e9e; border-radius: 6px; padding: 15px; margin: 15px 0; text-align: center; color: #666; font-style: italic; }
+    .checklist { list-style-type: none; padding-left: 0; }
+    .checklist li { padding: 8px 0; border-bottom: 1px solid #eee; }
+    .checklist li::before { content: "☐ "; color: #4caf50; font-weight: bold; margin-right: 8px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    th { background-color: #3f51b5; color: white; }
+    .page-break { page-break-before: always; }
+    @media print {
+        body { max-width: 100%; padding: 0; }
+        .step { page-break-inside: avoid; }
+        .no-print { display: none; }
+    }
+</style>
+</head>
+<body>
+
+<h1>Руководство по установке CMS «Школа английского» на виртуальный хостинг</h1>
+<p><strong>Версия:</strong> 1.0 &nbsp;|&nbsp; <strong>Для:</strong> новичков и владельцев виртуального хостинга</p>
+
+<div class="info">
+<p><strong>Что вам понадобится:</strong></p>
+<ul>
+<li>Доступ к панели управления хостингом (cPanel, ISPmanager, DirectAdmin или другая)</li>
+<li>Доступ к файловому менеджеру хостинга или FTP-клиент (FileZilla, WinSCP)</li>
+<li>База данных MySQL (имя базы, пользователь, пароль, хост)</li>
+<li>Название сайта, адрес электронной почты администратора и пароль</li>
+</ul>
+</div>
+
+<div class="warning">
+<p><strong>Важно:</strong> Ниже в документе есть блоки для скриншотов. Если вы делаете этот документ для себя, просто пропустите их или вставьте свои скриншоты. Если делаете для другого человека — замените каждый блок на реальный скриншот из вашего хостинга.</p>
+</div>
+
+<h2>Чеклист перед началом</h2>
+<ul class="checklist">
+<li>У меня есть доступ к панели управления хостингом</li>
+<li>У меня есть FTP-доступ или файловый менеджер</li>
+<li>Я знаю имя базы данных, пользователя и пароль MySQL</li>
+<li>У меня есть название сайта, email администратора и пароль (минимум 10 символов)</li>
+</ul>
+
+<div class="page-break"></div>
+
+<h2>Шаг 1. Подготовка файлов на компьютере</h2>
+
+<p>Скачайте архив с CMS и распакуйте его в отдельную папку на компьютере, например в папку cms-ready.</p>
+
+<p>В этой папке должны быть:</p>
+<ul>
+<li>public/ — основные файлы сайта (включая index.php, setup.php, .htaccess, assets/app.css)</li>
+<li>core/ — ядро системы</li>
+<li>admin/ — каркас админки</li>
+<li>theme/ — шаблоны оформления</li>
+<li>apps/ — приложения (Новости, Курсы, Магазин и т.д.)</li>
+<li>config.sample.php — образец файла настроек</li>
+<li>composer.json и composer.lock</li>
+<li>scripts/ — служебные скрипты</li>
+</ul>
+
+<div class="placeholder">
+<img src="placeholder-folder.png" alt="Папка с файлами CMS" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 1:</strong> Покажите окно проводника Windows с открытой папкой cms-ready/, где видны папки public/, core/, admin/, theme/, apps/ и файлы config.sample.php, composer.json.</p>
+</div>
+
+<div class="warning">
+<p><strong>Не загружайте на хостинг:</strong></p>
+<ul>
+<li>Папку vendor/ (если есть возможность установить Composer на хостинге — делайте это там)</li>
+<li>Папку .superpowers/ (внутренний журнал разработки)</li>
+<li>Папку tests/ (тесты не нужны на рабочем сайте)</li>
+<li>Файл public/install.lock (создастся автоматически при установке)</li>
+</ul>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Шаг 2. Загрузка файлов на хостинг</h2>
+
+<p>Загрузите файлы двумя способами: через файловый менеджер панели управления или через FTP.</p>
+
+<h3>Вариант А: Через файловый менеджер панели управления</h3>
+<ol>
+<li>Войдите в панель управления хостингом.</li>
+<li>Найдите «Файловый менеджер» или «File Manager».</li>
+<li>Перейдите в корневую папку вашего сайта (обычно public_html, www или httpdocs).</li>
+<li>Загрузите содержимое локальной папки public/ в папку public_html/public/.</li>
+<li>Загрузите папки core/, admin/, theme/, apps/ в корневую папку сайта.</li>
+<li>Загрузите файл config.sample.php в корневую папку сайта.</li>
+</ol>
+
+<div class="placeholder">
+<img src="placeholder-filemanager.png" alt="Файловый менеджер хостинга" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 2:</strong> Файловый менеджер хостинга. Видны папки public/, core/, admin/, theme/, apps/ и файлы config.sample.php, composer.json.</p>
+</div>
+
+<h3>Вариант Б: Через FTP-клиент (FileZilla)</h3>
+<ol>
+<li>Подключитесь к хостингу через FTP.</li>
+<li>Перейдите в корневую папку сайта.</li>
+<li>Перетащите папки и файлы из локальной папки cms-ready/ на сервер.</li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2>Шаг 3. Настройка прав доступа к файлам</h2>
+
+<p>Права доступа определяют, кто может читать и записывать файлы. Выставьте следующие права:</p>
+
+<table>
+<tr><th>Папка / файл</th><th>Права</th><th>Зачем</th></tr>
+<tr><td>public/</td><td>755</td><td>Папка сайта доступна для чтения и записи</td></tr>
+<tr><td>public/assets/</td><td>755</td><td>CSS и картинки доступны для чтения</td></tr>
+<tr><td>public/uploads/</td><td>777 или 755</td><td>Загрузка файлов пользователями (аватары, картинки)</td></tr>
+<tr><td>config.php</td><td>600</td><td>Только владелец может читать и писать (создастся при установке)</td></tr>
+<tr><td>public/install.lock</td><td>644</td><td>Замок установщика (создастся после установки)</td></tr>
+</table>
+
+<p><strong>Как выставить права в файловый менеджер хостинга:</strong></p>
+<ol>
+1. Нажмите правой кнопкой мыши на папку или файл.
+2. Выберите «Права доступа» или «Change permissions».
+3. Введите цифровой код (например, 755 или 600).
+4. Нажмите «ОК» или «Применить».
+</ol>
+
+<div class="placeholder">
+<img src="placeholder-permissions.png" alt="Права доступа" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 3:</strong> Окно изменения прав доступа в файловый менеджер хостинга. Видно поле с цифровым кодом (например, 755 или 600).</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Шаг 4. Создание базы данных на хостинге</h2>
+
+<ol>
+<li>В панели управления хостингом найдите раздел «Базы данных MySQL» или «MySQL Databases».</li>
+<li>Нажмите «Создать базу данных». Придумайте имя, например cms_prod или u12345_cms.</li>
+<li>Создайте нового пользователя базы данных, например cms_user.</li>
+<li>Придумайте надёжный пароль (минимум 10 символов, буквы, цифры, спецсимволы).</li>
+<li>Привяжите пользователя к базе данных с правами «Все привилегии» (All privileges).</li>
+<li>Запишите на бумаге: имя базы, имя пользователя, пароль, хост (обычно localhost).</li>
+</ol>
+
+<div class="placeholder">
+<img src="placeholder-database.png" alt="Создание базы данных" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 4:</strong> Страница создания базы данных в панели управления хостингом. Видны поля для имени базы, пользователя и пароля.</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Шаг 5. Создание файла настроек config.php</h2>
+
+<ol>
+<li>Скачайте файл config.sample.php с хостинга на ваш компьютер.</li>
+<li>Откройте его в текстовом редакторе (Notepad++, VS Code, Блокнот).</li>
+<li>Заполните следующие строки:</li>
+</ol>
+
+<pre><code>return [
+    'DB_HOST' => 'localhost',           // обычно localhost
+    'DB_PORT' => '3306',                // обычно 3306
+    'DB_NAME' => 'cms_prod',            // имя вашей базы данных
+    'DB_USER' => 'cms_user',            // имя пользователя БД
+    'DB_PASS' => 'ваш_надёжный_пароль', // пароль пользователя БД
+    'TABLE_PREFIX' => 'tbl_',
+    'SITE_URL' => 'https://ваш-сайт.ru', // адрес сайта с https://
+    'SITE_NAME' => 'Моя школа английского',
+    'TIMEZONE' => 'Europe/Moscow',
+    // SMTP настройки (опционально, для отправки почты):
+    // 'SMTP_HOST' => '',
+    // 'SMTP_PORT' => '587',
+    // 'MAIL_FROM' => 'noreply@ваш-сайт.ru',
+];</code></pre>
+
+<div class="placeholder">
+<img src="placeholder-config.png" alt="Редактирование config.php" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 5:</strong> Файл config.php в текстовом редакторе. Видны заполненные поля DB_HOST, DB_NAME, DB_USER, SITE_URL.</p>
+</div>
+
+<ol start="4">
+<li>Сохраните файл как config.php (без слова sample).</li>
+<li>Загрузите config.php в корневую папку сайта (рядом с папкой public/).</li>
+<li>Выставьте права на файл config.php: 600 (только владелец может читать и писать).</li>
+</ol>
+
+<div class="warning">
+<p><strong>Никогда не отправляйте config.php по электронной почте и не храните его в открытом доступе.</strong> В файле содержится пароль от базы данных.</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Шаг 6. Запуск установщика</h2>
+
+<ol>
+<li>Откройте любой веб-браузер.</li>
+<li>В строке адреса введите: https://ваш-сайт.ru/setup.php</li>
+<li>Вы должны увидеть страницу «Установка сайта».</li>
+</ol>
+
+<div class="placeholder">
+<img src="placeholder-installer.png" alt="Страница установщика" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 6:</strong> Страница установщика CMS с формой ввода данных.</p>
+</div>
+
+<ol start="4">
+<li>Если вы видите ошибки красным цветом — проверьте:</li>
+<ul>
+<li>Права на запись в папку public/ (нужны для создания файла install.lock)</li>
+<li>Версию PHP (должна быть не ниже 8.1)</li>
+<li>Наличие расширений pdo_mysql, mbstring, openssl, fileinfo</li>
+</ul>
+<li>Заполните форму установки:</li>
+<ul>
+<li><strong>Название сайта:</strong> например «Моя школа английского»</li>
+<li><strong>Почта администратора:</strong> ваш рабочий email</li>
+<li><strong>Имя администратора:</strong> ваше имя</li>
+<li><strong>Пароль:</strong> придумайте надёжный пароль (минимум 10 символов)</li>
+<li><strong>Пароль ещё раз:</strong> повторите тот же пароль</li>
+</ul>
+<li>Нажмите кнопку «Установить».</li>
+</ol>
+
+<div class="placeholder">
+<img src="placeholder-install-form.png" alt="Форма установщика заполнена" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 7:</strong> Заполненная форма установщика с введённым названием сайта, почтой, именем и паролем.</p>
+</div>
+
+<div class="success">
+<p><strong>Если всё прошло успешно:</strong> вы увидите сообщение об успешной установке и ссылку на вход в кабинет администратора.</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Шаг 7. Первый вход в кабинет администратора</h2>
+
+<ol>
+<li>Нажмите ссылку на вход или перейдите по адресу: https://ваш-сайт.ru/login</li>
+<li>Введите email администратора и пароль, которые указали при установке.</li>
+<li>Нажмите «Войти».</li>
+<li>Вы должны попасть в кабинет администратора с вкладками «Сводка», «Приложения» и т.д.</li>
+</ol>
+
+<div class="placeholder">
+<img src="placeholder-login.png" alt="Страница входа" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 8:</strong> Страница входа в кабинет администратора CMS.</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Шаг 8. Установка разделов (приложений)</h2>
+
+<p>После входа в кабинет:</p>
+<ol>
+<li>Нажмите вкладку «Приложения» (или «Админка приложений»).</li>
+<li>Вы увидите список доступных разделов:</li>
+<ul>
+<li><b>Новости</b> — публикация статей</li>
+<li><b>Курсы</b> — обучающие курсы для учеников</li>
+<li><b>Магазин</b> — интернет-магазин</li>
+<li><b>Доска объявлений</b> — доска частных объявлений</li>
+<li><b>SEO и статистика</b> — аналитика посещаемости</li>
+</ul>
+<li>Для каждого раздела, который хотите использовать, нажмите кнопку «Установить».</li>
+<li>После установки раздел появится в меню сайта и в кабинете.</li>
+</ol>
+
+<div class="placeholder">
+<img src="placeholder-apps.png" alt="Страница управления приложениями" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 9:</strong> Страница управления приложениями /admin/apps со списком разделов и кнопками «Установить».</p>
+</div>
+
+<h3>После установки настройте каждый раздел:</h3>
+<table>
+<tr><th>Раздел</th><th>Что настроить</th></tr>
+<tr><td>Новости</td><td>Создайте рубрики (например, «Новости школы», «Объявления») и первые материалы</td></tr>
+<tr><td>Курсы</td><td>Создайте уровни (Pre-A1, A1, A2, B1, B2, C1, C2), курсы, модули и уроки</td></tr>
+<tr><td>Магазин</td><td>Создайте товары, настройте способы оплаты</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>Шаг 9. Финальные проверки</h2>
+
+<p>Откройте в браузере каждый адрес и убедитесь, что он открывается без ошибок:</p>
+
+<table>
+<tr><th>Адрес</th><th>Что должно быть</th></tr>
+<tr><td>https://ваш-сайт.ru/</td><td>Главная страница с навигацией</td></tr>
+<tr><td>https://ваш-сайт.ru/news</td><td>Лента новостей (если раздел установлен)</td></tr>
+<tr><td>https://ваш-сайт.ru/learn</td><td>Раздел курсов (если установлен)</td></tr>
+<tr><td>https://ваш-сайт.ru/admin</td><td>Кабинет администратора</td></tr>
+<tr><td>https://ваш-сайт.ru/sitemap.xml</td><td>Карта сайта в формате XML</td></tr>
+<tr><td>https://ваш-сайт.ru/robots.txt</td><td>Файл для поисковиков (должен запрещать индексацию /admin, /login и служебных путей)</td></tr>
+<tr><td>https://ваш-сайт.ru/setup.php</code></td><td>Должен отвечать 404 (установщик заблокирован после установки)</td></tr>
+</table>
+
+<div class="placeholder">
+<img src="placeholder-checklist.png" alt="Проверка сайта" style="max-width: 100%; border: 1px solid #ddd;">
+<p><strong>Скриншот 10:</strong> Главная страница сайта и страница входа в админку открываются без ошибок.</p>
+</div>
+
+<div class="page-break"></div>
+
+<h2>Шаг 10. Настройка электронной почты (опционально)</h2>
+
+<p>Если хотите получать уведомления и отправлять письма пользователям (восстановление пароля, уведомления о заказе):</p>
+<ol>
+<li>В панели управления хостинга создайте почтовый ящик (например, noreply@ваш-сайт.ru).</li>
+<li>В файле config.php добавьте или отредактируйте:</li>
+</ol>
+
+<pre><code>'SMTP_HOST' => 'ssl://smtp.your-hosting.ru',
+'SMTP_PORT' => '465',
+'MAIL_FROM' => 'noreply@ваш-сайт.ru',
+'MAIL_FROM_NAME' => 'Моя школа',</code></pre>
+
+<ol start="3">
+<li>Проверьте отправку тестового письма через кабинет администратора.</li>
+</ol>
+
+<div class="page-break"></div>
+
+<h2>Шаг 11. Регулярное обслуживание</h2>
+
+<table>
+<tr><th>Частота</th><th>Что делать</th></tr>
+<tr><td>Каждый день</td><td>Проверять журнал ошибок (core/storage/errors.log или логи хостинга)</td></tr>
+<tr><td>Каждую неделю</td><td>Делать дамп базы данных MySQL (mysqldump) через панель управления</td></tr>
+<tr><td>При обновлении CMS</td><td>Загрузить новые файлы, запустить composer install --no-dev, перепройти установщик для разделов, снова проверить ворота локально</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>Решение частых проблем</h2>
+
+<table>
+<tr><th>Проблема</th><th>Что делать</th></tr>
+<tr><td>Установщик пишет: «Не хватает расширения pdo_mysql»</td><td>Обратитесь в поддержку хостинга с просьбой включить расширение pdo_mysql для PHP</td></tr>
+<tr><td>После установки сайт открывается, но стили не подгружаются</td><td>Проверьте, что файл public/assets/app.css загружен на хостинг и права на него 644</td></tr>
+<tr><td>Я забыл пароль администратора</td><td>Обратитесь в поддержку хостинга, чтобы сбросить пароль в таблице tbl_user базы данных, или используйте функцию восстановления пароля на странице входа</td></tr>
+<tr><td>Как сделать бэкап сайта</td><td>Сделайте дамп базы данных через панель управления (phpMyAdmin → Экспорт) и скачайте файлы папки public/ и файл config.php себе на компьютер</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h2>Итоговый чеклист перед запуском</h2>
+<ul class="checklist">
+<li>Все файлы загружены на хостинг</li>
+<li>Права на public/uploads/ — 777 или 755</li>
+<li>Права на config.php — 600</li>
+<li>База данных создана и пользователь привязан</li>
+<li>Файл config.php заполнен и загружен</li>
+<li>Установщик пройден (/setup.php), создан аккаунт администратора</li>
+<li>Файл public/install.lock существует (установщик заблокирован)</li>
+<li>Разделы установлены через /admin/apps</li>
+<li>Сайт открывается по главному адресу</li>
+<li>Админка открывается по адресу /admin</li>
+</ul>
+
+<hr>
+<p><small>Документ подготовлен для установки CMS «Школа английского» на виртуальный хостинг. Все права защищены.</small></p>
+
+</body>
+</html>

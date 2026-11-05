@@ -39,7 +39,7 @@ final class CsrfCoverageTest extends TestCase
     // обращается к базе — поиск по телу обработчика идёт по всему замыкающему множеству.
     private const DB_PRIMITIVES = ['db', 'all', 'one', 'value', 'run', 'insert', 'tx'];
 
-    public function testКаждыйPostОбработчикПроверяетТокенДоПервогоОбращенияКБазе(): void
+    public function testКаждыйПостОбработчикПроверяетТокенДоПервогоОбращенияКБазе(): void
     {
         // Пункт М284-Г2-5: слепая зона распознавания называется первым делом и отдельно от порядка
         // проверок, чтобы падение различало «нарушений нет» и «нарушение стоит в ветке, которую
@@ -182,7 +182,7 @@ final class CsrfCoverageTest extends TestCase
         );
     }
 
-    public function testКаждаяPostФормаНесётПолеТокенаВнутриСебя(): void
+    public function testКаждаяПостФормаНесётПолеТокенаВнутриСебя(): void
     {
         $violations = [];
         $forms = 0;

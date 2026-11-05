@@ -16,7 +16,7 @@ final class CommercePricebookTest extends CommerceDbTestCase
     // Экспорт
     // -----------------------------------------------------------------------
 
-    public function testЭкспортЕдетBOMЗаголовкомИКавычками(): void
+    public function testЭкспортЕдетBomЗаголовкомИКавычками(): void
     {
         $product = self::makeProduct(['slug' => 'kolonka', 'sku' => 'SPK-1', 'title' => 'Колонка "Круглая"']);
         commerceCreateVariant($product, [
