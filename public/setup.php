@@ -140,6 +140,18 @@ function setupApplyBaseline(): void
         ]);
     }
 
+    // Базовая схема — только первый файл; остальные релизы ядра (страницы, меню) нужны уже
+    // на первом запросе после установки: шапка читает tbl_menu_item, главная — tbl_page_section.
+    // planApp('core') видит записанный выше 0001 и возвращает ровно недостающие файлы, поэтому
+    // повторный прогон после сбоя ничего не применяет дважды.
+    $plan = planApp('core');
+    if (!$plan->isEmpty()) {
+        $migrated = applyApp($plan);
+        if ($migrated['ok'] === false) {
+            throw new RuntimeException('Не удалось применить миграции ядра: ' . $migrated['error']);
+        }
+    }
+
     $installed = one('SELECT id FROM ' . t('app_installation') . ' WHERE id = ?', ['core']);
     if ($installed === null) {
         insert('app_installation', [

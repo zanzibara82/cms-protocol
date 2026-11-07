@@ -2,10 +2,6 @@
 
 declare(strict_types=1);
 
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
-error_reporting(E_ALL);
-
 // Кабинет ученика: регистрация, онбординг, тест на уровень, dashboard и прогресс.
 // Каждый POST начинается с csrfCheck(), а значения уходят в базу параметрами.
 

@@ -187,8 +187,8 @@ final class Kernel
 
     /**
      * Эталон корректного POST шага 1 — перенесён дословно из SetupDbStepTest::validPost(). Учётные
-     * данные корня с пустым паролем — свойство контейнера (MYSQL_ALLOW_EMPTY_PASSWORD,
-     * docker-compose.dev.yml:44): корректный POST использует пустой db_pass, непустой пароль база
+     * данные корня с паролем root — свойство контейнера (MYSQL_ROOT_PASSWORD,
+     * docker-compose.dev.yml:48): корректный POST использует тот же пароль, иначе база его
      * не примет. Значения, чуждые эталону (несуществующий хост и порт 1, плохой table_prefix, секрет
      * в db_pass), передаются через $overrides на месте вызова — именно так отличие видно читателю.
      *
@@ -202,7 +202,7 @@ final class Kernel
             'db_port' => '3306',
             'db_name' => 'cms_test',
             'db_user' => 'root',
-            'db_pass' => '',
+            'db_pass' => 'root',
             'table_prefix' => 'tbl_setup_test_',
             'site_url' => 'http://localhost:8080/',
             'site_name' => 'Школа с шага первого',

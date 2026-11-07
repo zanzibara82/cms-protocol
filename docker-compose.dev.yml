@@ -1,6 +1,6 @@
 services:
   # Все порты опубликованы только на loopback: без префикса Docker слушает 0.0.0.0, и
-  # MySQL с пустым root-паролем, почтовый UI без аутентификации и dev-сайт становятся
+  # MySQL с известным dev-паролем, почтовый UI без аутентификации и dev-сайт становятся
   # доступны любому хосту локальной сети — стереть cms_test посреди прогона одна команда.
   php:
     build:
@@ -17,7 +17,7 @@ services:
       CMS_DB_PORT: '3306'
       CMS_DB_NAME: cms_dev
       CMS_DB_USER: root
-      CMS_DB_PASS: ''
+      CMS_DB_PASS: root
       CMS_SITE_URL: http://localhost:8080
       CMS_TABLE_PREFIX: tbl_
       CMS_SMTP_HOST: mailpit
@@ -45,13 +45,11 @@ services:
     image: mysql:8.0
     container_name: cms-db-1
     environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-    # Сопоставление сервера задаётся явно: базы без `COLLATE` (и дамп с хостинга) иначе получают
-    # utf8mb4_0900_ai_ci от 8.0, которого MySQL 5.7 на боевом хостинге не знает.
-    # cms_dev и cms_test с нужным COLLATE создаёт docker/mysql-init.sql.
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: cms_dev
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
     ports:
-      - '127.0.0.1:3307:3306'
+      - '127.0.0.1:3306:3306'
     volumes:
       - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - cms-db-data:/var/lib/mysql

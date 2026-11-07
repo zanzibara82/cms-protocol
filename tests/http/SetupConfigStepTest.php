@@ -136,6 +136,9 @@ final class SetupConfigStepTest extends TestCase
         $admin = Kernel::get('/setup.php?step=admin');
         self::assertStringContainsString('Установка сайта', $admin['body'], 'Шаг 2 не открылся под отметкой step=admin');
         self::assertStringContainsString('name="admin_email"', $admin['body'], 'Шаг 2 не печатает поле администратора');
+        // Форма шага 2 обязана возвращаться на тот же шаг: POST на голый /setup.php установщик
+        // считает шагом 1 и после проверки полей базы снова показывает первый экран.
+        self::assertStringContainsString('action="/setup.php?step=admin"', $admin['body'], 'Форма шага 2 отправляется не на шаг 2');
 
         $db = Kernel::get('/setup.php?step=db');
         self::assertStringNotContainsString('name="admin_email"', $db['body'], 'Шаг 1 не должен печатать поле администратора');

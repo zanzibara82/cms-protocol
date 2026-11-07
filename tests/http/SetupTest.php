@@ -267,13 +267,30 @@ final class SetupTest extends TestCase
 
         self::assertFileExists(self::lockPath());
         self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('user') . ' WHERE role = ?', ['admin']));
+        $coreFiles = array_map(
+            static fn (string $path): string => basename($path),
+            glob(dirname(__DIR__, 2) . '/sql/*.sql') ?: []
+        );
+        sort($coreFiles);
         self::assertSame(
-            ['0001_core_baseline.sql'],
+            $coreFiles,
             array_map(
                 static fn (array $row): string => (string) $row['name'],
                 all('SELECT name FROM ' . t('app_migration') . ' WHERE app = ?', ['core'])
-            )
+            ),
+            'Установщик применил не все миграции ядра'
         );
+        self::assertSame([], coreSqlPending(), 'После установки остались неприменённые миграции ядра');
+        foreach ([t('page'), t('page_section'), t('page_old_slug'), t('menu_item')] as $table) {
+            self::assertSame(
+                1,
+                (int) value(
+                    'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
+                    [$table]
+                ),
+                'Установщик не создал таблицу ' . $table
+            );
+        }
         self::assertSame(CORE_VERSION, (string) value('SELECT version FROM ' . t('app_installation') . ' WHERE id = ?', ['core']));
         self::assertSame('Школа английского', getOption('site_name'));
         self::assertSame('admin@school.dev', getOption('admin_email'));

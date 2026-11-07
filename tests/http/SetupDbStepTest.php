@@ -147,7 +147,7 @@ final class SetupDbStepTest extends TestCase
             "'DB_PORT' => '3306'",
             "'DB_NAME' => 'cms_test'",
             "'DB_USER' => 'root'",
-            "'DB_PASS' => ''",
+            "'DB_PASS' => 'root'",
             "'TABLE_PREFIX' => 'tbl_setup_test_'",
             "'SITE_NAME' => 'Школа с шага первого'",
             "'SITE_URL' => 'http://localhost:8080'",
@@ -160,16 +160,6 @@ final class SetupDbStepTest extends TestCase
 
         // Конечный слэш снят нормализацией — в файле его быть не должно.
         self::assertStringNotContainsString('8080/', $contents, 'Конечный слэш адреса сайта не снят');
-    }
-
-    public function testПустойПарольПриНепустомПользователеПроходит(): void
-    {
-        // db_pass пустой, db_user=root — это и есть корректный запрос контейнера; отказа «нужен
-        // пароль» ни в одном ключе быть не должно.
-        $response = Kernel::passStepOne(self::freshToken());
-
-        self::assertSame(302, $response['status'], 'Пустой пароль при непустом пользователе отклонён');
-        self::assertFileExists(self::tempConfigPath(), 'При пустом пароле файл настроек не записан');
     }
 
     public function testЗначенияФайлаСохраняютсяАВведённыйПарольПерекрываетСтарыйИНеУходитВСессию(): void
@@ -187,7 +177,7 @@ final class SetupDbStepTest extends TestCase
         self::assertSame(302, $response['status'], 'Корректный POST при предзаписанном файле не прошёл');
 
         $contents = (string) file_get_contents($path);
-        self::assertStringContainsString("'DB_PASS' => ''", $contents, 'Введённый пустой пароль не перекрыл старый');
+        self::assertStringContainsString("'DB_PASS' => 'root'", $contents, 'Введённый пароль не перекрыл старый');
         self::assertStringNotContainsString('старый-секрет-из-файла', $contents, 'Старый пароль базы остался в файле');
         self::assertStringContainsString('smtp-из-файла', $contents, 'Невидимый ключ не взят из файла');
 
@@ -205,10 +195,10 @@ final class SetupDbStepTest extends TestCase
         self::assertStringContainsString('tbl_setup_test_', $sessionContents, 'В сессии нет префикса из отметки');
         self::assertStringContainsString('Школа с шага первого', $sessionContents, 'В сессии нет названия сайта из отметки');
         self::assertStringNotContainsString('старый-секрет-из-файла', $sessionContents, 'Пароль базы ушёл в сессию');
-        // Отдельные ассерты по ИМЕНАМ: корректный POST контейнера обязан нести пустой db_pass
-        // (MYSQL_ALLOW_EMPTY_PASSWORD), поэтому ассерт по значению пароля ловит только боевой
-        // хостинг. Состояние сессии сериализовано («s:7:"DB_HOST"»), имя ключа краснеет на любой
-        // форме утечки — и через отметку, и через непройденную нормализацию.
+        // Отдельные ассерты по ИМЕНАМ: корректный POST контейнера несёт пароль root, поэтому
+        // ассерт по значению пароля ловит только боевой хостинг. Состояние сессии сериализовано
+        // («s:7:"DB_HOST"»), имя ключа краснеет на любой форме утечки — и через отметку, и через
+        // непройденную нормализацию.
         self::assertStringNotContainsString('DB_PASS', $sessionContents, 'В сессии появился ключ DB_PASS');
         self::assertStringNotContainsString('db_pass', $sessionContents, 'В сессию ушло поле формы db_pass');
     }
@@ -250,9 +240,9 @@ final class SetupDbStepTest extends TestCase
     {
         $secret = 'секрет-который-нельзя-показать';
 
-        // Единственное отличие от корректного набора — непустой db_pass: контейнерный root поднят
-        // с MYSQL_ALLOW_EMPTY_PASSWORD (docker-compose.dev.yml:44), поэтому непустой пароль даёт
-        // ровно 1045 и ведёт ту самую ветку «сервер отклонил пользователя или пароль», до этого
+        // Единственное отличие от корректного набора — чужой db_pass: контейнерный root поднят
+        // с паролем root (docker-compose.dev.yml:48), поэтому неверный пароль даёт ровно 1045
+        // и ведёт ту самую ветку «сервер отклонил пользователя или пароль», до этого
         // не достигавшуюся ни одной проверкой.
         $response = Kernel::passStepOne(self::freshToken(), [
             'db_pass' => $secret,

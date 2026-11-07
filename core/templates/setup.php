@@ -32,7 +32,7 @@ $fields = [
         </ul>
     <?php endif; ?>
 
-    <form class="mt-6 space-y-4" method="post" action="/setup.php">
+    <form class="mt-6 space-y-4" method="post" action="/setup.php?step=admin">
         <?php /* @safe html */ ?><?= csrfField() ?>
 
         <?php foreach ($fields as $name => $field): ?>
