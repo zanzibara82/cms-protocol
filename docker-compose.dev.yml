@@ -46,10 +46,15 @@ services:
     container_name: cms-db-1
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: cms_dev
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+    # Сопоставление сервера задаётся явно: базы без `COLLATE` (и дамп с хостинга) иначе получают
+    # utf8mb4_0900_ai_ci от 8.0, которого MySQL 5.7 на боевом хостинге не знает.
+    # cms_dev и cms_test с нужным COLLATE создаёт docker/mysql-init.sql.
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    # Хост-порт 3307 зафиксирован проектной спецификацией, чтобы не пересекаться с базами
+    # других локальных проектов. Внутри сети compose PHP ходит на db:3306, поэтому эта
+    # публикация нужна только инструментам хоста.
     ports:
-      - '127.0.0.1:3306:3306'
+      - '127.0.0.1:3307:3306'
     volumes:
       - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
       - cms-db-data:/var/lib/mysql
