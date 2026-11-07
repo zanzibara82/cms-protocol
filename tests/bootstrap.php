@@ -15,6 +15,18 @@ putenv('CMS_DB_HOST=' . (getenv('CMS_DB_HOST') ?: 'db'));
 putenv('CMS_EXTRA_APPS_DIR=' . dirname(__DIR__) . '/tests/fixtures/apps');
 putenv('CMS_EXTRA_THEME_DIR=' . dirname(__DIR__) . '/tests/fixtures/theme');
 
+// Прогон на установленной копии не должен открывать установщик: HTTP-наборы удаляют
+// public/install.lock, чтобы проверять экраны setup.php. Запоминаем настоящий замок до первого
+// теста и возвращаем его после прогона — иначе тесты меняли бы состояние живой копии.
+$installLockPath = dirname(__DIR__) . '/public/install.lock';
+$installLockContents = is_file($installLockPath) ? file_get_contents($installLockPath) : false;
+if ($installLockContents !== false) {
+    register_shutdown_function(static function () use ($installLockPath, $installLockContents): void {
+        file_put_contents($installLockPath, $installLockContents);
+        @chmod($installLockPath, 0644);
+    });
+}
+
 require dirname(__DIR__) . '/vendor/autoload.php';
 require dirname(__DIR__) . '/core/bootstrap.php';
 // core/db.php больше не подключается здесь: он входит в список core/bootstrap.php (задача 6),
