@@ -23,12 +23,12 @@ foreach ($reasons as $value => $label) {
 $error = (string) ($errors['reason'] ?? '');
 
 $content = '<section class="space-y-6">'
-    . '<nav aria-label="Хлебные крошки" class="flex flex-wrap items-center gap-2 text-sm text-ink/60">'
-    . '<a class="inline-flex min-h-[44px] items-center hover:underline" href="/classifieds">Доска</a>'
-    . '<span aria-hidden="true">/</span>'
-    . '<a class="inline-flex min-h-[44px] items-center hover:underline" href="' . e($back) . '">'
-    . e((string) $listing['title']) . '</a>'
-    . '</nav>'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => (string) $listing['title'], 'href' => $back],
+        ['label' => 'Жалоба на объявление', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<h1 class="text-3xl font-bold">Жалоба на объявление</h1>'
     . '<p class="text-ink/70">«' . e((string) $listing['title']) . '». Редактор проверит жалобу и примет решение.</p>'

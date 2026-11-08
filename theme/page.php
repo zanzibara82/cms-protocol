@@ -12,6 +12,12 @@ foreach ($sections as $section) {
     $content .= sectionHtml($section);
 }
 ?>
+<div class="mx-auto max-w-5xl px-4 sm:px-6">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => (string) $page['title'], 'href' => ''],
+    ]]) ?>
+</div>
 <?php if ($content !== ''): ?><?= $content /* @safe html */ ?><?php endif; ?>
 <?php if ($content === ''): ?>
 <section class="py-12">

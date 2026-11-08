@@ -12,13 +12,11 @@ declare(strict_types=1);
  */
 ?>
 <section class="space-y-8">
-    <nav aria-label="Путь до рубрики" class="flex flex-wrap gap-2 text-sm text-ink/70">
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/">Главная</a>
-        <span aria-hidden="true">→</span>
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/news">Новости</a>
-        <span aria-hidden="true">→</span>
-        <span><?= e($heading) ?></span>
-    </nav>
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Новости', 'href' => '/news'],
+        ['label' => $heading, 'href' => ''],
+    ]]) ?>
 
     <header class="space-y-2">
         <h1 class="text-3xl font-bold"><?= e($heading) ?></h1>

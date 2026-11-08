@@ -17,17 +17,22 @@ declare(strict_types=1);
  * @var int $cartCount
  */
 $paragraphs = (array) $product['body'];
+$breadcrumbs = [
+    ['label' => 'Главная', 'href' => '/'],
+    ['label' => 'Каталог', 'href' => '/shop'],
+];
+
+foreach ($categories as $category) {
+    $breadcrumbs[] = [
+        'label' => (string) $category['title'],
+        'href' => '/shop/c/' . rawurlencode((string) $category['slug']),
+    ];
+}
+
+$breadcrumbs[] = ['label' => (string) $product['title'], 'href' => ''];
 ?>
 <article class="space-y-8">
-    <nav aria-label="Путь до товара" class="flex flex-wrap gap-2 text-sm text-ink/70">
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/">Главная</a>
-        <span aria-hidden="true">→</span>
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/shop">Каталог</a>
-        <?php foreach ($categories as $category): ?>
-            <span aria-hidden="true">→</span>
-            <a class="inline-flex min-h-[44px] items-center hover:underline" href="<?= e('/shop/c/' . rawurlencode((string) $category['slug'])) ?>"><?= e((string) $category['title']) ?></a>
-        <?php endforeach; ?>
-    </nav>
+    <?= partial('partials/breadcrumbs', ['items' => $breadcrumbs]) /* @safe html */ ?>
 
     <header class="space-y-3">
         <h1 class="text-3xl font-bold break-words"><?= e((string) $product['title']) ?></h1>

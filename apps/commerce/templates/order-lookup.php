@@ -12,6 +12,12 @@ declare(strict_types=1);
 $formError = (string) ($errors['form'] ?? '');
 ?>
 <section class="space-y-6">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Каталог', 'href' => '/shop'],
+        ['label' => 'Состояние заказа', 'href' => ''],
+    ]]) ?>
+
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Состояние заказа</h1>
         <p class="text-ink/70">Номер заказа из письма и адрес e-mail, на который оно приходило. «№» и лишние пробелы в номере не мешают.</p>

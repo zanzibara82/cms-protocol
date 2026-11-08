@@ -141,19 +141,92 @@ final class LearnTest extends TestCase
         ], $counts);
     }
 
+    public function testЗакладкаСоздаётКурсыМодулиИУрокиПоВсемУровням(): void
+    {
+        $levels = all('SELECT id, code FROM ' . t('learn_level') . ' ORDER BY sort, id');
+
+        self::assertCount(7, $levels);
+
+        foreach ($levels as $level) {
+            $course = one(
+                'SELECT id, title FROM ' . t('learn_course')
+                    . ' WHERE level_id = ? AND status = ? LIMIT 1',
+                [(string) $level['id'], 'PUBLISHED']
+            );
+
+            self::assertNotNull($course, 'У уровня ' . (string) $level['code'] . ' нет опубликованного курса');
+
+            $modules = (int) value(
+                'SELECT COUNT(*) FROM ' . t('learn_module') . ' WHERE course_id = ? AND status = ?',
+                [(string) $course['id'], 'PUBLISHED']
+            );
+            $lessons = (int) value(
+                'SELECT COUNT(*) FROM ' . t('learn_lesson') . ' AS lesson'
+                    . ' JOIN ' . t('learn_module') . ' AS module ON module.id = lesson.module_id'
+                    . ' WHERE module.course_id = ? AND lesson.status = ? AND module.status = ?',
+                [(string) $course['id'], 'PUBLISHED', 'PUBLISHED']
+            );
+
+            self::assertGreaterThan(0, $modules, 'У курса ' . (string) $course['title'] . ' нет модулей');
+            self::assertGreaterThan(0, $lessons, 'У курса ' . (string) $course['title'] . ' нет уроков');
+        }
+
+        self::assertSame(7, (int) value('SELECT COUNT(*) FROM ' . t('learn_course')));
+        self::assertSame(12, (int) value('SELECT COUNT(*) FROM ' . t('learn_module')));
+        self::assertSame(98, (int) value('SELECT COUNT(*) FROM ' . t('learn_lesson')));
+        self::assertSame(1644, (int) value('SELECT COUNT(*) FROM ' . t('learn_exercise')));
+        self::assertSame(98, (int) value(
+            'SELECT COUNT(*) FROM ' . t('learn_test') . " WHERE kind = 'LESSON'"
+        ));
+        self::assertSame(12, (int) value(
+            'SELECT COUNT(*) FROM ' . t('learn_test') . " WHERE kind = 'MODULE'"
+        ));
+
+        $first = one(
+            'SELECT lesson.slug, lesson.title, lesson.status FROM ' . t('learn_lesson') . ' AS lesson'
+                . ' JOIN ' . t('learn_module') . ' AS module ON module.id = lesson.module_id'
+                . ' JOIN ' . t('learn_course') . ' AS course ON course.id = module.course_id'
+                . ' JOIN ' . t('learn_level') . ' AS level ON level.id = course.level_id'
+                . ' WHERE level.code = ? ORDER BY module.sort, lesson.sort LIMIT 1',
+            ['Pre-A1']
+        );
+
+        self::assertIsArray($first);
+        self::assertSame('pre-a1-m1-l1-hello-and-goodbye', (string) $first['slug']);
+        self::assertSame('PUBLISHED', (string) $first['status']);
+    }
+
     public function testПовторнаяЗакладкаНеДублируетШколу(): void
     {
         $manifest = (array) require dirname(__DIR__, 2) . '/apps/learn/manifest.php';
-        $levels = (int) value('SELECT COUNT(*) FROM ' . t('learn_level'));
-        $tests = (int) value('SELECT COUNT(*) FROM ' . t('learn_test'));
-        $questions = (int) value('SELECT COUNT(*) FROM ' . t('learn_test_question'));
+        $tables = [
+            'learn_level',
+            'learn_course',
+            'learn_module',
+            'learn_lesson',
+            'learn_objective',
+            'learn_vocab',
+            'learn_grammar',
+            'learn_exercise',
+            'learn_test',
+            'learn_test_question',
+        ];
+
+        $counts = [];
+        foreach ($tables as $table) {
+            $counts[$table] = (int) value('SELECT COUNT(*) FROM ' . t($table));
+        }
 
         seedApp($manifest);
         seedApp($manifest);
 
-        self::assertSame($levels, (int) value('SELECT COUNT(*) FROM ' . t('learn_level')));
-        self::assertSame($tests, (int) value('SELECT COUNT(*) FROM ' . t('learn_test')));
-        self::assertSame($questions, (int) value('SELECT COUNT(*) FROM ' . t('learn_test_question')));
+        foreach ($tables as $table) {
+            self::assertSame(
+                $counts[$table],
+                (int) value('SELECT COUNT(*) FROM ' . t($table)),
+                'Повторная закладка изменила число строк в ' . $table
+            );
+        }
     }
 
     public function testПерваяВернаяПопыткаНачисляетОпытАТожеВернаяИНевернаяНет(): void

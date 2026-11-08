@@ -16,6 +16,12 @@ $currency = (string) $totals['currency'];
 $formError = (string) ($errors['form'] ?? '');
 ?>
 <section class="space-y-8">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Каталог', 'href' => '/shop'],
+        ['label' => 'Корзина', 'href' => ''],
+    ]]) ?>
+
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Корзина</h1>
         <p class="text-ink/70"><?= e($totals['count'] > 0 ? 'Позиций: ' . $totals['count'] : 'Корзина пуста') ?></p>

@@ -603,4 +603,25 @@ final class NewsItemFormTest extends TestCase
         self::assertStringContainsString("getElementById('f-slug')", $script['body'], 'скрипт пишет адрес');
         self::assertStringContainsString("'ё': 'yo'", $script['body'], 'транслит совпадает с серверным');
     }
+
+    public function testОбложкаПоказываетсяПревьюНадПолем(): void
+    {
+        $this->login();
+        $id = (string) createItem(self::data('Материал с превью', 'material-s-preview', [
+            'cover' => '/uploads/images/staraya-oblozhka.png',
+        ]), self::EDITOR)['id'];
+
+        $page = Kernel::get(NEWS_ADMIN_ITEMS_PATH . '/' . rawurlencode($id));
+
+        self::assertSame(200, $page['status']);
+
+        $preview = strpos($page['body'], 'data-admin-image-preview');
+        $field = strpos($page['body'], 'id="f-cover"');
+
+        self::assertIsInt($preview, 'у обложки есть превью');
+        self::assertIsInt($field, 'поле пути обложки на месте');
+        self::assertLessThan($field, $preview, 'превью стоит над полем обложки');
+        self::assertStringContainsString('src="/uploads/images/staraya-oblozhka.png"', $page['body']);
+        self::assertStringContainsString('alt="Обложка материала"', $page['body']);
+    }
 }

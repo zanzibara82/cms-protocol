@@ -314,11 +314,18 @@ function pagesPageValuesFromPost(): array
  * (образец — характеристики доски), пустые строки отбрасываются в pagesFormRows; настройки
  * вклада едут в JSON как есть — их смысл знает вклад приложения, не ядро.
  *
+ * У «Карточек» полей примечания и картинки в форме нет. Если ключа нет в POST, остаётся прежнее
+ * значение: скрытое поле не должно стирать данные, которых человек не касался.
+ *
+ * @param array<string, mixed>|null $existing прежняя строка секции при сохранении
  * @return array<string, mixed>
  */
-function pagesSectionValuesFromPost(): array
+function pagesSectionValuesFromPost(?array $existing = null): array
 {
     $post = postAll();
+    $kept = static fn (string $key): string => array_key_exists($key, $post)
+        ? postString($key)
+        : (string) ($existing[$key] ?? '');
 
     return [
         'kind' => postString('kind'),
@@ -326,9 +333,9 @@ function pagesSectionValuesFromPost(): array
         'badge' => postString('badge'),
         'title' => postString('title'),
         'lead_text' => postString('lead_text'),
-        'note' => postString('note'),
-        'image' => postString('image'),
-        'image_alt' => postString('image_alt'),
+        'note' => $kept('note'),
+        'image' => $kept('image'),
+        'image_alt' => $kept('image_alt'),
         'buttons' => pagesFormRows($post['buttons'] ?? null, ['label', 'href', 'blank']),
         'items' => pagesFormRows($post['items'] ?? null, ['title', 'text', 'href', 'image', 'note']),
         'settings' => pagesSettingsOf($post['settings'] ?? null),
@@ -428,7 +435,10 @@ function coreAdminPagesAction(array $params = []): void
     $uploadedImage = '';
 
     if ($op === 'create-section' || $op === 'save-section') {
-        $sectionValues = pagesSectionValuesFromPost();
+        // У «Карточек» нет полей примечания и картинки: сохранение обязано оставить их прежними,
+        // а не записать пустоту вместо значений, до которых человек не добрался.
+        $previousSection = $op === 'save-section' ? sectionById(postString('section')) : null;
+        $sectionValues = pagesSectionValuesFromPost($previousSection);
         $file = uploadedFile('image_file');
 
         if ($file !== null) {

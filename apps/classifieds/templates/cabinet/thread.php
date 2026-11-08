@@ -29,11 +29,13 @@ foreach ($thread['messages'] as $message) {
 }
 
 $content = '<section class="space-y-6">'
-    . '<nav aria-label="Хлебные крошки" class="flex flex-wrap items-center gap-2 text-sm text-ink/60">'
-    . '<a class="inline-flex min-h-[44px] items-center hover:underline" href="/classifieds/cabinet">Кабинет</a>'
-    . '<span aria-hidden="true">/</span>'
-    . '<a class="inline-flex min-h-[44px] items-center hover:underline" href="/classifieds/cabinet/messages">Сообщения</a>'
-    . '</nav>'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => 'Кабинет', 'href' => '/classifieds/cabinet'],
+        ['label' => 'Сообщения', 'href' => '/classifieds/cabinet/messages'],
+        ['label' => (string) $listing['title'], 'href' => ''],
+    ]])
     . '<header class="space-y-1">'
     . '<h1 class="text-3xl font-bold">' . e((string) $listing['title']) . '</h1>'
     . '<p class="text-ink/70">Собеседник: ' . e($other['name']) . '</p>'

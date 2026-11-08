@@ -13,11 +13,11 @@ declare(strict_types=1);
  */
 ?>
 <section class="space-y-8">
-    <nav aria-label="Хлебные крошки" class="flex flex-wrap items-center gap-2 text-sm text-ink/60">
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/classifieds">Доска</a>
-        <span aria-hidden="true">/</span>
-        <span><?= e($seller['name']) ?></span>
-    </nav>
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => (string) $seller['name'], 'href' => ''],
+    ]]) ?>
 
     <header class="space-y-3 rounded-xl border border-ink/10 bg-white p-5">
         <h1 class="text-3xl font-bold"><?= e($seller['name']) ?></h1>

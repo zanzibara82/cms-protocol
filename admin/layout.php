@@ -59,6 +59,24 @@ function adminNotice(?string $text): string
         . e($text) . '</p>';
 }
 
+// Превью картинки в админской форме: человек видит, что стоит в поле, ещё до сохранения.
+// Пустой путь ничего не печатает — у новой записи превью появится после выбора файла.
+function adminImagePreview(string $src, string $alt = ''): string
+{
+    $src = trim($src);
+
+    if ($src === '') {
+        return '';
+    }
+
+    $alt = trim($alt);
+
+    return '<div class="mb-2 overflow-hidden rounded-lg border border-ink/10 bg-cream p-2" data-admin-image-preview>'
+        . '<img class="max-h-40 w-auto max-w-full rounded object-contain" src="' . e($src) . '"'
+        . ' alt="' . e($alt !== '' ? $alt : 'Текущая картинка') . '" loading="lazy">'
+        . '</div>';
+}
+
 // Чекбокс админки: видимая рамка 22 px — вдвое меньше прежних 44 px. Зона нажатия остаётся
 // 44 px у подписи: input скрыт классом sr-only (страж TapTargetTest пропускает скрытые поля),
 // а палец попадает в label. Галочка рисуется SVG и проявляется через peer-checked.

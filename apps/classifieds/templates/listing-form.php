@@ -49,10 +49,17 @@ foreach ($categories as $category) {
 
 $title = $mode === 'new' ? 'Новое объявление' : 'Правка объявления';
 $intro = 'Заполните поля. Черновик можно сохранить и опубликовать позже.';
+$breadcrumbs = [
+    ['label' => 'Главная', 'href' => '/'],
+    ['label' => 'Доска', 'href' => '/classifieds'],
+    ['label' => 'Кабинет', 'href' => '/classifieds/cabinet'],
+    ['label' => $title, 'href' => ''],
+];
 
 // Без выбранной категории показываем только шаг выбора: характеристики зависят от ветки.
 if ((string) $form['category'] === '') {
     $content = '<section class="mx-auto max-w-3xl space-y-6">'
+        . partial('partials/breadcrumbs', ['items' => $breadcrumbs])
         . '<header class="space-y-2">'
         . '<h1 class="text-3xl font-bold">' . e($title) . '</h1>'
         . '<p class="text-ink/70">Сначала выберите категорию — от неё зависят дополнительные поля.</p>'
@@ -146,6 +153,7 @@ if ($gallery !== []) {
 }
 
 $content = '<section class="mx-auto max-w-3xl space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => $breadcrumbs])
     . '<header class="space-y-2">'
     . '<h1 class="text-3xl font-bold">' . e($title) . '</h1>'
     . '<p class="text-ink/70">' . e($intro) . '</p>'
@@ -211,23 +219,24 @@ $content .= '<label class="block" for="body">'
     . ($form['views_public'] === 1 ? ' checked' : '') . '>'
     . '<span>Показывать счётчик просмотров</span>'
     . '</label>'
-    . '</div>'
+    . '</div>';
+
+$currentImage = '';
+if ((string) $form['image'] !== '') {
+    $currentImage = adminImagePreview((string) $form['image'], 'Текущее изображение')
+        . '<label class="mb-3 flex min-h-[44px] items-center gap-3 text-sm">'
+        . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="remove_image" value="1">'
+        . '<span>Убрать текущее изображение</span>'
+        . '</label>';
+}
+
+$content .= $currentImage
     . '<label class="block" for="image">'
     . '<span class="mb-1 block text-sm text-ink/70">Главное изображение (jpg, png или webp до 5 МБ)</span>'
     . '<input class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="image" name="image" type="file"'
     . ' accept="image/jpeg,image/png,image/webp"' . $invalid('image') . '>'
     . $error('image')
     . '</label>';
-
-if ((string) $form['image'] !== '') {
-    $content .= '<div class="space-y-2">'
-        . '<img class="h-40 rounded-lg object-cover" src="' . e($form['image']) . '" alt="Текущее изображение">'
-        . '<label class="flex min-h-[44px] items-center gap-3 text-sm">'
-        . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="remove_image" value="1">'
-        . '<span>Убрать текущее изображение</span>'
-        . '</label>'
-        . '</div>';
-}
 
 $content .= '<div class="space-y-3">'
     . '<p class="text-sm text-ink/70">Дополнительные изображения — до ' . e((string) CLASSIFIEDS_GALLERY_MAX) . ' штук</p>'

@@ -27,6 +27,10 @@ $field = static function (string $name, string $label, string $type, string $val
 };
 
 $content = '<section class="mx-auto max-w-md space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Регистрация ученика', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<h1 class="text-3xl font-bold">Регистрация ученика</h1>'
     . '<p class="text-ink/70">Аккаунт ученика нужен, чтобы открыть курсы и отслеживать прогресс. Уже есть аккаунт — '

@@ -94,6 +94,11 @@ foreach ($listings as $listing) {
 }
 
 $content = '<section class="space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => 'Кабинет', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<h1 class="text-3xl font-bold">Мои объявления</h1>'
     . '<p class="text-ink/70">Здравствуйте, ' . e($name) . '. Здесь ваши черновики и публикации.</p>'

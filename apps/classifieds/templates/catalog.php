@@ -11,6 +11,11 @@ declare(strict_types=1);
  */
 ?>
 <section class="space-y-8">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+    ]]) ?>
+
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Доска объявлений</h1>
         <p class="text-ink/70">Купить, продать, сдать и найти — без посредников.</p>

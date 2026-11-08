@@ -27,6 +27,11 @@ $field = static function (string $name, string $label, string $type, string $val
 };
 
 $content = '<section class="mx-auto max-w-md space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => 'Регистрация продавца', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<h1 class="text-3xl font-bold">Регистрация продавца</h1>'
     . '<p class="text-ink/70">Аккаунт нужен, чтобы размещать объявления и следить за ними. Уже есть аккаунт — '

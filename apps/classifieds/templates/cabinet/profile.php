@@ -13,6 +13,13 @@ declare(strict_types=1);
  */
 ?>
 <section class="mx-auto max-w-2xl space-y-6">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => 'Кабинет', 'href' => '/classifieds/cabinet'],
+        ['label' => 'Профиль продавца', 'href' => ''],
+    ]]) ?>
+
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Профиль продавца</h1>
         <p class="text-ink/70">Покупатели увидят имя, город и описание. Телефон показывается, только если вы разрешите.</p>

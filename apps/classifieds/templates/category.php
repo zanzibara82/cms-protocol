@@ -18,11 +18,11 @@ $activeFilter = $state['filters'] !== [];
 $listMode = $state['view'] === 'list';
 ?>
 <section class="space-y-6">
-    <nav aria-label="Хлебные крошки" class="flex flex-wrap items-center gap-2 text-sm text-ink/60">
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/classifieds">Доска</a>
-        <span aria-hidden="true">/</span>
-        <span class="inline-flex min-h-[44px] items-center text-ink"><?= e((string) $category['title']) ?></span>
-    </nav>
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => (string) $category['title'], 'href' => ''],
+    ]]) ?>
 
     <header class="space-y-2">
         <h1 class="text-3xl font-bold"><?= e((string) $category['title']) ?></h1>

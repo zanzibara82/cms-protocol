@@ -39,6 +39,11 @@ foreach ($module['lessons'] as $lesson) {
 $progress = 'Прогресс: ' . (string) $module['completed_count'] . ' из ' . (string) $module['lesson_count'] . ' уроков';
 
 $content = '<section class="space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Курсы', 'href' => '/learn'],
+        ['label' => 'Модуль ' . (string) $module['sort'] . ': ' . (string) $module['title'], 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<p class="text-sm text-ink/60">' . e($payload['level']['code']) . ' · ' . e($payload['course']['title']) . '</p>'
     . '<h1 class="text-3xl font-bold">Модуль ' . e((string) $module['sort']) . ': ' . e($module['title']) . '</h1>'

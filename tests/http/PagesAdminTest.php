@@ -394,7 +394,11 @@ final class PagesAdminTest extends TestCase
         $screen = Kernel::get('/admin/pages/' . (string) $page['id']);
 
         self::assertSame(200, $screen['status']);
-        self::assertStringContainsString('<details class="rounded-lg border border-ink/10 bg-white" open>', $screen['body'], 'блок — сворачиваемая карточка');
+        self::assertMatchesRegularExpression(
+            '#<details class="rounded-lg border border-ink/10 bg-white" data-section-id="[0-9a-hjkmnp-tv-z]{26}" open>#',
+            $screen['body'],
+            'блок — сворачиваемая карточка с идентификатором для сохранения состояния'
+        );
         self::assertStringContainsString('class="section-summary', $screen['body'], 'заголовок карточки — ручка сворачивания');
         self::assertStringContainsString('class="section-chevron', $screen['body'], 'у карточки есть стрелка');
         self::assertStringContainsString('enctype="multipart/form-data"', $screen['body'], 'без enctype файл не дойдёт');
@@ -403,6 +407,120 @@ final class PagesAdminTest extends TestCase
         self::assertStringContainsString('data-section-form', $screen['body'], 'форма секции участвует в общем сохранении');
         self::assertStringContainsString('data-save-button', $screen['body'], 'плавающая кнопка сохранения');
         self::assertStringContainsString('src="/assets/js/admin-sections.js"', $screen['body'], 'скрипт подключён внешним файлом');
+    }
+
+    public function testУКарточекНетОбщихПолейПримечанияИКартинки(): void
+    {
+        $page = createPage([
+            'title' => 'Карточки без общих полей',
+            'slug' => 'kartochki-bez-obshchikh-poley',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        createSection((string) $page['id'], [
+            'kind' => 'cards',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Карточки',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        createSection((string) $page['id'], [
+            'kind' => 'hero',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Первый экран',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $screen = Kernel::get('/admin/pages/' . (string) $page['id']);
+        $body = $screen['body'];
+
+        self::assertSame(200, $screen['status']);
+        self::assertSame(1, substr_count($body, 'name="note"'), 'общее примечание осталось только у блока с картинкой');
+        self::assertSame(1, substr_count($body, 'name="image"'), 'общая картинка осталась только у блока с картинкой');
+        self::assertSame(1, substr_count($body, 'name="image_alt"'), 'описание картинки осталось только у блока с картинкой');
+        self::assertSame(1, substr_count($body, 'name="image_file"'), 'выбор файла остался только у блока с картинкой');
+        self::assertStringContainsString('name="items[0][image]"', $body, 'у карточки своя картинка в строке');
+        self::assertStringContainsString('name="items[0][note]"', $body, 'у карточки своя подпись в строке');
+    }
+
+    public function testСохранениеКарточекНеСтираетСкрытыеПоля(): void
+    {
+        $page = createPage([
+            'title' => 'Карточки сохраняют скрытое',
+            'slug' => 'kartochki-sokhranyayut-skrytoe',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        $section = createSection((string) $page['id'], [
+            'kind' => 'cards',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Карточки',
+            'lead_text' => '',
+            'note' => 'Прежнее примечание',
+            'image' => '/uploads/images/prezhnyaya-kartinka.png',
+            'image_alt' => 'Прежнее описание картинки',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $token = $this->token('/admin/pages/' . (string) $page['id']);
+
+        $saved = Kernel::post('/admin/pages/' . (string) $page['id'], [
+            '_token' => $token,
+            'op' => 'save-section',
+            'section' => (string) $section['id'],
+            'kind' => 'cards',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Новые карточки',
+            'lead_text' => '',
+            'visible' => '1',
+        ]);
+
+        self::assertSame(302, $saved['status']);
+
+        $stored = sectionById((string) $section['id']) ?? [];
+
+        self::assertSame('Новые карточки', (string) ($stored['title'] ?? ''));
+        self::assertSame('Прежнее примечание', (string) ($stored['note'] ?? ''), 'скрытое примечание не стёрлось');
+        self::assertSame('/uploads/images/prezhnyaya-kartinka.png', (string) ($stored['image'] ?? ''), 'скрытая картинка не стёрлась');
+        self::assertSame('Прежнее описание картинки', (string) ($stored['image_alt'] ?? ''), 'скрытое описание не стёрлось');
+    }
+
+    public function testСвёрнутостьБлоковХранитсяВСкрипте(): void
+    {
+        $script = Kernel::get('/assets/js/admin-sections.js');
+
+        self::assertSame(200, $script['status']);
+        self::assertStringContainsString('data-section-id', $script['body'], 'скрипт находит блоки по идентификатору');
+        self::assertStringContainsString('localStorage', $script['body'], 'состояние хранится в браузере');
+        self::assertStringContainsString("addEventListener('toggle'", $script['body'], 'скрипт слушает сворачивание блока');
+        self::assertStringContainsString('cms-sections-collapsed:', $script['body'], 'ключ хранилища привязан к странице');
     }
 
     public function testКартинкуБлокаМожноЗагрузитьСКомпьютера(): void
@@ -504,5 +622,51 @@ final class PagesAdminTest extends TestCase
         $stored = sectionById((string) $section['id']) ?? [];
 
         self::assertSame('Новое название', (string) ($stored['title'] ?? ''));
+    }
+
+    public function testКартинкаБлокаПоказываетсяПревьюНадПолем(): void
+    {
+        $page = createPage([
+            'title' => 'Страница с превью',
+            'slug' => 'stranica-s-preview',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        $section = createSection((string) $page['id'], [
+            'kind' => 'hero',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Блок с картинкой',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '/assets/img/brand/og-default.png',
+            'image_alt' => 'Обложка школы',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $screen = Kernel::get('/admin/pages/' . (string) $page['id']);
+
+        self::assertSame(200, $screen['status']);
+
+        $preview = strpos($screen['body'], 'data-admin-image-preview');
+        $field = strpos($screen['body'], 'id="section-image-' . (string) $section['id'] . '"');
+
+        self::assertIsInt($preview, 'у картинки блока есть превью');
+        self::assertIsInt($field, 'поле пути картинки на месте');
+        self::assertLessThan($field, $preview, 'превью стоит над полем картинки');
+        self::assertSame(1, substr_count($screen['body'], 'data-admin-image-preview'), 'превью печатается один раз');
+        self::assertStringContainsString('class="flex flex-col gap-3 sm:grid sm:grid-cols-3"', $screen['body'], 'поля выровнены сеткой');
+        self::assertStringContainsString('order-2 sm:col-start-2 sm:row-start-1', $screen['body'], 'превью стоит в средней колонке над полем');
+        self::assertStringContainsString('sm:col-start-1 sm:row-start-2', $screen['body'], 'примечание выровнено с полями');
+        self::assertStringContainsString('order-3 text-sm sm:col-start-2 sm:row-start-2', $screen['body'], 'поле картинки под превью');
+        self::assertStringContainsString('order-4 block text-sm sm:col-start-3 sm:row-start-2', $screen['body'], 'описание картинки в третьей колонке');
+        self::assertStringContainsString('src="/assets/img/brand/og-default.png"', $screen['body']);
+        self::assertStringContainsString('alt="Обложка школы"', $screen['body']);
     }
 }

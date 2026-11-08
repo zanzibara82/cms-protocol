@@ -362,6 +362,27 @@ final class ClassifiedsHttpTest extends TestCase
         self::assertContains('ItemList', $types);
     }
 
+    public function testДоскаИОбъявлениеПечатаютКрошки(): void
+    {
+        $board = Kernel::get('/classifieds');
+
+        self::assertSame(200, $board['status']);
+        self::assertMatchesRegularExpression(
+            '/<nav aria-label="Хлебные крошки" class="[^"]*flex flex-wrap items-center gap-2[^"]*">/',
+            $board['body']
+        );
+        self::assertMatchesRegularExpression('/aria-current="page">Доска<\/span>/', $board['body']);
+
+        $listing = Kernel::get('/classifieds/kofemashina');
+
+        self::assertSame(200, $listing['status']);
+        self::assertMatchesRegularExpression(
+            '/aria-current="page">Кофемашина<\/span>/',
+            $listing['body'],
+            'название объявления закрывает путь'
+        );
+    }
+
     public function testJsonВыдачаОтдаётСписокИКарточкуОбъявления(): void
     {
         $list = Kernel::get('/classifieds/api/listings');

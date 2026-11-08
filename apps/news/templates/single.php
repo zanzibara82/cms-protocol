@@ -9,6 +9,19 @@ declare(strict_types=1);
  * @var bool $scheduled
  * @var bool $showUpdated
  */
+$breadcrumbs = [
+    ['label' => 'Главная', 'href' => '/'],
+    ['label' => 'Новости', 'href' => '/news'],
+];
+
+if ((string) $item['categoryTitle'] !== '') {
+    $breadcrumbs[] = [
+        'label' => (string) $item['categoryTitle'],
+        'href' => $item['categoryVisible'] === true ? (string) $item['categoryHref'] : '',
+    ];
+}
+
+$breadcrumbs[] = ['label' => (string) $item['title'], 'href' => ''];
 ?>
 <article class="space-y-6">
     <?php if ($preview): ?>
@@ -19,19 +32,7 @@ declare(strict_types=1);
         </p>
     <?php endif; ?>
 
-    <nav aria-label="Путь до материала" class="flex flex-wrap gap-2 text-sm text-ink/70">
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/">Главная</a>
-        <span aria-hidden="true">→</span>
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/news">Новости</a>
-        <?php if ((string) $item['categoryTitle'] !== ''): ?>
-            <span aria-hidden="true">→</span>
-            <?php if ($item['categoryVisible'] === true): ?>
-                <a class="inline-flex min-h-[44px] items-center hover:underline" href="<?= e((string) $item['categoryHref']) ?>"><?= e((string) $item['categoryTitle']) ?></a>
-            <?php else: ?>
-                <span class="inline-flex min-h-[44px] items-center"><?= e((string) $item['categoryTitle']) ?></span>
-            <?php endif; ?>
-        <?php endif; ?>
-    </nav>
+    <?= partial('partials/breadcrumbs', ['items' => $breadcrumbs]) /* @safe html */ ?>
 
     <header class="space-y-3">
         <h1 class="text-3xl font-bold"><?= e((string) $item['title']) ?></h1>

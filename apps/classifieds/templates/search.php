@@ -15,6 +15,12 @@ declare(strict_types=1);
 $listMode = $state['view'] === 'list';
 ?>
 <section class="space-y-6">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => 'Поиск', 'href' => ''],
+    ]]) ?>
+
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Поиск объявлений</h1>
         <p class="text-ink/70">

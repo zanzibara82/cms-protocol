@@ -343,4 +343,38 @@ final class NewsPublicTest extends TestCase
 
         self::assertStringNotContainsString('<section class="region', $page['body']);
     }
+
+    public function testЛентаНовостейПечатаетВыровненныеКрошки(): void
+    {
+        $page = Kernel::get('/news');
+
+        self::assertSame(200, $page['status']);
+        self::assertMatchesRegularExpression(
+            '/<nav aria-label="Хлебные крошки" class="[^"]*flex flex-wrap items-center gap-2[^"]*">/',
+            $page['body'],
+            'крошки выровнены по одной линии'
+        );
+        self::assertStringContainsString(
+            '<a class="inline-flex min-h-[44px] items-center hover:underline" href="/">Главная</a>',
+            $page['body']
+        );
+        self::assertMatchesRegularExpression(
+            '/<span class="inline-flex min-h-\[44px\] items-center text-ink" aria-current="page">Новости<\/span>/',
+            $page['body'],
+            'последний пункт помечен как текущая страница'
+        );
+    }
+
+    public function testМатериалПечатаетСебяПоследнимПунктомКрошек(): void
+    {
+        $page = Kernel::get('/news/vecher-vstrechi');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('aria-label="Хлебные крошки"', $page['body']);
+        self::assertMatchesRegularExpression(
+            '/aria-current="page">Вечер встречи<\/span>/',
+            $page['body'],
+            'заголовок материала закрывает путь'
+        );
+    }
 }

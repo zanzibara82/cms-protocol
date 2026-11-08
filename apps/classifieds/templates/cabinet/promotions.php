@@ -43,6 +43,12 @@ foreach ($promotions as $row) {
 }
 
 $content = '<section class="space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => 'Кабинет', 'href' => '/classifieds/cabinet'],
+        ['label' => 'Услуги и заказы', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<h1 class="text-3xl font-bold">Услуги и заказы</h1>'
     . '<p class="text-ink/70">Здесь видно, какие услуги вы заказали. Оплата проходит в магазине: '

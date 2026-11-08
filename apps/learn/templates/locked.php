@@ -15,6 +15,12 @@ $href = '/learn/module/' . rawurlencode($module['id']);
 $lessonTitle = (string) ($payload['lesson']['title'] ?? '');
 
 $content = '<section class="space-y-4">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Курсы', 'href' => '/learn'],
+        ['label' => 'Модуль ' . (string) $module['sort'] . ': ' . (string) $module['title'], 'href' => $href],
+        ['label' => $lessonTitle !== '' ? 'Урок: ' . $lessonTitle : 'Урок закрыт', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<p class="text-sm text-ink/60">Модуль ' . e((string) $module['sort']) . ': ' . e($module['title']) . '</p>'
     . '<h1 class="text-3xl font-bold">Урок закрыт</h1>'

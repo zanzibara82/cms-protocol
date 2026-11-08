@@ -26,15 +26,19 @@ declare(strict_types=1);
  * @var string $reportLogin
  * @var string $viewsLabel
  */
+$breadcrumbs = [
+    ['label' => 'Главная', 'href' => '/'],
+    ['label' => 'Доска', 'href' => '/classifieds'],
+];
+
+if ($categoryHref !== '') {
+    $breadcrumbs[] = ['label' => $categoryTitle, 'href' => $categoryHref];
+}
+
+$breadcrumbs[] = ['label' => (string) $listing['title'], 'href' => ''];
 ?>
 <article class="space-y-6">
-    <nav aria-label="Хлебные крошки" class="flex flex-wrap items-center gap-2 text-sm text-ink/60">
-        <a class="inline-flex min-h-[44px] items-center hover:underline" href="/classifieds">Доска</a>
-        <?php if ($categoryHref !== ''): ?>
-            <span aria-hidden="true">/</span>
-            <a class="inline-flex min-h-[44px] items-center hover:underline" href="<?= e($categoryHref) ?>"><?= e($categoryTitle) ?></a>
-        <?php endif; ?>
-    </nav>
+    <?= partial('partials/breadcrumbs', ['items' => $breadcrumbs]) /* @safe html */ ?>
 
     <?php if ($preview): ?>
         <p class="rounded-lg border border-ink/10 bg-accent/10 p-4 text-sm">

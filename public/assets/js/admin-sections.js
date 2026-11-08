@@ -9,6 +9,49 @@
 (function () {
     'use strict';
 
+    // Свёрнутые блоки переживают сохранение: страница после отправки перезагружается, и без
+    // сохранённого состояния все карточки раскрылись бы заново. Ключ привязан к адресу страницы,
+    // а состояние хранится по идентификатору секции, поэтому перестановка блоков его не сбивает.
+    var collapsedKey = 'cms-sections-collapsed:' + window.location.pathname;
+    var collapsed = {};
+
+    try {
+        var saved = JSON.parse(window.localStorage.getItem(collapsedKey) || '{}');
+        collapsed = saved && typeof saved === 'object' ? saved : {};
+    } catch (error) {
+        collapsed = {};
+    }
+
+    function saveCollapsed() {
+        try {
+            window.localStorage.setItem(collapsedKey, JSON.stringify(collapsed));
+        } catch (error) {
+            // Хранилище недоступно: блоки останутся раскрытыми после перезагрузки, но страница работает.
+        }
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('details[data-section-id]'), function (details) {
+        var id = details.getAttribute('data-section-id');
+
+        if (!id) {
+            return;
+        }
+
+        if (collapsed[id] === true) {
+            details.open = false;
+        }
+
+        details.addEventListener('toggle', function () {
+            if (details.open) {
+                delete collapsed[id];
+            } else {
+                collapsed[id] = true;
+            }
+
+            saveCollapsed();
+        });
+    });
+
     var button = document.querySelector('[data-save-button]');
 
     if (!button) {

@@ -40,12 +40,13 @@ $listingIntro = 'Товаров: ' . (int) $list['total']
     . ($keptQuery !== '' ? ' по фильтрам' : '');
 ?>
 <section class="space-y-8">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Каталог', 'href' => '/shop'],
+        ['label' => (string) $category['title'], 'href' => ''],
+    ]]) ?>
+
     <header class="space-y-2">
-        <nav aria-label="Путь до рубрики" class="text-sm text-ink/70">
-            <a class="inline-flex min-h-[44px] items-center hover:underline" href="/shop">Каталог</a>
-            <span aria-hidden="true">→</span>
-            <span class="inline-flex min-h-[44px] items-center"><?= e((string) $category['title']) ?></span>
-        </nav>
         <h1 class="text-3xl font-bold"><?= e((string) $category['title']) ?></h1>
         <p class="text-sm text-ink/60"><?= e($listingIntro) ?></p>
         <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" href="/shop/cart">

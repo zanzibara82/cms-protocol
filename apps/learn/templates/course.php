@@ -15,6 +15,10 @@ $course = $tree['course'];
 
 if ($course === null) {
     $content = '<section class="space-y-6">'
+        . partial('partials/breadcrumbs', ['items' => [
+            ['label' => 'Главная', 'href' => '/'],
+            ['label' => 'Курсы', 'href' => '/learn'],
+        ]])
         . '<header class="space-y-2">'
         . '<h1 class="text-3xl font-bold">Курсы</h1>'
         . '</header>'
@@ -42,6 +46,10 @@ if ($course === null) {
     }
 
     $content = '<section class="space-y-6">'
+        . partial('partials/breadcrumbs', ['items' => [
+            ['label' => 'Главная', 'href' => '/'],
+            ['label' => 'Курсы', 'href' => '/learn'],
+        ]])
         . '<header class="space-y-2">'
         . '<h1 class="text-3xl font-bold">Курсы</h1>'
         . '<p class="text-ink/70">'

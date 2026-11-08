@@ -11,6 +11,13 @@ declare(strict_types=1);
  */
 ?>
 <section class="space-y-6">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Доска', 'href' => '/classifieds'],
+        ['label' => 'Кабинет', 'href' => '/classifieds/cabinet'],
+        ['label' => 'Избранное', 'href' => ''],
+    ]]) ?>
+
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Избранное</h1>
         <p class="text-ink/70">Сохранённые объявления. Убрать можно в любой момент.</p>

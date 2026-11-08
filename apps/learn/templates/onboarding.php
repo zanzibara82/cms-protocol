@@ -23,7 +23,7 @@ $radios = static function (string $name, array $options, string $value) use ($fi
     $html = '';
     foreach ($options as $option) {
         $checked = (string) $option['value'] === $value ? ' checked' : '';
-        $html .= '<label class="flex items-center gap-2" for="' . e($name) . '-' . e((string) $option['value']) . '">'
+        $html .= '<label class="flex min-h-[44px] cursor-pointer items-center gap-2" for="' . e($name) . '-' . e((string) $option['value']) . '">'
             . '<input class="size-11 min-h-[44px]" type="radio" name="' . e($name) . '"'
             . ' id="' . e($name) . '-' . e((string) $option['value']) . '" value="' . e((string) $option['value']) . '"' . $checked . $invalid . $describe . '>'
             . '<span class="text-sm text-ink">' . e((string) $option['label']) . '</span>'
@@ -36,6 +36,10 @@ $radios = static function (string $name, array $options, string $value) use ($fi
 };
 
 $content = '<section class="mx-auto max-w-md space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Онбординг', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<h1 class="text-3xl font-bold">Онбординг</h1>'
     . ($notice !== '' ? '<p class="rounded-lg border border-ink/10 bg-accent/10 p-4 text-sm">' . e($notice) . '</p>' : '')

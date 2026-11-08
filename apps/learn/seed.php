@@ -6,8 +6,8 @@ require_once __DIR__ . '/lib/boot.php';
 
 // Закладка идемпотентна: ядро запускает seed.php через `require` при каждой установке,
 // поэтому файл не объявляет ни констант, ни функций — только повторяет запись по коду.
-// Уровни и тест на уровень — единственный контент, который школа получает сразу:
-// курсы, модули и уроки создаёт контент-админка.
+// Школа сразу получает уровни, тест на уровень и полную программу: курсы, модули,
+// уроки с лексикой, грамматикой, упражнениями и тестами.
 
 $levels = [
     ['code' => 'Pre-A1', 'title' => 'Стартовый'],
@@ -36,6 +36,20 @@ foreach ($levels as $sort => $level) {
         'sort' => $sort,
     ]);
 }
+
+// Программа курсов лежит отдельным JSON: так seed.php остаётся читаемым, а данные
+// можно обновлять, не трогая логику установки. Замыкание само проверяет, что уже
+// создано, поэтому повторная установка не плодит дубли и не затирает правки админки.
+/** @var callable(list<array<string, mixed>>): void $seedCourses */
+$seedCourses = require __DIR__ . '/lib/seed-courses.php';
+/** @var list<array<string, mixed>> $courseData */
+$courseData = json_decode(
+    (string) file_get_contents(__DIR__ . '/data/courses.json'),
+    true,
+    512,
+    JSON_THROW_ON_ERROR
+);
+$seedCourses($courseData);
 
 $placement = one(
     'SELECT id FROM ' . t('learn_test') . " WHERE kind = 'PLACEMENT' LIMIT 1"

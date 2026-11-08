@@ -124,6 +124,7 @@ $fields .= $two(
     ], $values, $errors),
     '<div class="space-y-1"><label class="block text-sm" for="f-cover">'
         . '<span class="font-medium">Обложка</span></label>'
+        . adminImagePreview($values['cover'], 'Обложка материала')
         . '<div class="mt-1 flex items-start gap-2">'
         . '<input class="min-h-[44px] min-w-0 flex-1 rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm font-mono"'
         . ' id="f-cover" name="cover" type="text" maxlength="' . e((string) NEWS_FORM_MAX['cover']) . '"'

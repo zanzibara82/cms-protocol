@@ -48,6 +48,30 @@ final class CommerceShopTest extends TestCase
         self::assertStringNotContainsString('Черновой товар', $page['body']);
     }
 
+    public function testКаталогИКарточкаТовараПечатаютКрошки(): void
+    {
+        $shop = Kernel::get('/shop');
+
+        self::assertSame(200, $shop['status']);
+        self::assertMatchesRegularExpression(
+            '/<nav aria-label="Хлебные крошки" class="[^"]*flex flex-wrap items-center gap-2[^"]*">/',
+            $shop['body']
+        );
+        self::assertMatchesRegularExpression(
+            '/aria-current="page">Каталог<\/span>/',
+            $shop['body']
+        );
+
+        $product = Kernel::get('/shop/kofemashina');
+
+        self::assertSame(200, $product['status']);
+        self::assertMatchesRegularExpression(
+            '/aria-current="page">Кофемашина<\/span>/',
+            $product['body'],
+            'название товара закрывает путь'
+        );
+    }
+
     public function testЧерновикНеОткрываетсяПоАдресу(): void
     {
         $page = Kernel::get('/shop/draft-tovar');

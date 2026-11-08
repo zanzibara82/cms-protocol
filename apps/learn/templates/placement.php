@@ -14,7 +14,7 @@ $questionField = static function (string $name, int $index, array $options): str
     $html = '';
     foreach ($options as $optionIndex => $optionText) {
         $inputId = $name . '-' . $optionIndex;
-        $html .= '<label class="flex items-center gap-2" for="' . e($inputId) . '">'
+        $html .= '<label class="flex min-h-[44px] cursor-pointer items-center gap-2" for="' . e($inputId) . '">'
             . '<input class="size-11 min-h-[44px]" type="radio" name="' . e($name) . '"'
             . ' id="' . e($inputId) . '" value="' . (string) $optionIndex . '" required>'
             . '<span class="text-sm text-ink">' . e((string) $optionText) . '</span>'
@@ -28,6 +28,10 @@ $hasResult = $result !== null;
 
 if ($hasResult) {
     $content = '<section class="mx-auto max-w-md space-y-6">'
+        . partial('partials/breadcrumbs', ['items' => [
+            ['label' => 'Главная', 'href' => '/'],
+            ['label' => 'Тест на уровень', 'href' => ''],
+        ]])
         . '<header class="space-y-2">'
         . '<h1 class="text-3xl font-bold">Тест на уровень</h1>'
         . '<p class="text-ink/70">' . e($notice) . '</p>'
@@ -80,6 +84,10 @@ if ($hasResult) {
         . '</section>';
 } else {
     $content = '<section class="mx-auto max-w-md space-y-6">'
+        . partial('partials/breadcrumbs', ['items' => [
+            ['label' => 'Главная', 'href' => '/'],
+            ['label' => 'Тест на уровень', 'href' => ''],
+        ]])
         . '<header class="space-y-2">'
         . '<h1 class="text-3xl font-bold">Тест на уровень</h1>'
         . ($notice !== '' ? '<p class="rounded-lg border border-ink/10 bg-accent/10 p-4 text-sm">' . e($notice) . '</p>' : '')

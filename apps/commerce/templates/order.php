@@ -14,6 +14,12 @@ $promoDiscountCents = commerceCents((float) ($order['promo_discount'] ?? 0));
 $discounted = $couponDiscountCents > 0 || $promoDiscountCents > 0;
 ?>
 <section class="space-y-6">
+    <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Каталог', 'href' => '/shop'],
+        ['label' => 'Заказ №' . (string) $order['number'], 'href' => ''],
+    ]]) ?>
+
     <header class="space-y-2">
         <h1 class="text-3xl font-bold">Заказ №<?= e((string) $order['number']) ?> принят</h1>
         <p class="text-ink/70">Подтверждение ушло на <?= e((string) $order['customer_email']) ?> — мы напишем, когда отправим.</p>

@@ -39,6 +39,26 @@ final class LearnStudentTest extends TestCase
             self::fail('Раздел «Курсы» не установился: ' . (string) ($result['error'] ?? ''));
         }
 
+        // Закладка теперь приносит полную программу. Ученические тесты проверяют свою
+        // фикстуру, поэтому временно убираем установленные курсы, но оставляем уровни и
+        // placement-тест: иначе текущим курсом станет «English Basics» из закладки.
+        run(
+            'DELETE FROM ' . t('learn_test_question')
+                . ' WHERE test_id IN (SELECT id FROM ' . t('learn_test') . " WHERE kind <> 'PLACEMENT')"
+        );
+        run('DELETE FROM ' . t('learn_test') . " WHERE kind <> 'PLACEMENT'");
+        foreach ([
+            'learn_exercise',
+            'learn_vocab',
+            'learn_grammar',
+            'learn_objective',
+            'learn_lesson',
+            'learn_module',
+            'learn_course',
+        ] as $table) {
+            run('DELETE FROM ' . t($table));
+        }
+
         self::$studentId = TestDb::seedUser(self::STUDENT_EMAIL, self::STUDENT_PASSWORD, 'student');
 
         $level = one('SELECT id FROM ' . t('learn_level') . ' WHERE code = ? LIMIT 1', ['A1']);
@@ -145,6 +165,29 @@ final class LearnStudentTest extends TestCase
         self::assertStringContainsString('0%', $page['body']);
         self::assertStringContainsString('/learn/module/' . self::$moduleAId, $page['body']);
         self::assertStringContainsString('/learn/module/' . self::$moduleBId, $page['body']);
+    }
+
+    public function testСтраницыОбученияПечатаютВыровненныеКрошки(): void
+    {
+        $this->login();
+
+        $course = Kernel::get('/learn');
+
+        self::assertSame(200, $course['status']);
+        self::assertMatchesRegularExpression(
+            '/<nav aria-label="Хлебные крошки" class="[^"]*flex flex-wrap items-center gap-2[^"]*">/',
+            $course['body']
+        );
+        self::assertMatchesRegularExpression('/aria-current="page">Курсы<\/span>/', $course['body']);
+
+        $module = Kernel::get('/learn/module/' . self::$moduleAId);
+
+        self::assertSame(200, $module['status']);
+        self::assertMatchesRegularExpression(
+            '/aria-current="page">Модуль 1: Знакомство<\/span>/',
+            $module['body'],
+            'название модуля закрывает путь'
+        );
     }
 
     public function testМодульПоказываетГалочкиИЗамкиУроков(): void

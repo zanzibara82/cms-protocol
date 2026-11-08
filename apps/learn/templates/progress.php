@@ -22,6 +22,11 @@ $stats = $summary['stats'];
 $streak = $summary['streak'];
 
 $content = '<section class="space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Кабинет', 'href' => '/dashboard'],
+        ['label' => 'Прогресс', 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<p class="text-sm text-ink/60">' . e($summary['greeting']) . '</p>'
     . '<h1 class="text-3xl font-bold">Прогресс</h1>'

@@ -326,6 +326,12 @@ if ($step === 'intro') {
 }
 
 $content = '<section class="space-y-6">'
+    . partial('partials/breadcrumbs', ['items' => [
+        ['label' => 'Главная', 'href' => '/'],
+        ['label' => 'Курсы', 'href' => '/learn'],
+        ['label' => 'Модуль ' . (string) $module['sort'] . ': ' . (string) $module['title'], 'href' => $moduleUrl],
+        ['label' => 'Урок ' . (string) $lesson['sort'] . '. ' . (string) $lesson['title'], 'href' => ''],
+    ]])
     . '<header class="space-y-2">'
     . '<p class="text-sm text-ink/60">' . e($meta['level_code']) . ' · Модуль ' . e((string) $module['sort']) . ': ' . e($module['title']) . '</p>'
     . '<h1 class="text-3xl font-bold">Урок ' . e((string) $lesson['sort']) . '. ' . e($lesson['title']) . '</h1>'
