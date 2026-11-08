@@ -58,9 +58,9 @@ final class PagesRulesTest extends TestCase
     public function testВидыПервогоЗаходаСперечнемИмен(): void
     {
         self::assertSame(
-            ['hero', 'band', 'cards', 'steps', 'prose', 'cta', 'faq'],
+            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'cta', 'faq'],
             PAGES_KINDS,
-            'Решение 3 штурма: каркас + семь видов, остальные добираются пачками'
+            'Решение 3 штурма: каркас и виды первого захода, остальные добираются пачками (split и quote — вторая пачка)'
         );
 
         foreach (PAGES_KINDS as $kind) {

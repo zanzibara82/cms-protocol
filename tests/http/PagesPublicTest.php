@@ -172,7 +172,7 @@ final class PagesPublicTest extends TestCase
             'visible' => true,
         ], nowUtc());
 
-        // Страница с шестью видами секций: задача 5 проверяет каждый шаблон настоящим запросом.
+        // Страница с видами секций: каждый шаблон проверяется настоящим запросом.
         $values = static fn (array $overrides): array => array_merge([
             'kind' => 'prose',
             'anchor' => '',
@@ -235,6 +235,29 @@ final class PagesPublicTest extends TestCase
             'items' => [
                 ['title' => 'Заявка', 'text' => 'Оставьте заявку на сайте.'],
                 ['title' => 'Пробный урок', 'text' => 'Приходите на пробное занятие.'],
+            ],
+        ]), nowUtc());
+
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'split',
+            'title' => 'Как проходит урок',
+            'lead_text' => 'Сначала разминка, потом практика.',
+            'note' => 'Длительность — час',
+            'image' => '/uploads/images/lesson.jpg',
+            'image_alt' => 'Урок в классе',
+            'items' => [
+                ['title' => 'Разминка', 'text' => 'Пять минут на повторение.'],
+                ['title' => '', 'text' => ''],
+            ],
+            'buttons' => [['label' => 'Смотреть программу', 'href' => '/o-nas']],
+        ]), nowUtc());
+
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'quote',
+            'title' => 'Говорят ученики',
+            'items' => [
+                ['title' => 'Мария', 'text' => 'Через месяц заговорила.', 'note' => 'A2 → B1'],
+                ['title' => 'Пустая цитата', 'text' => '', 'note' => 'Не печатается'],
             ],
         ]), nowUtc());
 
@@ -382,6 +405,33 @@ final class PagesPublicTest extends TestCase
         self::assertMatchesRegularExpression('~<ol\b[^>]*>.*?Заявка.*?Пробный урок.*?</ol>~s', $page['body'], 'шаги — нумерованный список по порядку');
         self::assertStringContainsString('Оставьте заявку на сайте.', $page['body']);
         self::assertStringContainsString('Приходите на пробное занятие.', $page['body']);
+    }
+
+    public function testSplitДелитПолосуНаТекстИКартинку(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Как проходит урок', $page['body']);
+        self::assertStringContainsString('Сначала разминка, потом практика.', $page['body'], 'лид split напечатан');
+        self::assertStringContainsString('Разминка', $page['body'], 'пункт списка напечатан');
+        self::assertStringContainsString('Пять минут на повторение.', $page['body']);
+        self::assertStringContainsString('Длительность — час', $page['body'], 'примечание split напечатано');
+        self::assertStringContainsString('src="/uploads/images/lesson.jpg"', $page['body'], 'картинка split печатается');
+        self::assertStringContainsString('alt="Урок в классе"', $page['body'], 'у картинки есть описание');
+        self::assertMatchesRegularExpression('~href="/o-nas"[^>]*>Смотреть программу</a>~', $page['body'], 'кнопка split ведёт на программу');
+        self::assertMatchesRegularExpression('~class="[^"]*\bsm:grid-cols-2\b[^"]*"~', $page['body'], 'split — две колонки на широком экране');
+    }
+
+    public function testQuoteПечатаетЦитатуСАвторомИМолчитНаПустой(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertStringContainsString('Говорят ученики', $page['body'], 'заголовок блока цитат напечатан');
+        self::assertMatchesRegularExpression('~<blockquote\b[^>]*>Через месяц заговорила\.</blockquote>~', $page['body'], 'цитата печатается выдержкой');
+        self::assertStringContainsString('Мария', $page['body'], 'автор цитаты назван');
+        self::assertStringContainsString('A2 → B1', $page['body'], 'подпись к автору напечатана');
+        self::assertStringNotContainsString('Пустая цитата', $page['body'], 'цитата без текста не печатается даже с автором');
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void

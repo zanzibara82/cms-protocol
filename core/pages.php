@@ -33,10 +33,11 @@ const PAGES_HOME_ID = '';
  */
 const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress'];
 
-// Виды секций первого захода (решение 3 штурма): каркас + семь видов, остальные добором пачками.
-// Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
+// Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка.
+// Остальные добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру
+// pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -46,6 +47,8 @@ const PAGES_KIND_NAMES = [
     'cards' => 'Карточки',
     'steps' => 'Шаги',
     'prose' => 'Текстовый блок',
+    'split' => 'Текст и картинка',
+    'quote' => 'Цитата',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];

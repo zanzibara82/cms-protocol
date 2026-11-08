@@ -153,6 +153,13 @@ CREATE TABLE page_old_slug (
 | `cta`   | title, lead, buttons                                                         |
 | `faq`   | title, items[{title, text}] + JSON-LD FAQPage (как в портале)                 |
 
+Второй пачкой (задача 9 плана) добраны два вида, которым хватает общих колонок секции:
+
+| вид     | поля                                                                          |
+|---------|-------------------------------------------------------------------------------|
+| `split` | title, lead, note, image, image_alt, buttons, items[{title, text}]             |
+| `quote` | title (заголовок блока), items[{text, title — автор, note — подпись, image}]   |
+
 `layout` в первый заход не рисует вариантов: колонка есть, но значения пустые — варианты вёрстки
 (cols-4/rows) приедут с добором видов. Неиспользуемые ядром `buttons/items/settings` — `JSON NOT NULL`
 и всегда `[]`/`{}`, чтобы шаблон не ветвился на NULL.
@@ -204,8 +211,10 @@ CREATE TABLE page_old_slug (
 ## 7. Что остаётся за пределами первого захода
 
 - Меню шапки/подвала из базы (заход следом, таблица `page_menu` по образцу `MenuItem`).
-- Доборы видов: levels, demo, split, chain, banner, slider, video, pricing, toc, quote, review,
+- Доборы видов: levels, demo, chain, banner, slider, video, pricing, toc, quote, review,
   related, gallery, float, table, tabs, files, contacts — каждый пачкой со своими шаблонами.
+  `split` и `quote` уже добраны (задача 9 плана): живут на общих `items`/`buttons`/`image`,
+  новых колонок и полей формы им не понадобилось.
 - Заявки (`lead`) и рассылка — отдельный раздел §17.
 - Перенос контента главной и страниц из `content-*.ts` портала — вместе с переносом данных
   из PostgreSQL, не здесь.
