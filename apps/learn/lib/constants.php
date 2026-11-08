@@ -67,6 +67,11 @@ const LEARN_PLACEMENT_LEVELS = [
     ['code' => 'C1', 'min' => 97],
 ];
 
+// Вклад раздела в конструктор страниц: вид блока «карта уровней» и предел ступеней в нём.
+// Предел равен числу уровней программы, поэтому настройка «все уровни» — это и есть шкала целиком.
+const LEARN_PAGES_LEVELS_KIND = 'learn_levels';
+const LEARN_PAGES_LEVELS_LIMIT = 7;
+
 // Композиция теста на уровень: сколько вопросов каждого навыка кладёт сид.
 const LEARN_PLACEMENT_COUNTS = [
     'VOCABULARY' => 10,

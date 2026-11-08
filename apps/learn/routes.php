@@ -37,3 +37,9 @@ addRoute('GET', '/learn/admin/lessons/new', 'learnAdminLessonNew', ['app' => 'le
 addRoute('POST', '/learn/admin/lessons/new', 'learnAdminLessonSaveAction', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
 addRoute('GET', '/learn/admin/lessons/{id}', 'learnAdminLessonEdit', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
 addRoute('POST', '/learn/admin/lessons/{id}', 'learnAdminLessonSaveAction', ['app' => 'learn', 'private' => true, 'permission' => 'login']);
+
+// Вклад раздела в конструктор страниц: вид «карта уровней» появляется в селекте и печатается
+// страницей ядра. Подписки — именованными функциями: routes.php исполняется для всех приложений
+// сборки, поэтому каждая сама сверяет isAppActive('learn') (механика вклада новостей).
+addFilter('pages_block_kinds', 'learnPagesBlockKindsFilter');
+addFilter('pages_block_' . LEARN_PAGES_LEVELS_KIND, 'learnPagesLevelsHtml');

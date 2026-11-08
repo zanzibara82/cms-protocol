@@ -695,4 +695,43 @@ final class LearnRulesTest extends TestCase
 
         return $result['row'];
     }
+
+    public function testКартаУровнейРазбираетНастройкуИЧислоСтупеней(): void
+    {
+        self::assertSame('learn_levels', LEARN_PAGES_LEVELS_KIND, 'вид вклада в конструкторе страниц');
+        self::assertSame(7, LEARN_PAGES_LEVELS_LIMIT, 'предел равен числу уровней программы');
+
+        // Пустая настройка — «вся программа», а не ошибка: так выглядит блок, только что
+        // добавленный в конструкторе, где поля ещё не заполнены.
+        self::assertSame(['limit' => 7, 'error' => ''], learnLevelsCountPlan(''));
+        self::assertSame(['limit' => 7, 'error' => ''], learnLevelsCountPlan(null));
+        self::assertSame(['limit' => 3, 'error' => ''], learnLevelsCountPlan('3'));
+        self::assertSame(['limit' => 7, 'error' => ''], learnLevelsCountPlan(' 7 '));
+
+        // Кривое число — отказ с причиной, а не тихо зажатое значение.
+        foreach (['0', '8', '-1', 'три', '2.5'] as $bad) {
+            $plan = learnLevelsCountPlan($bad);
+            self::assertSame(0, $plan['limit'], 'отказ не печатает карту: ' . $bad);
+            self::assertStringContainsString('от 1 до 7', $plan['error'], 'причина отказа названа: ' . $bad);
+        }
+    }
+
+    public function testВкладКурсовОбъявляетПоляНастроекКарты(): void
+    {
+        $kinds = learnPagesBlockKinds();
+
+        self::assertCount(1, $kinds);
+        self::assertSame(LEARN_PAGES_LEVELS_KIND, $kinds[0]['kind']);
+        self::assertSame('Курсы — карта уровней', $kinds[0]['name']);
+        self::assertSame(
+            ['count', 'cta_label', 'cta_href'],
+            array_column($kinds[0]['fields'], 'key'),
+            'конструктор рисует ровно эти поля'
+        );
+
+        foreach ($kinds[0]['fields'] as $field) {
+            self::assertNotSame('', $field['label'], 'у поля есть подпись');
+            self::assertNotSame('', $field['hint'], 'у поля есть подсказка');
+        }
+    }
 }
