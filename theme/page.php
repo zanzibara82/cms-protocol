@@ -6,11 +6,9 @@ declare(strict_types=1);
 /** @var array<string, mixed> $page */
 /** @var bool $preview */
 
-// Секции собираются диспетчером: известные виды — шаблоны ядра, чужие — вклады приложений.
-$content = '';
-foreach ($sections as $section) {
-    $content .= sectionHtml($section);
-}
+// Секции собираются сборкой страницы: известные виды — шаблоны ядра, чужие — вклады приложений.
+// Содержание печатается сборкой последним из видов: ему нужен список напечатавшихся мест.
+$content = pagesSectionsHtml($sections);
 ?>
 <div class="mx-auto max-w-5xl px-4 sm:px-6">
     <?= partial('partials/breadcrumbs', ['items' => [ /* @safe html */

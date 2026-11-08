@@ -20,10 +20,7 @@ if ($sections === []) {
 </section>
     <?php
 } else {
-    $content = '';
-    foreach ($sections as $section) {
-        $content .= sectionHtml($section);
-    }
+    $content = pagesSectionsHtml($sections);
     ?>
 <?= $content /* @safe html */ ?>
 <?php region('home'); ?>

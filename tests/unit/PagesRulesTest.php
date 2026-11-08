@@ -58,14 +58,39 @@ final class PagesRulesTest extends TestCase
     public function testВидыПервогоЗаходаСперечнемИмен(): void
     {
         self::assertSame(
-            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'cta', 'faq'],
+            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'cta', 'faq'],
             PAGES_KINDS,
-            'Решение 3 штурма: каркас и виды первого захода, остальные добираются пачками (split и quote — вторая пачка)'
+            'Решение 3 штурма: каркас и виды первого захода, остальные добираются пачками '
+            . '(split и quote — вторая, pricing и toc — третья)'
         );
 
         foreach (PAGES_KINDS as $kind) {
             self::assertArrayHasKey($kind, PAGES_KIND_NAMES, 'У вида без имени нет подписи в конструкторе');
         }
+    }
+
+    public function testСодержаниеСобираетсяИзНапечатанныхМест(): void
+    {
+        // Содержание ссылается на места страницы: место без якоря (ссылка некуда ведёт) и место
+        // без заголовка (безымянный пункт) в список не идут, само содержание — тоже: это
+        // оглавление страницы, а не её место.
+        $entries = pagesTocEntries([
+            ['id' => '1', 'kind' => 'split', 'anchor' => 'verh', 'title' => 'Первый экран'],
+            ['id' => '2', 'kind' => 'prose', 'anchor' => '', 'title' => 'Без якоря'],
+            ['id' => '3', 'kind' => 'prose', 'anchor' => 'bez-zagolovka', 'title' => ''],
+            ['id' => '4', 'kind' => 'toc', 'anchor' => 'soderzhanie', 'title' => 'Содержание'],
+            ['id' => '5', 'kind' => 'quote', 'anchor' => 'otzyvy', 'title' => 'Отзывы'],
+        ]);
+
+        self::assertSame(
+            [
+                ['anchor' => 'verh', 'title' => 'Первый экран'],
+                ['anchor' => 'otzyvy', 'title' => 'Отзывы'],
+            ],
+            $entries,
+            'в содержание идут только места с якорем и заголовком'
+        );
+        self::assertSame([], pagesTocEntries([]), 'пустая страница — пустое содержание');
     }
 
     public function testПределыПолейЧитаютсяОднимСпособом(): void

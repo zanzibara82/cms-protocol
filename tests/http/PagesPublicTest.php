@@ -196,6 +196,14 @@ final class PagesPublicTest extends TestCase
             'noindex' => '0',
         ], nowUtc());
 
+        // Содержание стоит первым блоком страницы, а ссылается на места, которые напечатались:
+        // список собирается после рендера остальных секций, поэтому порядок блоков ему не мешает.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'toc',
+            'anchor' => 'soderzhanie',
+            'title' => 'Содержание страницы',
+        ]), nowUtc());
+
         createSection((string) $vidy['id'], $values([
             'kind' => 'hero',
             'anchor' => 'verh',
@@ -266,6 +274,27 @@ final class PagesPublicTest extends TestCase
             'title' => 'Запишитесь на пробный урок',
             'lead_text' => 'Первое занятие бесплатно.',
             'buttons' => [['label' => 'Оставить заявку', 'href' => '/o-nas']],
+        ]), nowUtc());
+
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'pricing',
+            'title' => 'Стоимость обучения',
+            'lead_text' => 'Платите за месяц, без взносов.',
+            'note' => 'Цены без НДС',
+            'items' => [
+                ['title' => 'Утро', 'note' => '2 900 ₽ / месяц', 'text' => 'Два урока в неделю.', 'href' => '/o-nas'],
+                ['title' => 'Вечер', 'note' => '3 400 ₽ / месяц', 'text' => '', 'href' => ''],
+                ['title' => '', 'note' => '', 'text' => 'Обрывок без названия', 'href' => '/o-nas'],
+            ],
+        ]), nowUtc());
+
+        // Место с якорем, которое ничего не печатает: в содержание оно попасть не должно —
+        // ссылка вела бы в пустоту.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'quote',
+            'anchor' => 'pustye-otzyvy',
+            'title' => 'Пустые отзывы',
+            'items' => [['title' => 'Автор без текста', 'text' => '']],
         ]), nowUtc());
 
         createSection((string) $vidy['id'], $values([
@@ -472,6 +501,52 @@ final class PagesPublicTest extends TestCase
 
         // Сырьё в ответе не разрывает script-блок: «<» экранируется в \u003C.
         self::assertStringNotContainsString('</script><script>', $page['body'], 'инъекция в ответе не разрывает JSON-LD');
+    }
+
+    public function testPricingПечатаетТарифыЦенуИКнопку(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Стоимость обучения', $page['body']);
+        self::assertStringContainsString('Платите за месяц, без взносов.', $page['body'], 'лид прайса напечатан');
+        self::assertStringContainsString('Утро', $page['body'], 'название тарифа напечатано');
+        self::assertStringContainsString('2 900 ₽ / месяц', $page['body'], 'цена тарифа напечатана');
+        self::assertStringContainsString('Два урока в неделю.', $page['body'], 'описание тарифа напечатано');
+        self::assertMatchesRegularExpression('~href="/o-nas"[^>]*>Выбрать</a>~', $page['body'], 'у тарифа с адресом есть кнопка');
+        self::assertStringContainsString('Цены без НДС', $page['body'], 'примечание блока — сноска под тарифами');
+        self::assertStringContainsString('Вечер', $page['body'], 'тариф без кнопки печатается текстом');
+        self::assertSame(1, substr_count($page['body'], '>Выбрать</a>'), 'кнопка есть только у тарифа с адресом');
+        self::assertStringNotContainsString('Обрывок без названия', $page['body'], 'тариф без названия не печатается');
+    }
+
+    public function testСодержаниеСсылаетсяНаНапечатанныеМеста(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertMatchesRegularExpression(
+            '~<nav\b[^>]*aria-label="Содержание"[^>]*>~',
+            $page['body'],
+            'содержание печатается навигацией, а не простым списком'
+        );
+        self::assertStringContainsString('Содержание страницы', $page['body'], 'заголовок блока напечатан');
+        self::assertMatchesRegularExpression(
+            '~href="#verh"[^>]*>Школа английского языка</a>~',
+            $page['body'],
+            'пункт ведёт на место первого экрана'
+        );
+        self::assertMatchesRegularExpression(
+            '~href="#polosa"[^>]*>Интенсивы</a>~',
+            $page['body'],
+            'второй пункт ведёт на следующее место страницы'
+        );
+        self::assertStringNotContainsString(
+            'href="#pustye-otzyvy"',
+            $page['body'],
+            'место, которое ничего не напечатало, в содержание не попадает'
+        );
+        self::assertStringNotContainsString('href="#soderzhanie"', $page['body'], 'содержание не ссылается само на себя');
     }
 
     public function testЧерновикГостюОтвечаетКакНесуществующий(): void

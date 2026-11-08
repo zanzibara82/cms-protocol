@@ -33,11 +33,11 @@ const PAGES_HOME_ID = '';
  */
 const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress'];
 
-// Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка.
-// Остальные добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру
-// pages_block_<kind> (вклад приложения).
+// Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
+// pricing и toc — третья. Остальные добираются своими пачками. Чужой вид ядро не рисует само —
+// уходит фильтру pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -49,6 +49,8 @@ const PAGES_KIND_NAMES = [
     'prose' => 'Текстовый блок',
     'split' => 'Текст и картинка',
     'quote' => 'Цитата',
+    'pricing' => 'Тарифы',
+    'toc' => 'Содержание страницы',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];
@@ -318,6 +320,74 @@ function sectionHtml(array $section): string
         is_array($section['settings'] ?? null) ? $section['settings'] : [],
         $head
     );
+}
+
+/**
+ * Сборка страницы из секций. Содержание («toc») ссылается на места этой же страницы, поэтому
+ * сначала печатаются все остальные секции, и только потом — оно само: иначе оглавление пришлось
+ * бы собирать из полей базы, не зная, что напечаталось. Секция, оставшаяся пустой (чужой вид без
+ * вклада приложения, цитата без текста), в содержание не попадает — ссылка вела бы в пустоту.
+ * Порядок блоков на странице не меняется: сборка идёт по исходному списку.
+ *
+ * @param list<array<string, mixed>> $sections
+ */
+function pagesSectionsHtml(array $sections): string
+{
+    $html = [];
+    $printed = [];
+
+    foreach ($sections as $index => $section) {
+        if ((string) $section['kind'] === 'toc') {
+            continue;
+        }
+
+        $html[$index] = sectionHtml($section);
+
+        if ($html[$index] !== '') {
+            $printed[] = $section;
+        }
+    }
+
+    $entries = pagesTocEntries($printed);
+
+    foreach ($sections as $index => $section) {
+        if (isset($html[$index])) {
+            continue;
+        }
+
+        // Вид «toc» — единственный, чей рендер зависит от соседей: шаблон получает готовые пункты.
+        $html[$index] = partial('sections/toc', ['section' => $section, 'entries' => $entries]);
+    }
+
+    ksort($html);
+
+    return implode('', $html);
+}
+
+/**
+ * Пункты содержания из секций, которые что-то напечатали: место попадает в список, только если
+ * у него есть якорь (иначе ссылка некуда ведёт) и заголовок (иначе пункт безымянный). Само
+ * содержание в свой список не входит — это оглавление страницы, а не её место.
+ *
+ * @param list<array<string, mixed>> $sections
+ * @return list<array{anchor: string, title: string}>
+ */
+function pagesTocEntries(array $sections): array
+{
+    $entries = [];
+
+    foreach ($sections as $section) {
+        $anchor = (string) ($section['anchor'] ?? '');
+        $title = (string) ($section['title'] ?? '');
+
+        if ((string) ($section['kind'] ?? '') === 'toc' || $anchor === '' || $title === '') {
+            continue;
+        }
+
+        $entries[] = ['anchor' => $anchor, 'title' => $title];
+    }
+
+    return $entries;
 }
 
 // ---------------------------------------------------------------------------
