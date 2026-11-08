@@ -210,6 +210,9 @@ final class NewsItemFormTest extends TestCase
         self::assertStringContainsString('<title>Новый материал — админка</title>', $page['body']);
         self::assertStringContainsString('noindex, nofollow', $page['body']);
         self::assertStringContainsString('enctype="multipart/form-data"', $page['body'], 'Без enctype файл не дойдёт');
+        self::assertStringContainsString('id="f-title"', $page['body'], 'заголовок — источник адреса');
+        self::assertStringContainsString('id="f-slug"', $page['body'], 'адрес — поле подстановки');
+        self::assertStringContainsString('src="/assets/js/news-slug.js"', $page['body'], 'подстановка живёт во внешнем скрипте');
         self::assertStringContainsString('name="intent" value="draft"', $page['body']);
         self::assertStringContainsString('name="intent" value="publish"', $page['body']);
         self::assertStringNotContainsString('name="id"', $page['body'], 'Идентификатор в форме не нужен: решает адрес');
@@ -243,6 +246,46 @@ final class NewsItemFormTest extends TestCase
         $page = Kernel::get(NEWS_ITEM_NEW_PATH);
 
         self::assertSame(2, substr_count($page['body'], 'Картинка горизонтальная, 1200×630.'), '§8.5: у обложки и у OG-картинки');
+    }
+
+    public function testУОбложкиЕстьИконкаВыбораФайла(): void
+    {
+        $this->login();
+        $page = Kernel::get(NEWS_ITEM_NEW_PATH);
+
+        self::assertStringContainsString(
+            'class="sr-only" id="f-cover_file" name="cover_file" type="file"',
+            $page['body'],
+            'Нативный выбор файла скрыт, но остаётся в форме'
+        );
+        self::assertStringContainsString(
+            'accept="image/jpeg,image/png,image/webp"',
+            $page['body'],
+            'Формат файла ограничен'
+        );
+        self::assertStringContainsString(
+            'for="f-cover_file" title="Выбрать картинку с компьютера"',
+            $page['body'],
+            'Иконка папки открывает выбор файла'
+        );
+        self::assertMatchesRegularExpression(
+            '/class="inline-flex min-h-\[44px\] min-w-\[44px\][^"]*"[^>]*for="f-cover_file"/',
+            $page['body'],
+            'Зона нажатия иконки не меньше 44 px'
+        );
+    }
+
+    public function testНоваяНовостьПолучаетТекущуюДатуПубликации(): void
+    {
+        $this->login();
+        $page = Kernel::get(NEWS_ITEM_NEW_PATH);
+
+        self::assertStringContainsString('Дата публикации', $page['body'], 'подпись поля даты');
+        self::assertMatchesRegularExpression(
+            '/id="f-publishedAt"[^>]*value="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}"/',
+            $page['body'],
+            'поле даты заполнено при открытии формы'
+        );
     }
 
     public function testВкладкаМатериалыОстаётсяОтмеченной(): void
@@ -549,5 +592,15 @@ final class NewsItemFormTest extends TestCase
             '#^/uploads/images/[0-9a-z]{26}\.png$#',
             (string) itemForForm($id)['cover']
         );
+    }
+
+    public function testСкриптАдресаОтдаётсяКлиенту(): void
+    {
+        $script = Kernel::get('/assets/js/news-slug.js');
+
+        self::assertSame(200, $script['status']);
+        self::assertStringContainsString("getElementById('f-title')", $script['body'], 'скрипт читает заголовок');
+        self::assertStringContainsString("getElementById('f-slug')", $script['body'], 'скрипт пишет адрес');
+        self::assertStringContainsString("'ё': 'yo'", $script['body'], 'транслит совпадает с серверным');
     }
 }

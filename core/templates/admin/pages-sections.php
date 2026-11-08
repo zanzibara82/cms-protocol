@@ -13,6 +13,9 @@ declare(strict_types=1);
 // Класс min-h-[44px] стоит литералом в каждом атрибуте class (страж TapTargetTest читает
 // классы значения атрибута, `e($input)` даёт ему только имя переменной).
 $input = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
+// Поле картинки стоит в одной строке с кнопкой выбора файла: отступ задаёт обёртка, а ширину
+// делят input и квадратная зона нажатия 44×44.
+$imageInput = 'w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
 
 // Имена и поля настроек видов: имена карточек и селекта читаются из одного перечня — вклад
 // приложения печатается своей подписью, а не технической меткой.
@@ -55,13 +58,12 @@ $actionForm = static function (string $op, array $hidden, string $label, string 
 $buttonsRows = static function (array $rows) use ($input): string {
     $html = '';
     foreach (array_merge($rows, [['label' => '', 'href' => '', 'blank' => false]]) as $index => $row) {
-        $checked = ($row['blank'] ?? false) ? ' checked' : '';
         $html .= '<div class="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]">'
             . '<label class="text-sm"><span class="font-medium">Подпись</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="buttons[' . e((string) $index) . '][label]" value="' . e((string) ($row['label'] ?? '')) . '"></label>'
             . '<label class="text-sm"><span class="font-medium">Адрес</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="buttons[' . e((string) $index) . '][href]" value="' . e((string) ($row['href'] ?? '')) . '"></label>'
-            . '<label class="flex items-center gap-2 text-sm"><input class="min-h-[44px] size-11 rounded border border-ink/20 bg-white" type="checkbox" name="buttons[' . e((string) $index) . '][blank]" value="1"' . $checked . '><span>Новая вкладка</span></label>'
+            . adminCheckbox('buttons[' . (string) $index . '][blank]', 'Новая вкладка', '1', (bool) ($row['blank'] ?? false))
             . '</div>';
     }
 
@@ -95,14 +97,16 @@ $itemsRows = static function (array $rows) use ($input): string {
  *
  * @param array<string, mixed>|null $section
  */
-$sectionForm = static function (?array $section) use ($target, $kindSelect, $buttonsRows, $itemsRows, $kindFields, $input, $field): string {
+$sectionForm = static function (?array $section) use ($target, $kindSelect, $buttonsRows, $itemsRows, $kindFields, $input, $imageInput, $field): string {
     $exists = $section !== null;
     $values = static fn (string $name): string => (string) ($section[$name] ?? '');
     $visible = $exists ? (int) $section['visible'] === 1 : true;
-    $checked = $visible ? ' checked' : '';
     $op = $exists ? 'save-section' : 'create-section';
     $submitLabel = $exists ? 'Сохранить секцию' : 'Добавить секцию';
     $id = $exists ? $field('section', (string) $section['id']) : '';
+    $sectionKey = $exists ? (string) $section['id'] : 'new';
+    $imageFieldId = 'section-image-' . $sectionKey;
+    $imageFileId = 'section-image-file-' . $sectionKey;
 
     // Поля настроек вклада: рисуются по описанию приложения (pages_block_kinds), значения едут
     // в JSON как есть. У новой формы вид ещё не выбран — блока нет; после создания и перезагрузки
@@ -122,7 +126,7 @@ $sectionForm = static function (?array $section) use ($target, $kindSelect, $but
         ? ''
         : '<div class="space-y-2"><h4 class="text-sm font-medium">Настройки вклада</h4><div class="grid gap-3 sm:grid-cols-3">' . $settingsHtml . '</div></div>';
 
-    return '<form class="mt-3 space-y-3" method="post" action="' . e($target) . '">' . csrfField()
+    return '<form class="mt-3 space-y-3" method="post" action="' . e($target) . '" enctype="multipart/form-data" data-section-form>' . csrfField()
         . '<input type="hidden" name="op" value="' . e($op) . '">' . $id
         . '<div class="grid gap-3 sm:grid-cols-2">'
         . '<label class="block text-sm"><span class="font-medium">Вид</span>' . $kindSelect($exists ? (string) $section['kind'] : '') . '</label>'
@@ -142,15 +146,22 @@ $sectionForm = static function (?array $section) use ($target, $kindSelect, $but
         . '<div class="grid gap-3 sm:grid-cols-3">'
         . '<label class="block text-sm"><span class="font-medium">Примечание</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="note" value="' . e($values('note')) . '"></label>'
-        . '<label class="block text-sm"><span class="font-medium">Картинка</span>'
-        . '<input class="min-h-[44px] ' . e($input) . ' font-mono" type="text" name="image" value="' . e($values('image')) . '"></label>'
+        . '<div class="text-sm"><label class="font-medium" for="' . e($imageFieldId) . '">Картинка</label>'
+        . '<div class="mt-1 flex items-start gap-2">'
+        . '<input class="min-h-[44px] ' . e($imageInput . ' min-w-0 flex-1') . ' font-mono" id="' . e($imageFieldId) . '" type="text" name="image" value="' . e($values('image')) . '">'
+        . '<input class="sr-only" id="' . e($imageFileId) . '" type="file" name="image_file" accept="image/jpeg,image/png,image/webp">'
+        . '<label class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5" for="' . e($imageFileId) . '" title="Выбрать картинку с компьютера">'
+        . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>'
+        . '<span class="sr-only">Выбрать картинку с компьютера</span></label>'
+        . '</div>'
+        . '<span class="mt-1 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ.</span></div>'
         . '<label class="block text-sm"><span class="font-medium">Описание картинки</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image_alt" value="' . e($values('image_alt')) . '"></label>'
         . '</div>'
         . $settingsBlock
         . '<div class="space-y-2"><h4 class="text-sm font-medium">Кнопки</h4>' . $buttonsRows($exists ? pagesButtonsOf($section['buttons'] ?? null) : []) . '</div>'
         . '<div class="space-y-2"><h4 class="text-sm font-medium">Строки (карточки, шаги, вопросы)</h4>' . $itemsRows($exists ? pagesItemsOf($section['items'] ?? null) : []) . '</div>'
-        . '<label class="flex items-center gap-2 text-sm"><input class="min-h-[44px] size-11 rounded border border-ink/20 bg-white" type="checkbox" name="visible" value="1"' . $checked . '><span>Показывать на странице</span></label>'
+        . adminCheckbox('visible', 'Показывать на странице', '1', $visible)
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">' . e($submitLabel) . '</button>'
         . '</form>';
 };
@@ -170,13 +181,16 @@ foreach ($sections as $section) {
         )
         . ' ' . $actionForm('delete-section', ['section' => (string) $section['id']], 'Удалить', 'text-bad hover:bg-bad/10');
 
-    $content .= '<section class="rounded-lg border border-ink/10 bg-white p-4">'
-        . '<header class="flex flex-wrap items-baseline justify-between gap-2">'
+    $content .= '<details class="rounded-lg border border-ink/10 bg-white" open>'
+        . '<summary class="section-summary flex min-h-[44px] cursor-pointer items-center justify-between gap-3 px-4 py-3">'
         . '<h3 class="font-semibold">' . e($kindName) . $state . '</h3>'
+        . '<svg class="section-chevron h-5 w-5 shrink-0 text-ink/60 transition-transform" viewBox="0 0 20 20" fill="none" aria-hidden="true">'
+        . '<path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        . '</summary>'
+        . '<div class="border-t border-ink/10 px-4 py-3">'
         . '<div class="flex flex-wrap justify-end gap-2">' . $actions . '</div>'
-        . '</header>'
         . $sectionForm($section)
-        . '</section>';
+        . '</div></details>';
 }
 
 $addCard = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
@@ -187,5 +201,13 @@ $addCard = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
 $content .= $sections === []
     ? '<p class="text-sm text-ink/60">Секций ещё нет — добавьте первую формой ниже.</p>' . $addCard
     : $addCard;
+
+// Плавающая кнопка живёт вне форм: она собирает изменённые формы и отправляет их сама. Без
+// скрипта остаётся неактивной, а каждая секция сохраняется своей кнопкой внутри формы.
+$content .= '<div class="pointer-events-none fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2 md:bottom-auto md:right-6 md:top-24">'
+    . '<div class="pointer-events-auto max-w-xs rounded-lg border border-bad/30 bg-white px-4 py-3 text-sm text-bad shadow-lg" data-save-error role="alert" hidden></div>'
+    . '<button class="admin-save-button pointer-events-auto inline-flex min-h-[44px] items-center rounded-lg bg-ink/20 px-4 py-2 text-sm font-medium text-ink/50 shadow-lg transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:bg-ink/20 disabled:text-ink/50" type="button" data-save-button data-dirty="0" disabled>Сохранить</button>'
+    . '<span class="sr-only" data-save-status aria-live="polite">Все изменения сохранены</span>'
+    . '</div>';
 
 /* @safe html */ echo $content;

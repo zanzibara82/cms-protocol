@@ -135,6 +135,9 @@ final class MenuTest extends TestCase
     public function testПравкаПунктаМеняетПоляНоНеСлотПорядокВидимость(): void
     {
         $id = $this->makeItem('FOOTER', ['label' => 'Старое', 'href' => '/staryj', 'section' => 'Обучение'], nowUtc()->modify('-1 day'));
+        // Момент правки фиксируется один раз: второй nowUtc() мог пересечь границу секунды,
+        // и сравнение метки падало на ровном месте.
+        $now = nowUtc();
 
         $saved = updateMenuItem($id, [
             // Чужой слот формы игнорируется: пункт не переезжает между картами сохранением.
@@ -143,7 +146,7 @@ final class MenuTest extends TestCase
             'href' => '/novyj',
             'section' => 'Программы',
             'blank' => '',
-        ], nowUtc());
+        ], $now);
 
         self::assertTrue($saved['ok'], $saved['error']);
         self::assertSame('menu_saved', $saved['notice']);
@@ -160,7 +163,7 @@ final class MenuTest extends TestCase
         self::assertSame('0', (string) $row['sort']);
         self::assertSame('1', (string) $row['visible']);
         // Метка перезаписана сегодняшним моментом, а не вчерашним от создания.
-        self::assertSame(utcStamp(nowUtc()), (string) $row['updated_at']);
+        self::assertSame(utcStamp($now), (string) $row['updated_at']);
 
         // Несуществующая строка и кривая правка отказывают по-человечески и ничего не трогают.
         $ghost = updateMenuItem('net-takogo', ['label' => 'Призрак', 'href' => '/ok']);

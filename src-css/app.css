@@ -73,6 +73,23 @@ body {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Свёрнутый блок конструктора: маркер браузера скрыт, стрелка поворачивается по состоянию details. */
+.section-summary {
+  list-style: none;
+}
+.section-summary::-webkit-details-marker {
+  display: none;
+}
+details[open] .section-chevron {
+  transform: rotate(180deg);
+}
+
+/* Плавающая кнопка сохранения: без изменений она неактивна и серая, с изменениями — зелёная. */
+.admin-save-button[data-dirty="1"] {
+  background-color: var(--color-good);
+  color: var(--color-cream);
+}
+
 /* Видимый фокус для клавиатуры: перенос `outline-ring/50` из базового слоя globals.css. */
 :focus-visible {
   outline: 2px solid var(--color-accent);

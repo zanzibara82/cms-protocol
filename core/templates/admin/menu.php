@@ -61,8 +61,7 @@ $itemCard = static function (array $row) use ($input, $field, $actionForm): stri
         . '<input class="min-h-[44px] ' . e($input) . ' font-mono" type="text" name="href" value="' . e((string) $row['href']) . '">'
         . '<span class="mt-1 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
         . '</div>'
-        . '<label class="flex items-center gap-2 text-sm"><input class="min-h-[44px] size-11 rounded border border-ink/20 bg-white" type="checkbox" name="blank" value="1"'
-        . ((int) $row['blank'] === 1 ? ' checked' : '') . '><span>Открыть в новом окне</span></label>'
+        . adminCheckbox('blank', 'Открыть в новом окне', '1', (int) $row['blank'] === 1)
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Сохранить пункт</button>'
         . '</form>'
         . '</section>';
@@ -90,8 +89,7 @@ $addForm = static function (string $slot) use ($input, $field): string {
         . '<span class="mt-1 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
         . $sectionField
         . '</div>'
-        . '<label class="flex items-center gap-2 text-sm"><input class="min-h-[44px] size-11 rounded border border-ink/20 bg-white" type="checkbox" name="blank" value="1">'
-        . '<span>Открыть в новом окне</span></label>'
+        . adminCheckbox('blank', 'Открыть в новом окне')
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Добавить пункт</button>'
         . '<span class="text-sm text-ink/60">Новый пункт встанет в конец слота «' . e($slotName) . '».</span>'
         . '</form>';

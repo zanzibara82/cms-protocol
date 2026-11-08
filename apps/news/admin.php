@@ -105,13 +105,20 @@ function renderNewsItemForm(array $item, array $raw, array $errors, string $back
 {
     $isNew = $item === [];
     $status = (string) ($item['status'] ?? '');
+    $values = newsFormValues($item, $raw);
+
+    if ($isNew && $raw === []) {
+        // Новая новость по умолчанию выходит сразу: поле показывает текущее московское время,
+        // а человек может передвинуть его на будущее или очистить — пустое значит «сразу».
+        $values['publishedAt'] = formPublishedAt(nowUtc());
+    }
 
     render('news/admin/item-form', [
         'nav' => newsAdminNav(NEWS_ADMIN_ITEMS_PATH),
         'notice' => (string) (noticeOfRequest(NEWS_NOTICE_TEXT) ?? ''),
         'error' => $error,
         'errors' => $errors,
-        'values' => newsFormValues($item, $raw),
+        'values' => $values,
         'buttons' => newsFormButtons($status),
         'action' => $isNew ? NEWS_ITEM_NEW_PATH : (string) $item['editHref'],
         'back' => $back,
@@ -124,6 +131,8 @@ function renderNewsItemForm(array $item, array $raw, array $errors, string $back
     ], [
         'title' => ($isNew ? 'Новый материал' : 'Правка материала') . ' — админка',
         'noindex' => true,
+        // Адрес подставляется из заголовка внешним скриптом: CSP запрещает инлайновый код.
+        'head' => '<script src="/assets/js/news-slug.js" defer></script>',
     ]);
 }
 

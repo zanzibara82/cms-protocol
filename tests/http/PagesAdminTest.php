@@ -364,4 +364,145 @@ final class PagesAdminTest extends TestCase
 
         self::assertStringNotContainsString('Ушла', $list['body'], 'удалённая страница ушла из списка');
     }
+
+    public function testБлокиСворачиваютсяИПринимаютФайл(): void
+    {
+        $page = createPage([
+            'title' => 'Сверка блоков',
+            'slug' => 'sverka-blokov',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        createSection((string) $page['id'], [
+            'kind' => 'prose',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Сворачиваемый блок',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $screen = Kernel::get('/admin/pages/' . (string) $page['id']);
+
+        self::assertSame(200, $screen['status']);
+        self::assertStringContainsString('<details class="rounded-lg border border-ink/10 bg-white" open>', $screen['body'], 'блок — сворачиваемая карточка');
+        self::assertStringContainsString('class="section-summary', $screen['body'], 'заголовок карточки — ручка сворачивания');
+        self::assertStringContainsString('class="section-chevron', $screen['body'], 'у карточки есть стрелка');
+        self::assertStringContainsString('enctype="multipart/form-data"', $screen['body'], 'без enctype файл не дойдёт');
+        self::assertStringContainsString('name="image_file"', $screen['body'], 'поле выбора картинки');
+        self::assertStringContainsString('accept="image/jpeg,image/png,image/webp"', $screen['body'], 'формат файла ограничен');
+        self::assertStringContainsString('data-section-form', $screen['body'], 'форма секции участвует в общем сохранении');
+        self::assertStringContainsString('data-save-button', $screen['body'], 'плавающая кнопка сохранения');
+        self::assertStringContainsString('src="/assets/js/admin-sections.js"', $screen['body'], 'скрипт подключён внешним файлом');
+    }
+
+    public function testКартинкуБлокаМожноЗагрузитьСКомпьютера(): void
+    {
+        $page = createPage([
+            'title' => 'Блок с картинкой',
+            'slug' => 'blok-s-kartinkoy',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        $source = dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png';
+
+        self::assertFileExists($source);
+
+        $this->login();
+        $token = $this->token('/admin/pages/' . (string) $page['id']);
+
+        $created = Kernel::post('/admin/pages/' . (string) $page['id'], [
+            '_token' => $token,
+            'op' => 'create-section',
+            'kind' => 'hero',
+            'anchor' => 's-kartinkoy',
+            'badge' => '',
+            'title' => 'С картинкой',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '',
+            'image_alt' => 'Витрина школы',
+            'visible' => '1',
+            'image_file' => new \CURLFile($source, 'image/png', 'vitrina.png'),
+        ]);
+
+        self::assertSame(302, $created['status']);
+        self::assertStringContainsString('?notice=section_created', $created['headers']['location']);
+
+        $section = pageSections((string) $page['id'])[0] ?? [];
+        $image = (string) ($section['image'] ?? '');
+
+        self::assertMatchesRegularExpression('#^/uploads/images/[0-9a-hjkmnp-tv-z]{26}\.png$#', $image, 'сервер сам назвал файл');
+        self::assertFileExists(dirname(__DIR__, 2) . '/public' . $image, 'картинка легла в каталог загрузок');
+
+        pageImageDelete($image);
+        sectionDelete((string) ($section['id'] ?? ''));
+    }
+
+    public function testПлавающаяКнопкаСохраняетБезРедиректа(): void
+    {
+        $page = createPage([
+            'title' => 'Сохранение без перезагрузки',
+            'slug' => 'json-sokhranenie',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        $section = createSection((string) $page['id'], [
+            'kind' => 'prose',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Старое название',
+            'lead_text' => 'Старый текст.',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $token = $this->token('/admin/pages/' . (string) $page['id']);
+
+        $saved = Kernel::post('/admin/pages/' . (string) $page['id'], [
+            '_token' => $token,
+            'op' => 'save-section',
+            'section' => (string) $section['id'],
+            'kind' => 'prose',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Новое название',
+            'lead_text' => 'Новый текст.',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'visible' => '1',
+        ], ['headers' => ['X-CMS-Section-Save' => '1']]);
+
+        self::assertSame(200, $saved['status'], 'fetch получает ответ, а не редирект');
+        self::assertStringContainsString('application/json', (string) ($saved['headers']['content-type'] ?? ''));
+
+        $data = (array) json_decode($saved['body'], true);
+
+        self::assertTrue($data['ok'] ?? false);
+        self::assertSame('section_saved', $data['notice'] ?? '');
+
+        $stored = sectionById((string) $section['id']) ?? [];
+
+        self::assertSame('Новое название', (string) ($stored['title'] ?? ''));
+    }
 }

@@ -388,7 +388,11 @@ function coreAdminPageScreen(string $pageId): void
         $data['alertTitle'] = adminFailureTitle($alertReason);
         $data['alertReason'] = $alertReason;
 
-        render('admin/pages-home', $data, ['title' => 'Блоки главной — админка', 'noindex' => true]);
+        render('admin/pages-home', $data, [
+            'title' => 'Блоки главной — админка',
+            'noindex' => true,
+            'head' => ADMIN_SECTIONS_HEAD,
+        ]);
 
         return;
     }
@@ -398,7 +402,11 @@ function coreAdminPageScreen(string $pageId): void
     $data['alertTitle'] = adminFailureTitle($alertReason);
     $data['alertReason'] = $alertReason;
 
-    render('admin/pages-edit', $data, ['title' => 'Страницы — админка', 'noindex' => true]);
+    render('admin/pages-edit', $data, [
+        'title' => 'Страницы — админка',
+        'noindex' => true,
+        'head' => ADMIN_SECTIONS_HEAD,
+    ]);
 }
 
 // Все действия раздела — один обработчик: намерение приходит полем op, а не адресом. Так страж
@@ -416,6 +424,29 @@ function coreAdminPagesAction(array $params = []): void
     $pageId = (string) ($params['id'] ?? PAGES_HOME_ID);
     $to = $pageId === PAGES_HOME_ID ? '/admin/pages/home' : '/admin/pages/' . $pageId;
 
+    $sectionValues = null;
+    $uploadedImage = '';
+
+    if ($op === 'create-section' || $op === 'save-section') {
+        $sectionValues = pagesSectionValuesFromPost();
+        $file = uploadedFile('image_file');
+
+        if ($file !== null) {
+            $stored = pageImageStore($file);
+
+            if (($stored['ok'] ?? false) !== true) {
+                finishSectionAction(['ok' => false, 'error' => (string) ($stored['error'] ?? '')], $to, '');
+
+                return;
+            }
+
+            // Присланный файл важнее текстового поля: имя и формат решил сервер, а путь человек
+            // мог вписать старый. Если сохранение строки сорвётся, файл удалится ниже.
+            $uploadedImage = (string) $stored['href'];
+            $sectionValues['image'] = $uploadedImage;
+        }
+    }
+
     if ($op === 'create-page') {
         // Создание приходит со списка: успех ведёт в редактор новой страницы, отказ — в список
         // с человеческой причиной в flash.
@@ -429,14 +460,20 @@ function coreAdminPagesAction(array $params = []): void
 
     $result = match ($op) {
         'save-page' => updatePage($pageId, pagesPageValuesFromPost(), nowUtc()),
-        'create-section' => createSection($pageId, pagesSectionValuesFromPost(), nowUtc()),
-        'save-section' => updateSection(postString('section'), pagesSectionValuesFromPost(), nowUtc()),
+        'create-section' => createSection($pageId, $sectionValues ?? [], nowUtc()),
+        'save-section' => updateSection(postString('section'), $sectionValues ?? [], nowUtc()),
         'move-section' => sectionMove(postString('section'), postString('dir')),
         'toggle-section' => sectionToggle(postString('section'), postString('visible') !== '0'),
         'delete-section' => sectionDelete(postString('section')),
         'delete-page' => deletePage($pageId),
         default => ['ok' => false, 'error' => 'Неизвестное действие.'],
     };
+
+    if ($uploadedImage !== '' && ($result['ok'] ?? false) !== true) {
+        // Файл уже на диске, но на него никто не сослался: удалить дешевле, чем оставить
+        // осиротевшую картинку, которую никто не найдёт.
+        pageImageDelete($uploadedImage);
+    }
 
     // Успех у страницы уводит в список — страницы больше нет. Остальные действия остаются
     // на своём экране.
@@ -453,6 +490,14 @@ function coreAdminPagesAction(array $params = []): void
         'delete-page' => 'page_deleted',
         default => '',
     };
+
+    // Формы секций плавающая кнопка отправляет через fetch: ей нужен ответ, а не PRG-редирект.
+    // Остальные действия (страница, меню, приложения) остаются на прежнем канале.
+    if ($op === 'create-section' || $op === 'save-section') {
+        finishSectionAction($result, $to, $notice);
+
+        return;
+    }
 
     finishAppAction($result, $to, $notice);
 }
@@ -482,6 +527,37 @@ function finishAppAction(array $result, string $to, string $notice): void
     }
 
     redirectWithNotice($to, $notice);
+}
+
+// Плавающая кнопка конструктора присылает этот заголовок: ответом должен быть JSON, а не
+// PRG-редирект. Иначе fetch следовал бы за редиректом, забирал сессионное уведомление и терял
+// причину отказа, которую человек обязан увидеть рядом с формой.
+function sectionSaveIsJson(): bool
+{
+    return (string) ($_SERVER['HTTP_X_CMS_SECTION_SAVE'] ?? '') === '1';
+}
+
+/**
+ * @param array{ok: bool, error?: string} $result
+ */
+function finishSectionAction(array $result, string $to, string $notice): void
+{
+    if (!sectionSaveIsJson()) {
+        finishAppAction($result, $to, $notice);
+
+        return;
+    }
+
+    $ok = ($result['ok'] ?? false) === true;
+    $payload = [
+        'ok' => $ok,
+        'error' => $ok ? '' : (string) ($result['error'] ?? 'Действие не удалось.'),
+        'notice' => $ok ? $notice : '',
+    ];
+
+    respond(200, (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), [
+        'Content-Type' => 'application/json; charset=utf-8',
+    ]);
 }
 
 /** Экран «Меню»: две карты слотов, штрихи пунктов правятся на месте.

@@ -56,8 +56,7 @@ $form = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="description"></label>'
     . '<label class="block text-sm"><span class="font-medium">Статус</span>'
     . '<select class="min-h-[44px] ' . e($input) . '" name="status">' . $statusOptions . '</select></label>'
-    . '<label class="flex items-center gap-2 text-sm"><input class="min-h-[44px] size-11 rounded border border-ink/20 bg-white" type="checkbox" name="noindex" value="1">'
-    . '<span>Скрыть страницу от поисковиков</span></label>'
+    . adminCheckbox('noindex', 'Скрыть страницу от поисковиков')
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Создать</button>'
     . '</form></section>';
 

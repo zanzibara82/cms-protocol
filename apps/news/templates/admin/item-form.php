@@ -123,22 +123,27 @@ $fields .= $two(
         'hint' => 'Названия через запятую, до ' . fieldLimit(TAG_FIELDS, 'perItem') . ' штук. Новое название заведётся в справочнике само.',
     ], $values, $errors),
     '<div class="space-y-1"><label class="block text-sm" for="f-cover">'
-        . '<span class="font-medium">Обложка</span>'
-        . '<input class="min-h-[44px] ' . e($INPUT . ' font-mono') . '" id="f-cover" name="cover" type="text" maxlength="'
-        . e((string) NEWS_FORM_MAX['cover']) . '" value="' . e($values['cover']) . '"'
-        . ($coverError === '' ? '' : ' aria-invalid="true"') . ' placeholder="/uploads/images/…">'
-        . '</label>'
+        . '<span class="font-medium">Обложка</span></label>'
+        . '<div class="mt-1 flex items-start gap-2">'
+        . '<input class="min-h-[44px] min-w-0 flex-1 rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm font-mono"'
+        . ' id="f-cover" name="cover" type="text" maxlength="' . e((string) NEWS_FORM_MAX['cover']) . '"'
+        . ' value="' . e($values['cover']) . '"' . ($coverError === '' ? '' : ' aria-invalid="true"')
+        . ' placeholder="/uploads/images/…">'
+        . '<input class="sr-only" id="f-cover_file" name="cover_file" type="file"'
+        . ' accept="image/jpeg,image/png,image/webp">'
+        . '<label class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5"'
+        . ' for="f-cover_file" title="Выбрать картинку с компьютера">'
+        . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>'
+        . '<span class="sr-only">Выбрать картинку с компьютера</span></label>'
+        . '</div>'
         . '<p class="' . e($coverError === '' ? 'text-sm text-ink/60' : 'text-sm text-bad') . '"'
         . ($coverError === '' ? '' : ' role="alert"') . '>'
-        . e($coverError !== '' ? $coverError : 'Путь картинки этого сайта. ' . $textHint) . '</p>'
-        . '<input class="block min-h-[44px] w-full text-sm" id="f-cover_file" name="cover_file" type="file"'
-        . ' accept="image/jpeg,image/png,image/webp">'
-        . '<label class="block text-sm text-ink/60" for="f-cover_file">или загрузите файл — jpg, png или webp до '
-        . NEWS_IMAGE_MAX_MB . ' МБ</label></div>'
+        . e($coverError !== '' ? $coverError : 'Путь картинки этого сайта. ' . $textHint
+            . ' Или выберите файл: jpg, png или webp до ' . NEWS_IMAGE_MAX_MB . ' МБ.') . '</p></div>'
 );
 
 $publish = $row([
-    'name' => 'publishedAt', 'label' => 'Срок публикации', 'type' => 'datetime-local',
+    'name' => 'publishedAt', 'label' => 'Дата публикации', 'type' => 'datetime-local',
     'hint' => 'Пустое поле значит «сразу». Время считается по Москве: материал появится сам, когда наступит срок.',
 ], $values, $errors);
 

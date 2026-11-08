@@ -131,7 +131,7 @@ final class NewsValidatorsTest extends TestCase
             $parsed = parsePublishedAt($raw);
 
             self::assertSame(
-                'Срок публикации нужно выбрать в поле даты и времени — например, 04.10.2026 09:00.',
+                'Дату публикации нужно выбрать в поле даты и времени — например, 04.10.2026 09:00.',
                 (string) ($parsed['error'] ?? ''),
                 $raw
             );

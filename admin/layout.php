@@ -11,6 +11,10 @@ const ADMIN_CORE_TABS = [
     ['href' => '/admin/apps', 'label' => 'Приложения'],
 ];
 
+// Конструктор страниц подключает один внешний скрипт: CSP запрещает инлайновый код, а кнопка
+// сохранения должна работать без перезагрузки на каждое изменение.
+const ADMIN_SECTIONS_HEAD = '<script src="/assets/js/admin-sections.js" defer></script>';
+
 /** @return list<array{href: string, label: string}> */
 function adminTabs(): array
 {
@@ -53,6 +57,26 @@ function adminNotice(?string $text): string
 
     return '<p class="mb-4 rounded-lg border border-good/30 bg-good/10 px-4 py-3 text-sm text-good" role="status">'
         . e($text) . '</p>';
+}
+
+// Чекбокс админки: видимая рамка 22 px — вдвое меньше прежних 44 px. Зона нажатия остаётся
+// 44 px у подписи: input скрыт классом sr-only (страж TapTargetTest пропускает скрытые поля),
+// а палец попадает в label. Галочка рисуется SVG и проявляется через peer-checked.
+function adminCheckbox(string $name, string $label, string $value = '1', bool $checked = false): string
+{
+    $box = 'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded border border-ink/20 '
+        . 'bg-white text-transparent peer-checked:bg-ink peer-checked:text-cream '
+        . 'peer-focus-visible:ring-2 peer-focus-visible:ring-accent';
+
+    return '<label class="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm">'
+        . '<input class="peer sr-only" type="checkbox" name="' . e($name) . '" value="' . e($value) . '"'
+        . ($checked ? ' checked' : '') . '>'
+        . '<span class="' . e($box) . '" aria-hidden="true">'
+        . '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">'
+        . '<path d="M4 10.5 8 14.5 16 5.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'
+        . '</svg></span>'
+        . '<span>' . e($label) . '</span>'
+        . '</label>';
 }
 
 function adminTabsHtml(string $current): string

@@ -18,6 +18,8 @@ require_once __DIR__ . '/form.php';
 require_once __DIR__ . '/hooks.php';
 require_once __DIR__ . '/template.php';
 require_once __DIR__ . '/request.php';
+// Приём картинок конструктора страниц: файл проверяется до записи на диск, а имя генерирует сервер.
+require_once __DIR__ . '/upload.php';
 require_once __DIR__ . '/response.php';
 require_once __DIR__ . '/router.php';
 require_once __DIR__ . '/auth.php';
