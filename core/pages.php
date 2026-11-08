@@ -34,10 +34,10 @@ const PAGES_HOME_ID = '';
 const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress'];
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
-// pricing и toc — третья. Остальные добираются своими пачками. Чужой вид ядро не рисует само —
-// уходит фильтру pages_block_<kind> (вклад приложения).
+// pricing и toc — третья, gallery и related — четвёртая. Остальные добираются своими пачками.
+// Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -51,6 +51,8 @@ const PAGES_KIND_NAMES = [
     'quote' => 'Цитата',
     'pricing' => 'Тарифы',
     'toc' => 'Содержание страницы',
+    'gallery' => 'Галерея',
+    'related' => 'Соседние ссылки',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];
@@ -564,7 +566,7 @@ function pagesFormRows(mixed $raw, array $keys): array
 }
 
 /**
- * Перечень видов для селекта конструктора: семь видов ядра плюс вклады приложений, которые
+ * Перечень видов для селекта конструктора: виды ядра плюс вклады приложений, которые
  * отвечают на pages_block_kinds (задача вклада живых новостей). Название вида человек выбирает
  * по подписи, а не по технической метке; поля настроек вклада конструктор рисует формой из
  * этого же ответа — значения ядро хранит как есть и смысла их не понимает.

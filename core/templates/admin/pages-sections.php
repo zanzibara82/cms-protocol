@@ -171,7 +171,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         . $sectionMedia
         . $settingsBlock
         . '<div class="space-y-2"><h4 class="text-sm font-medium">Кнопки</h4>' . $buttonsRows($exists ? pagesButtonsOf($section['buttons'] ?? null) : []) . '</div>'
-        . '<div class="space-y-2"><h4 class="text-sm font-medium">Строки (карточки, шаги, вопросы, пункты, тарифы и цитаты)</h4>' . $itemsRows($exists ? pagesItemsOf($section['items'] ?? null) : []) . '</div>'
+        . '<div class="space-y-2"><h4 class="text-sm font-medium">Строки (карточки, шаги, вопросы, пункты, тарифы, цитаты, кадры и соседние ссылки)</h4>' . $itemsRows($exists ? pagesItemsOf($section['items'] ?? null) : []) . '</div>'
         . adminCheckbox('visible', 'Показывать на странице', '1', $visible)
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:opacity-90" type="submit">Сохранить блок</button>'
         . '</form>';

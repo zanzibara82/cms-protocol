@@ -297,6 +297,31 @@ final class PagesPublicTest extends TestCase
             'items' => [['title' => 'Автор без текста', 'text' => '']],
         ]), nowUtc());
 
+        // Галерея: кадр без картинки в сетку не идёт, подпись кадра служит описанием картинки.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'gallery',
+            'anchor' => 'fotografii',
+            'title' => 'Как это выглядит',
+            'lead_text' => 'Кадры из классов.',
+            'note' => 'Снято в этом году',
+            'items' => [
+                ['image' => '/uploads/images/gallery-1.jpg', 'title' => 'Разговорный клуб', 'note' => 'Среда'],
+                ['image' => '/uploads/images/gallery-2.jpg', 'title' => '', 'note' => 'Без подписи'],
+                ['image' => '', 'title' => 'Кадр без картинки', 'note' => ''],
+            ],
+        ]), nowUtc());
+
+        // Соседние места: строка без адреса ссылкой не становится.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'related',
+            'anchor' => 'sosednee',
+            'title' => 'Смотрите также',
+            'items' => [
+                ['title' => 'Программа курса', 'text' => 'Модули и уроки.', 'href' => '/o-nas'],
+                ['title' => 'Без адреса', 'text' => 'Остаётся текстом.', 'href' => ''],
+            ],
+        ]), nowUtc());
+
         createSection((string) $vidy['id'], $values([
             'kind' => 'faq',
             'title' => 'Частые вопросы',
@@ -461,6 +486,42 @@ final class PagesPublicTest extends TestCase
         self::assertStringContainsString('Мария', $page['body'], 'автор цитаты назван');
         self::assertStringContainsString('A2 → B1', $page['body'], 'подпись к автору напечатана');
         self::assertStringNotContainsString('Пустая цитата', $page['body'], 'цитата без текста не печатается даже с автором');
+    }
+
+    public function testGalleryПечатаетКадрыСПодписями(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Как это выглядит', $page['body'], 'заголовок галереи напечатан');
+        self::assertStringContainsString('Кадры из классов.', $page['body'], 'лид галереи напечатан');
+        self::assertStringContainsString('src="/uploads/images/gallery-1.jpg"', $page['body'], 'кадр печатается картинкой');
+        self::assertStringContainsString('alt="Разговорный клуб"', $page['body'], 'подпись кадра служит описанием картинки');
+        self::assertMatchesRegularExpression(
+            '~<figcaption\b[^>]*>.*?Разговорный клуб.*?</figcaption>~s',
+            $page['body'],
+            'подпись кадра печатается под ним'
+        );
+        self::assertStringContainsString('Среда', $page['body'], 'место съёмки напечатано');
+        self::assertStringContainsString('src="/uploads/images/gallery-2.jpg"', $page['body'], 'кадр без подписи печатается');
+        self::assertStringNotContainsString('Кадр без картинки', $page['body'], 'кадр без картинки не печатается');
+        self::assertStringContainsString('Снято в этом году', $page['body'], 'примечание блока — подпись под галереей');
+    }
+
+    public function testRelatedВедётНаСоседниеМестаИМолчитНаСтрокеБезАдреса(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Смотрите также', $page['body'], 'заголовок блока напечатан');
+        self::assertMatchesRegularExpression(
+            '~<a\b[^>]*href="/o-nas"[^>]*>\s*Программа курса</a>~s',
+            $page['body'],
+            'соседнее место печатается ссылкой'
+        );
+        self::assertStringContainsString('Модули и уроки.', $page['body'], 'пояснение к ссылке напечатано');
+        self::assertStringNotContainsString('Без адреса', $page['body'], 'строка без адреса ссылкой не становится');
+        self::assertStringNotContainsString('Остаётся текстом.', $page['body'], 'пояснение обрывка тоже не печатается');
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void
