@@ -34,11 +34,11 @@ const PAGES_HOME_ID = '';
 const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress'];
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
-// pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая. Остальные
-// добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind>
-// (вклад приложения).
+// pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая, banner и video —
+// шестая. Остальные добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру
+// pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -56,6 +56,8 @@ const PAGES_KIND_NAMES = [
     'related' => 'Соседние ссылки',
     'table' => 'Ведомость',
     'tabs' => 'Вкладки',
+    'banner' => 'Баннер',
+    'video' => 'Видео',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];
@@ -80,6 +82,8 @@ const PAGES_KIND_FIELDS = [
     'related' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'table' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'note'],
     'tabs' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'banner' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'image', 'items', 'buttons'],
+    'video' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'buttons'],
     'cta' => ['anchor', 'badge', 'title', 'lead_text', 'buttons'],
     'faq' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
 ];
@@ -98,6 +102,8 @@ const PAGES_KIND_ITEM_FIELDS = [
     'related' => ['href', 'title', 'text'],
     'table' => ['title', 'text', 'note'],
     'tabs' => ['title', 'text'],
+    'banner' => ['note', 'text'],
+    'video' => ['video', 'image', 'title', 'text'],
     'faq' => ['title', 'text'],
 ];
 
@@ -114,6 +120,8 @@ const PAGES_KIND_ITEM_LABELS = [
     'related' => ['href' => 'Адрес', 'title' => 'Заголовок ссылки', 'text' => 'Пояснение'],
     'table' => ['title' => 'Название', 'text' => 'Значение', 'note' => 'Примечание'],
     'tabs' => ['title' => 'Название вкладки', 'text' => 'Содержимое'],
+    'banner' => ['note' => 'Надпись', 'text' => 'Текст'],
+    'video' => ['video' => 'Ссылка на видео или файл', 'image' => 'Обложка', 'title' => 'Заголовок', 'text' => 'Подпись'],
     'faq' => ['title' => 'Вопрос', 'text' => 'Ответ'],
 ];
 
@@ -533,6 +541,30 @@ function pagesItemsOf(mixed $raw): array
     }
 
     return $items;
+}
+
+/**
+ * Файл видео для секции «Видео»: страница живёт под строгой CSP (default-src 'self'), поэтому
+ * плеером становится только собственный файл сайта — «/videos/promo.mp4» и прочие видео-форматы.
+ * Чужой домен (включая протокол-относительный «//») и не-видео файл не проходят: публика не
+ * видит пустого плеера, а правку замечают в конструкторе. Расширение судят по пути без хвоста
+ * «?v=…» — запрос к файлу, а не к странице-обёртке площадки.
+ */
+function pagesVideoFile(mixed $raw): string
+{
+    $value = trim((string) $raw);
+
+    if ($value === '' || !str_starts_with($value, '/') || str_starts_with($value, '//')) {
+        return '';
+    }
+
+    $path = (string) parse_url($value, PHP_URL_PATH);
+
+    if ($path === '' || preg_match('/\.(mp4|webm|ogv|ogg)$/i', $path) !== 1) {
+        return '';
+    }
+
+    return $value;
 }
 
 /**

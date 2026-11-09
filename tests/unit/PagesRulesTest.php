@@ -58,11 +58,11 @@ final class PagesRulesTest extends TestCase
     public function testВидыПервогоЗаходаСперечнемИмен(): void
     {
         self::assertSame(
-            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'cta', 'faq'],
+            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'cta', 'faq'],
             PAGES_KINDS,
             'Решение 3 штурма: каркас и виды первого захода, остальные добираются пачками '
             . '(split и quote — вторая, pricing и toc — третья, gallery и related — четвёртая, '
-            . 'table и tabs — пятая)'
+            . 'table и tabs — пятая, banner и video — шестая)'
         );
 
         foreach (PAGES_KINDS as $kind) {
@@ -92,6 +92,22 @@ final class PagesRulesTest extends TestCase
             'в содержание идут только места с якорем и заголовком'
         );
         self::assertSame([], pagesTocEntries([]), 'пустая страница — пустое содержание');
+    }
+
+    public function testВидеоФайлСекцииПризнаётсяТолькоСайтовым(): void
+    {
+        // Вид «Видео» живёт под строгой CSP (default-src 'self'): страница показывает только
+        // собственный файл сайта. Чужой домен, протокол-относительный «//» и не-видео файл
+        // плеером не становятся — правку видно в конструкторе, а публика не видит пустого плеера.
+        self::assertSame('/videos/promo.mp4', pagesVideoFile('/videos/promo.mp4'));
+        self::assertSame('/videos/promo.webm', pagesVideoFile('/videos/promo.webm'));
+        self::assertSame('/videos/promo.ogv', pagesVideoFile('/videos/promo.ogv'));
+        self::assertSame('/videos/promo.ogg', pagesVideoFile('/videos/promo.ogg'));
+        self::assertSame('', pagesVideoFile('https://www.youtube.com/watch?v=abc'));
+        self::assertSame('', pagesVideoFile('//cdn.example.com/promo.mp4'));
+        self::assertSame('', pagesVideoFile('/files/plan.pdf'));
+        self::assertSame('', pagesVideoFile(''));
+        self::assertSame('', pagesVideoFile(null));
     }
 
     public function testПределыПолейЧитаютсяОднимСпособом(): void

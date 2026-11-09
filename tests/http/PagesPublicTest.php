@@ -359,6 +359,38 @@ final class PagesPublicTest extends TestCase
             ],
         ]), nowUtc());
 
+        // Баннер: картинка на подложке, поверх текст и карточки «до/после». Карточка без текста
+        // не печатается — пустая плашка «до/после» ничего не сообщает.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'banner',
+            'anchor' => 'aktsiya',
+            'title' => 'Летний интенсив',
+            'lead_text' => 'Две недели погружения в язык.',
+            'note' => 'Места ограничены',
+            'image' => '/uploads/images/banner.jpg',
+            'image_alt' => 'Класс летом',
+            'items' => [
+                ['note' => 'До', 'text' => 'Разрозненные темы.'],
+                ['note' => 'После', 'text' => 'Система и свободная речь.'],
+                ['note' => 'Обрывок', 'text' => ''],
+            ],
+            'buttons' => [['label' => 'Узнать программу', 'href' => '/o-nas']],
+        ]), nowUtc());
+
+        // Видео: плеером становится только собственный видеофайл сайта — чужая площадка и
+        // не-видео файл под CSP не показываются вовсе.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'video',
+            'anchor' => 'roliki',
+            'title' => 'Видео с уроков',
+            'lead_text' => 'Короткие ролики о школе.',
+            'items' => [
+                ['video' => '/videos/lesson.mp4', 'image' => '/uploads/images/lesson-poster.jpg', 'title' => 'Урок', 'text' => 'Фрагмент занятия.'],
+                ['video' => 'https://www.youtube.com/watch?v=abc', 'image' => '', 'title' => 'Чужой ролик', 'text' => ''],
+                ['video' => '/files/plan.pdf', 'image' => '', 'title' => 'Не видео', 'text' => ''],
+            ],
+        ]), nowUtc());
+
         createSection((string) $vidy['id'], $values([
             'kind' => 'faq',
             'title' => 'Частые вопросы',
@@ -614,6 +646,47 @@ final class PagesPublicTest extends TestCase
         self::assertCount(1, array_unique($groups[1]), 'группа у блока одна — два блока вкладок не закрывают друг друга');
         self::assertStringContainsString('B1 — свободная речь.', $page['body'], 'вторая вкладка напечатана');
         self::assertStringNotContainsString('Вкладка без названия', $page['body'], 'вкладка без названия не печатается');
+    }
+
+    public function testBannerПечатаетКартинкуТекстИКарточкиДоПосле(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Летний интенсив', $page['body'], 'заголовок баннера напечатан');
+        self::assertStringContainsString('Две недели погружения в язык.', $page['body'], 'лид баннера напечатан');
+        self::assertStringContainsString('src="/uploads/images/banner.jpg"', $page['body'], 'картинка баннера напечатана подложкой');
+        self::assertStringContainsString('alt="Класс летом"', $page['body'], 'у картинки баннера есть описание');
+        self::assertMatchesRegularExpression(
+            '~class="[^"]*\bfrom-paper\b[^"]*"~',
+            $page['body'],
+            'подложка баннера — градиентная плашка от цвета бумаги'
+        );
+        self::assertStringContainsString('До', $page['body'], 'надпись карточки «до» напечатана');
+        self::assertStringContainsString('Разрозненные темы.', $page['body'], 'текст карточки «до» напечатан');
+        self::assertStringContainsString('После', $page['body'], 'надпись карточки «после» напечатана');
+        self::assertStringContainsString('Система и свободная речь.', $page['body'], 'текст карточки «после» напечатан');
+        self::assertStringNotContainsString('Обрывок', $page['body'], 'карточка без текста не печатается');
+        self::assertMatchesRegularExpression('~href="/o-nas"[^>]*>Узнать программу</a>~', $page['body'], 'кнопка баннера ведёт на программу');
+        self::assertStringContainsString('Места ограничены', $page['body'], 'примечание баннера напечатано сноской');
+    }
+
+    public function testVideoПечатаетСайтовыйРоликИМолчитНаЧужом(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Видео с уроков', $page['body'], 'заголовок видео напечатан');
+        self::assertStringContainsString('Короткие ролики о школе.', $page['body'], 'лид видео напечатан');
+        self::assertMatchesRegularExpression(
+            '~<video\b[^>]*\bsrc="/videos/lesson\.mp4"~',
+            $page['body'],
+            'собственный видеофайл печатается плеером'
+        );
+        self::assertStringContainsString('poster="/uploads/images/lesson-poster.jpg"', $page['body'], 'обложка ролика печатается');
+        self::assertStringContainsString('Урок — Фрагмент занятия.', $page['body'], 'подпись ролика собрана из заголовка и текста');
+        self::assertStringNotContainsString('Чужой ролик', $page['body'], 'чужая площадка под CSP плеером не становится');
+        self::assertStringNotContainsString('Не видео', $page['body'], 'файл не-видео плеером не становится');
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void
