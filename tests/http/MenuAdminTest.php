@@ -68,7 +68,7 @@ final class MenuAdminTest extends TestCase
         self::assertStringContainsString('Раздел открыт только редактору и администратору.', $denied['body']);
     }
 
-    public function testЭкранОткрытРедакторуИПоказываетДвеКарты(): void
+    public function testЭкранОткрытРедакторуИПоказываетВкладкиМеню(): void
     {
         $this->login();
 
@@ -76,11 +76,44 @@ final class MenuAdminTest extends TestCase
 
         self::assertSame(200, $screen['status']);
         self::assertStringContainsString('<title>Меню — админка</title>', $screen['body']);
-        self::assertStringContainsString('Шапка', $screen['body'], 'первая карта слота');
-        self::assertStringContainsString('Подвал', $screen['body'], 'вторая карта слота');
+        self::assertStringContainsString('Верхнее меню', $screen['body'], 'первая вкладка');
+        self::assertStringContainsString('Меню в футере', $screen['body'], 'вторая вкладка');
+        self::assertStringContainsString('href="/admin/menu?tab=header"', $screen['body'], 'вкладка шапки — ссылка');
+        self::assertStringContainsString('href="/admin/menu?tab=footer"', $screen['body'], 'вкладка подвала — ссылка');
+        self::assertStringContainsString('Строки шапки печатаются', $screen['body'], 'по умолчанию открыта шапка');
+        self::assertStringNotContainsString('Пункты подвала группируются', $screen['body'], 'карта подвала скрыта за вкладкой');
         self::assertStringContainsString('name="op" value="create-item"', $screen['body'], 'добавление — форма с op, а не отдельный адрес');
         self::assertStringContainsString('Пунктов ещё нет', $screen['body'], 'пустой день-1 экран не ломается');
         self::assertStringContainsString('noindex, nofollow', $screen['body'], 'приватный экран поисковой машине закрыт');
+
+        $footer = Kernel::get('/admin/menu?tab=footer');
+
+        self::assertSame(200, $footer['status']);
+        self::assertStringContainsString('Пункты подвала группируются', $footer['body'], 'вкладка подвала открывает свою карту');
+        self::assertStringNotContainsString('Строки шапки печатаются', $footer['body'], 'карта шапки скрыта за вкладкой');
+
+        $unknown = Kernel::get('/admin/menu?tab=chuzhaya');
+
+        self::assertStringContainsString('Строки шапки печатаются', $unknown['body'], 'неизвестная вкладка возвращает к шапке');
+    }
+
+    public function testДействиеВПодвалеВозвращаетНаВкладкуПодвала(): void
+    {
+        $this->login();
+        $token = $this->token('/admin/menu?tab=footer');
+
+        $created = Kernel::post('/admin/menu', [
+            '_token' => $token,
+            'op' => 'create-item',
+            'tab' => 'footer',
+            'slot' => 'FOOTER',
+            'label' => 'Подвал вкладки',
+            'href' => '/podval-vkladki',
+            'section' => 'Разделы',
+        ]);
+
+        self::assertSame(302, $created['status']);
+        self::assertSame('/admin/menu?tab=footer&notice=menu_created', $created['headers']['location']);
     }
 
     public function testСозданиеПунктаНазываетКлючУведомления(): void

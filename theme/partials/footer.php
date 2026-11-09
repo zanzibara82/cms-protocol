@@ -2,10 +2,14 @@
 
 declare(strict_types=1);
 
-// Подвал: колонки пунктов читаются из базы (menuFooterSections), «Карта сайта» остаётся
-// статикой — адрес машины состояния, не контента. Пустое меню день-1 печатает только
-// брендовый ряд: колонок нет, заглушка не рисуется.
+// Подвал: колонки пунктов читаются из базы (menuFooterSections), текст и логотип — из настроек
+// шапки/подвала (/admin/settings), «Карта сайта» остаётся статикой — адрес машины состояния, не
+// контента. Пустое меню день-1 печатает только брендовый ряд: колонок нет, заглушка не рисуется.
 $footerSections = menuFooterSections();
+$footerLogo = function_exists('siteSettingValue') ? siteSettingValue('footer_logo') : '';
+$footerText = function_exists('siteSettingValue')
+    ? siteSettingValue('footer_text')
+    : (string) configValue('SITE_NAME', 'Школа') . ' — новости, курсы и объявления школы.';
 ?>
 <footer class="mt-12 border-t border-ink/10 bg-cream">
     <div class="mx-auto w-full max-w-5xl px-4 py-8 text-sm sm:px-6">
@@ -26,7 +30,12 @@ $footerSections = menuFooterSections();
         <?php else: ?>
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
         <?php endif; ?>
-            <p><?= e((string) configValue('SITE_NAME', 'Школа')) ?> — новости, курсы и объявления школы.</p>
+            <?php if ($footerLogo !== ''): ?>
+                <img class="h-8 w-auto" src="<?= e($footerLogo) ?>" alt="">
+            <?php endif; ?>
+            <?php if ($footerText !== ''): ?>
+                <p><?= e($footerText) ?></p>
+            <?php endif; ?>
             <nav class="flex flex-wrap gap-x-4 gap-y-2 sm:ml-auto">
                 <a class="inline-flex min-h-[44px] items-center hover:underline" href="/sitemap.xml">Карта сайта</a>
             </nav>

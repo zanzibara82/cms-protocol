@@ -9,6 +9,8 @@ const ADMIN_CORE_TABS = [
     ['href' => '/admin', 'label' => 'Сводка'],
     ['href' => '/admin/pages', 'label' => 'Страницы'],
     ['href' => '/admin/apps', 'label' => 'Приложения'],
+    ['href' => '/admin/menu', 'label' => 'Меню'],
+    ['href' => '/admin/settings', 'label' => 'Настройки'],
 ];
 
 // Конструктор страниц подключает один внешний скрипт: CSP запрещает инлайновый код, а кнопка

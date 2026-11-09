@@ -24,9 +24,12 @@ function registerCoreRoutes(): void
     // экране «Приложения». Адрес выбирает контекст: список, главная или страница.
     addRoute('POST', '/admin/pages/{id}', 'coreAdminPagesAction', ['private' => true, 'permission' => 'login']);
     // Меню шапки и подвала — тот же род контента (право login, как конструктор): экран с двумя
-    // картами и один POST-обработчик (op) для всех пяти действий пунктов.
+    // вкладками и один POST-обработчик (op) для всех пяти действий пунктов.
     addRoute('GET', '/admin/menu', 'coreAdminMenu', ['private' => true, 'permission' => 'login']);
     addRoute('POST', '/admin/menu', 'coreAdminMenuAction', ['private' => true, 'permission' => 'login']);
+    // Текст и логотипы шапки/подвала — настройки контента, поэтому право то же, что у меню.
+    addRoute('GET', '/admin/settings', 'coreAdminSettings', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/settings', 'coreAdminSettingsAction', ['private' => true, 'permission' => 'login']);
     addRoute('GET', '/sitemap.xml', 'coreSitemap');
     addRoute('GET', '/robots.txt', 'coreRobots');
     // Страницы живут на /{slug} одним сегментом, поэтому маршрут идёт в конец реестра: точные
@@ -314,8 +317,10 @@ function pagesPageValuesFromPost(): array
  * (образец — характеристики доски), пустые строки отбрасываются в pagesFormRows; настройки
  * вклада едут в JSON как есть — их смысл знает вклад приложения, не ядро.
  *
- * У «Карточек» полей примечания и картинки в форме нет. Если ключа нет в POST, остаётся прежнее
- * значение: скрытое поле не должно стирать данные, которых человек не касался.
+ * Состав полей решает вид: у «Карточек» нет примечания и общей картинки, у шагов нет кнопок и
+ * ссылок в строке. Поле, которого форма вида не печатает, остаётся прежним значением: скрытое
+ * поле не должно стирать данные, до которых человек не добрался. Лишние подполя строки тоже не
+ * сохраняются — pagesFormRows читает только ключи вида.
  *
  * @param array<string, mixed>|null $existing прежняя строка секции при сохранении
  * @return array<string, mixed>
@@ -323,22 +328,40 @@ function pagesPageValuesFromPost(): array
 function pagesSectionValuesFromPost(?array $existing = null): array
 {
     $post = postAll();
+    $kind = postString('kind');
+    $allowed = pagesKindFieldsOf($kind);
+    $allows = static fn (string $key): bool => in_array($key, $allowed, true);
     $kept = static fn (string $key): string => array_key_exists($key, $post)
         ? postString($key)
         : (string) ($existing[$key] ?? '');
+    $existingButtons = is_array($existing['buttons'] ?? null) ? array_values((array) $existing['buttons']) : [];
+    $existingItems = is_array($existing['items'] ?? null) ? array_values((array) $existing['items']) : [];
+    $existingSettings = is_array($existing['settings'] ?? null) ? (array) $existing['settings'] : [];
+    $itemKeys = [];
+    foreach (pagesKindItemFieldsOf($kind) as $field) {
+        $itemKeys[] = $field['key'];
+    }
 
     return [
-        'kind' => postString('kind'),
+        'kind' => $kind,
         'anchor' => postString('anchor'),
         'badge' => postString('badge'),
         'title' => postString('title'),
         'lead_text' => postString('lead_text'),
-        'note' => $kept('note'),
-        'image' => $kept('image'),
-        'image_alt' => $kept('image_alt'),
-        'buttons' => pagesFormRows($post['buttons'] ?? null, ['label', 'href', 'blank']),
-        'items' => pagesFormRows($post['items'] ?? null, ['title', 'text', 'href', 'image', 'note']),
-        'settings' => pagesSettingsOf($post['settings'] ?? null),
+        // У вида без примечания и картинки ключей в POST нет — прежние значения остаются.
+        'note' => $allows('note') ? $kept('note') : (string) ($existing['note'] ?? ''),
+        'image' => $allows('image') ? $kept('image') : (string) ($existing['image'] ?? ''),
+        'image_alt' => $allows('image') ? $kept('image_alt') : (string) ($existing['image_alt'] ?? ''),
+        'buttons' => $allows('buttons') && array_key_exists('buttons', $post)
+            ? pagesFormRows($post['buttons'], ['label', 'href', 'blank'])
+            : $existingButtons,
+        'items' => $allows('items') && array_key_exists('items', $post)
+            ? pagesFormRows($post['items'], $itemKeys)
+            : $existingItems,
+        // Настройки объявляет только вклад приложения; у вида ядра их нет и трогать нечего.
+        'settings' => !in_array($kind, PAGES_KINDS, true) && array_key_exists('settings', $post)
+            ? pagesSettingsOf($post['settings'])
+            : $existingSettings,
         'visible' => postString('visible') !== '0',
     ];
 }
@@ -570,7 +593,13 @@ function finishSectionAction(array $result, string $to, string $notice): void
     ]);
 }
 
-/** Экран «Меню»: две карты слотов, штрихи пунктов правятся на месте.
+/** Вкладка меню: неизвестное значение не должно открывать пустой экран — только две вкладки. */
+function menuAdminTab(mixed $raw): string
+{
+    return $raw === 'footer' ? 'footer' : 'header';
+}
+
+/** Экран «Меню»: две вкладки слотов, штрихи пунктов правятся на месте.
  * @param array<string, string> $params
  */
 function coreAdminMenu(array $params = []): void
@@ -581,6 +610,7 @@ function coreAdminMenu(array $params = []): void
         'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
         'alertTitle' => adminFailureTitle($alertReason),
         'alertReason' => $alertReason,
+        'tab' => menuAdminTab(queryString('tab')),
         'headerRows' => menuRowsForAdmin('HEADER'),
         'footerRows' => menuRowsForAdmin('FOOTER'),
     ], ['title' => 'Меню — админка', 'noindex' => true]);
@@ -590,7 +620,8 @@ function coreAdminMenu(array $params = []): void
  * Действия пунктов меню — один POST-обработчик (op): точка проверки CSRF одна, как у конструктора.
  * Успех — PRG на свой экран с ключом уведомления; видимость делит ключ с сохранением — и то и
  * другое сохранение пункта. Отказ (кривой адрес, призрачный пункт) уходит картой migration-failed
- * с человеческой причиной в сессионный flash.
+ * с человеческой причиной в сессионный flash. Вкладка едет скрытым полем формы: после действия
+ * человек остаётся в том же меню, а не прыгает в шапку.
  *
  * @param array<string, string> $params
  */
@@ -618,7 +649,88 @@ function coreAdminMenuAction(array $params = []): void
         default => '',
     };
 
-    finishAppAction($result, '/admin/menu', $notice);
+    $to = menuAdminTab(postString('tab')) === 'footer' ? '/admin/menu?tab=footer' : '/admin/menu';
+
+    finishAppAction($result, $to, $notice);
+}
+
+/**
+ * Экран «Настройки»: текст и логотип шапки и подвала. Значения читаются с запасными из
+ * siteSettingDefault(), чтобы пустая установка показывала то, что и так печатает тема.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminSettings(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $values = [];
+
+    foreach (SITE_SETTINGS_FIELDS as $key => $field) {
+        $values[$key] = siteSettingValue($key);
+    }
+
+    render('admin/settings', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'values' => $values,
+    ], ['title' => 'Настройки — админка', 'noindex' => true]);
+}
+
+/**
+ * Сохранение шапки и подвала: тексты и пути к логотипам пишутся одной транзакцией; присланный
+ * файл важнее текстового поля — имя и формат решил сервер. Если запись сорвалась, уже принятые
+ * файлы удаляются, чтобы на диске не осталось картинок без ссылки.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminSettingsAction(array $params = []): void
+{
+    csrfCheck();
+
+    $values = siteSettingsFromPost();
+    $uploaded = [];
+
+    foreach (['header_logo' => 'header_logo_file', 'footer_logo' => 'footer_logo_file'] as $key => $fileKey) {
+        $file = uploadedFile($fileKey);
+
+        if ($file === null) {
+            continue;
+        }
+
+        $stored = pageImageStore($file);
+
+        if (($stored['ok'] ?? false) !== true) {
+            foreach ($uploaded as $href) {
+                pageImageDelete($href);
+            }
+
+            finishAppAction(['ok' => false, 'error' => (string) ($stored['error'] ?? '')], '/admin/settings', '');
+
+            return;
+        }
+
+        $values[$key] = (string) $stored['href'];
+        $uploaded[] = $values[$key];
+    }
+
+    try {
+        siteSettingsSave($values);
+    } catch (Throwable $error) {
+        logError('settings.save_failed', ['message' => $error->getMessage()]);
+
+        foreach ($uploaded as $href) {
+            pageImageDelete($href);
+        }
+
+        finishAppAction(['ok' => false, 'error' => 'Настройки не сохранились — повторите попытку.'], '/admin/settings', '');
+
+        return;
+    }
+
+    logInfo('settings.saved', ['keys' => implode(',', array_keys(SITE_SETTINGS_FIELDS))]);
+
+    finishAppAction(['ok' => true, 'error' => ''], '/admin/settings', 'settings_saved');
 }
 
 /**
