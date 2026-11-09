@@ -258,6 +258,7 @@ $questions = [
         'options' => ['I am from Canada.', 'I am from Cuba.', 'I am from China.', 'I am from Colombia.'],
         'correct' => 0,
         'explanation' => 'звучит фраза о Канаде: I am from Canada',
+        'audio' => '/assets/audio/learn/placement-26.mp3',
     ],
     [
         'skill' => 'LISTENING',
@@ -265,6 +266,7 @@ $questions = [
         'options' => ['She has got three sisters.', 'He has got three sisters.', 'She has got two sisters.', 'She likes sisters.'],
         'correct' => 0,
         'explanation' => 'говорят о ней и о трёх сёстрах',
+        'audio' => '/assets/audio/learn/placement-27.mp3',
     ],
     [
         'skill' => 'LISTENING',
@@ -272,6 +274,7 @@ $questions = [
         'options' => ['739', '731', '793', '379'],
         'correct' => 0,
         'explanation' => 'seven three nine — это 739, порядок цифр важен',
+        'audio' => '/assets/audio/learn/placement-28.mp3',
     ],
     [
         'skill' => 'LISTENING',
@@ -279,6 +282,7 @@ $questions = [
         'options' => ['I am 20.', 'In Moscow.', 'By bus.', 'Yes, I do.'],
         'correct' => 1,
         'explanation' => 'вопрос о месте жительства, отвечает название города',
+        'audio' => '/assets/audio/learn/placement-29.mp3',
     ],
     [
         'skill' => 'LISTENING',
@@ -286,6 +290,7 @@ $questions = [
         'options' => ['We have lunch at eight.', 'We have breakfast at eight.', 'We wake up at eight.', 'We have dinner at eight.'],
         'correct' => 1,
         'explanation' => 'звучит have breakfast — завтрак в восемь',
+        'audio' => '/assets/audio/learn/placement-30.mp3',
     ],
 ];
 
@@ -298,7 +303,7 @@ foreach ($questions as $index => $question) {
         'options' => (string) json_encode($question['options'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         'correct_option_index' => $question['correct'],
         'explanation' => $question['explanation'],
-        'audio_url' => null,
+        'audio_url' => $question['audio'] ?? null,
         'passage_ref' => null,
         'sort' => $index + 1,
     ]);

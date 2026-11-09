@@ -741,6 +741,36 @@ final class LearnStudentTest extends TestCase
         self::assertStringContainsString('Тест на уровень', $page['body']);
         self::assertStringContainsString('Что означает слово «apple»?', $page['body']);
         self::assertStringContainsString('type="radio"', $page['body']);
+        self::assertStringContainsString('data-placement-cards', $page['body']);
+        self::assertStringContainsString('src="/assets/js/placement-cards.js"', $page['body']);
+        self::assertStringContainsString('data-placement-next', $page['body']);
+        self::assertStringContainsString('data-placement-prev', $page['body']);
+        self::assertStringContainsString('Завершить тест', $page['body']);
+        self::assertSame(
+            30,
+            substr_count($page['body'], 'data-placement-card>'),
+            'Каждый вопрос печатается отдельной карточкой'
+        );
+        self::assertSame(5, substr_count($page['body'], 'data-placement-audio>'), 'Аудирование 26–30 идёт с записью');
+        foreach ([26, 27, 28, 29, 30] as $number) {
+            self::assertStringContainsString(
+                '/assets/audio/learn/placement-' . (string) $number . '.mp3',
+                $page['body'],
+                'У вопроса ' . (string) $number . ' должна быть своя аудиозапись'
+            );
+        }
+        self::assertStringNotContainsString('correct_option_index', $page['body'], 'Правильные ответы не попадают в разметку');
+
+        $script = Kernel::get('/assets/js/placement-cards.js');
+
+        self::assertSame(200, $script['status'], 'Скрипт карточек должен отдаваться статикой');
+        self::assertStringContainsString('data-placement-card', $script['body']);
+
+        $audio = Kernel::get('/assets/audio/learn/placement-26.mp3');
+
+        self::assertSame(200, $audio['status'], 'Аудиозапись вопроса должна отдаваться статикой');
+        self::assertSame('audio/mpeg', $audio['headers']['content-type'] ?? '');
+        self::assertGreaterThan(1000, strlen($audio['body']), 'Аудиофайл не должен быть пустым');
 
         $test = one(
             'SELECT id, pass_score FROM ' . t('learn_test') . ' WHERE kind = ? AND status = ? LIMIT 1',

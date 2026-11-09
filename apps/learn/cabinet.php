@@ -180,7 +180,7 @@ function learnPlacementPage(array $params = []): void
 
     $testId = (string) $test['id'];
     $questions = all(
-        'SELECT id, skill, text, options, correct_option_index, explanation FROM ' . t('learn_test_question')
+        'SELECT id, skill, text, options, correct_option_index, explanation, audio_url FROM ' . t('learn_test_question')
             . ' WHERE test_id = ? ORDER BY sort, id LIMIT 100',
         [$testId]
     );
@@ -279,6 +279,7 @@ function learnPlacementPage(array $params = []): void
         'title' => 'Тест на уровень',
         'description' => 'Проверьте знания, чтобы школа подобрала начальный курс.',
         'noindex' => true,
+        'head' => '<script src="/assets/js/placement-cards.js" defer></script>',
     ]);
 }
 
