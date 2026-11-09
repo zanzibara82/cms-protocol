@@ -6,7 +6,7 @@ declare(strict_types=1);
 /** @var string $email */
 /** @var string $next */
 ?>
-<section class="mx-auto max-w-md py-10">
+<section class="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-white p-6">
     <h1 class="text-2xl font-bold">Вход для редактора</h1>
     <p class="mt-2 text-sm text-ink/70">Раздел открыт администратору и редактору контента.</p>
 
