@@ -68,31 +68,39 @@ $buttonsRows = static function (array $rows) use ($input): string {
     return $html;
 };
 
-/** Строки items секции: у карточек пользуются всеми полями, у шагов и вопросов — первыми двумя. */
-$itemsRows = static function (array $rows) use ($input): string {
+/**
+ * Строки items секции: состав и подписи полей приходят из вида — у шагов только «Шаг» и
+ * «Описание», у карточек картинка, ссылка и подпись. Пустая последняя строка — место для новой.
+ *
+ * @param list<array<string, mixed>> $rows
+ * @param list<array{key: string, label: string}> $fields
+ */
+$itemsRows = static function (array $rows, array $fields) use ($input): string {
+    $empty = [];
+    foreach ($fields as $field) {
+        $empty[$field['key']] = '';
+    }
+
     $html = '';
-    foreach (array_merge($rows, [['title' => '', 'text' => '', 'href' => '', 'image' => '', 'note' => '']]) as $index => $row) {
-        $html .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-5">'
-            . '<label class="text-sm"><span class="font-medium">Заголовок</span>'
-            . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . 'title' . ']" value="' . e((string) ($row['title'] ?? '')) . '"></label>'
-            . '<label class="text-sm"><span class="font-medium">Текст</span>'
-            . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . 'text' . ']" value="' . e((string) ($row['text'] ?? '')) . '"></label>'
-            . '<label class="text-sm"><span class="font-medium">Адрес ссылки</span>'
-            . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . 'href' . ']" value="' . e((string) ($row['href'] ?? '')) . '"></label>'
-            . '<label class="text-sm"><span class="font-medium">Картинка</span>'
-            . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . 'image' . ']" value="' . e((string) ($row['image'] ?? '')) . '"></label>'
-            . '<label class="text-sm"><span class="font-medium">Подпись</span>'
-            . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . 'note' . ']" value="' . e((string) ($row['note'] ?? '')) . '"></label>'
-            . '</div>';
+    foreach (array_merge($rows, [$empty]) as $index => $row) {
+        $html .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-5">';
+        foreach ($fields as $field) {
+            $key = $field['key'];
+            $html .= '<label class="text-sm"><span class="font-medium">' . e($field['label']) . '</span>'
+                . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . e($key) . ']" value="' . e((string) ($row[$key] ?? '')) . '"></label>';
+        }
+        $html .= '</div>';
     }
 
     return $html;
 };
 
 /**
- * Форма одной секции: поля страницы, общие примечание и картинка (у «Карточек» их нет — подпись
- * и картинка живут в каждой строке), настройки вклада и блоки кнопок/строк. Новая секция
- * приходит пустым массивом: op — create-section, скрытого id нет, вид выбирается селектом.
+ * Форма одной секции: только поля её вида — шапка (якорь, надзаголовок, заголовок, текст) есть
+ * у всех, примечание, картинка, кнопки и строки печатаются тогда, когда шаблон вида их читает.
+ * Настройки вклада приложения рисуются из описания pages_block_kinds. Новая секция приходит
+ * пустым массивом: op — create-section, вид выбирается селектом, а поля вида появятся после
+ * создания и перезагрузки (JS не угадывает состав строк).
  */
 $sectionForm = static function (array $section) use ($input, $target, $kindSelect, $kindFields, $buttonsRows, $itemsRows): string {
     $exists = (string) ($section['id'] ?? '') !== '';
@@ -101,9 +109,12 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
     $values = static fn (string $key): string => (string) ($section[$key] ?? '');
     $currentKind = $exists ? (string) ($section['kind'] ?? '') : '';
     $visible = $exists ? (int) ($section['visible'] ?? 1) === 1 : true;
+    // У нового блока вид ещё не выбран: печатается только общая шапка, остальное появится
+    // после создания. У существующего состав полей задаёт его вид.
+    $allowed = $exists ? pagesKindFieldsOf($currentKind) : ['anchor', 'badge', 'title', 'lead_text'];
+    $allows = static fn (string $key): bool => in_array($key, $allowed, true);
 
-    // Настройки вклада рисуются только у существующей секции, чей вид объявил поля: у новой
-    // формы их нет — появятся после создания и перезагрузки (JS не угадывает вид).
+    // Настройки вклада рисуются только у существующей секции, чей вид объявил поля.
     $settingsBlock = '';
     $fields = $kindFields[$currentKind] ?? [];
 
@@ -123,12 +134,12 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         $settingsBlock = '<div class="space-y-2"><h4 class="text-sm font-medium">Настройки вклада</h4>' . $settingsRows . '</div>';
     }
 
-    // Общие примечание и картинка: у «Карточек» их нет — подпись и картинка живут в каждой
-    // строке, а общая картинка шаблоном не выводится.
+    // Общие примечание и картинка: только у видов, которые их читают (hero, split, prose, band,
+    // pricing, gallery, table). У карточек картинка и подпись живут в каждой строке.
     $sectionMedia = '';
 
-    if ($exists && $currentKind !== 'cards') {
-        $imageFieldId = 'section-image-' . (string) $section['id'];
+    if ($allows('image')) {
+        $imageFieldId = 'section-image-' . ($exists ? (string) $section['id'] : 'new');
         $imagePreview = adminImagePreview($values('image'), $values('image_alt'));
         $imagePreviewBlock = $imagePreview === ''
             ? ''
@@ -149,7 +160,22 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             . '<label class="order-4 block text-sm sm:col-start-3 sm:row-start-2"><span class="font-medium">Описание картинки</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image_alt" value="' . e($values('image_alt')) . '"></label>'
             . '</div>';
+    } elseif ($allows('note')) {
+        // Примечание без картинки: у band, prose, pricing, gallery и table оно есть, а общей
+        // картинки нет — поле печатается отдельной строкой.
+        $sectionMedia = '<label class="block text-sm"><span class="font-medium">Примечание</span>'
+            . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="note" value="' . e($values('note')) . '"></label>';
     }
+
+    $buttonsBlock = $allows('buttons')
+        ? '<div class="space-y-2"><h4 class="text-sm font-medium">Кнопки</h4>' . $buttonsRows($exists ? pagesButtonsOf($section['buttons'] ?? null) : []) . '</div>'
+        : '';
+    $itemsBlock = $allows('items')
+        ? '<div class="space-y-2"><h4 class="text-sm font-medium">Строки</h4>' . $itemsRows(
+            $exists ? pagesItemsOf($section['items'] ?? null) : [],
+            pagesKindItemFieldsOf($currentKind)
+        ) . '</div>'
+        : '';
 
     return '<form class="mt-3 space-y-3" method="post" action="' . e($target) . '" enctype="multipart/form-data" data-section-form>' . csrfField()
         . '<input type="hidden" name="op" value="' . e($op) . '">' . $id
@@ -170,8 +196,8 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         . '<span class="mt-1 block text-ink/60">Абзацы разделяются пустой строкой.</span></label>'
         . $sectionMedia
         . $settingsBlock
-        . '<div class="space-y-2"><h4 class="text-sm font-medium">Кнопки</h4>' . $buttonsRows($exists ? pagesButtonsOf($section['buttons'] ?? null) : []) . '</div>'
-        . '<div class="space-y-2"><h4 class="text-sm font-medium">Строки (карточки, шаги, вопросы, пункты, тарифы, цитаты, кадры и соседние ссылки)</h4>' . $itemsRows($exists ? pagesItemsOf($section['items'] ?? null) : []) . '</div>'
+        . $buttonsBlock
+        . $itemsBlock
         . adminCheckbox('visible', 'Показывать на странице', '1', $visible)
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:opacity-90" type="submit">Сохранить блок</button>'
         . '</form>';

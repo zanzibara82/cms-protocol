@@ -376,7 +376,7 @@ final class PagesAdminTest extends TestCase
         ], nowUtc());
 
         createSection((string) $page['id'], [
-            'kind' => 'prose',
+            'kind' => 'hero',
             'anchor' => '',
             'badge' => '',
             'title' => 'Сворачиваемый блок',
@@ -460,6 +460,100 @@ final class PagesAdminTest extends TestCase
         self::assertSame(1, substr_count($body, 'name="image_file"'), 'выбор файла остался только у блока с картинкой');
         self::assertStringContainsString('name="items[0][image]"', $body, 'у карточки своя картинка в строке');
         self::assertStringContainsString('name="items[0][note]"', $body, 'у карточки своя подпись в строке');
+    }
+
+    public function testКаждыйВидБлокаПоказываетТолькоСвоиПоля(): void
+    {
+        // Ожидания записаны здесь явно, а не выведены из PAGES_KIND_FIELDS: тест обязан
+        // поймать и ошибку в перечне полей, и лишнее поле, нарисованное шаблоном.
+        $expected = [
+            'hero' => ['media' => ['note', 'image', 'image_alt', 'image_file'], 'buttons' => true, 'items' => []],
+            'band' => ['media' => ['note'], 'buttons' => false, 'items' => []],
+            'cards' => ['media' => [], 'buttons' => false, 'items' => ['image', 'title', 'text', 'href', 'note']],
+            'steps' => ['media' => [], 'buttons' => false, 'items' => ['title', 'text']],
+            'prose' => ['media' => ['note'], 'buttons' => false, 'items' => []],
+            'split' => ['media' => ['note', 'image', 'image_alt', 'image_file'], 'buttons' => true, 'items' => ['title', 'text']],
+            'quote' => ['media' => [], 'buttons' => false, 'items' => ['text', 'title', 'note', 'image']],
+            'pricing' => ['media' => ['note'], 'buttons' => false, 'items' => ['title', 'text', 'note', 'href']],
+            'toc' => ['media' => [], 'buttons' => false, 'items' => []],
+            'gallery' => ['media' => ['note'], 'buttons' => false, 'items' => ['image', 'title', 'note']],
+            'related' => ['media' => [], 'buttons' => false, 'items' => ['href', 'title', 'text']],
+            'table' => ['media' => ['note'], 'buttons' => false, 'items' => ['title', 'text', 'note']],
+            'tabs' => ['media' => [], 'buttons' => false, 'items' => ['title', 'text']],
+            'cta' => ['media' => [], 'buttons' => true, 'items' => []],
+            'faq' => ['media' => [], 'buttons' => false, 'items' => ['title', 'text']],
+        ];
+
+        $page = createPage([
+            'title' => 'Все виды блоков',
+            'slug' => 'vse-vidy-blokov',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        foreach (array_keys($expected) as $kind) {
+            createSection((string) $page['id'], [
+                'kind' => $kind,
+                'anchor' => '',
+                'badge' => '',
+                'title' => 'Блок ' . $kind,
+                'lead_text' => '',
+                'note' => '',
+                'image' => '',
+                'image_alt' => '',
+                'buttons' => [],
+                'items' => [],
+                'settings' => [],
+                'visible' => true,
+            ], nowUtc());
+        }
+
+        $this->login();
+        $body = Kernel::get('/admin/pages/' . (string) $page['id'])['body'];
+
+        preg_match_all(
+            '#<details class="[^"]*" data-section-id="([^"]+)" open>(.*?)</details>#s',
+            $body,
+            $matches,
+            PREG_SET_ORDER
+        );
+
+        $forms = [];
+        foreach ($matches as $match) {
+            $forms[$match[1]] = $match[2];
+        }
+
+        $sections = pageSections((string) $page['id']);
+        self::assertCount(count($expected), $sections, 'на странице по одному блоку каждого вида');
+        self::assertCount(count($expected), $forms, 'каждый блок получил свою форму');
+
+        foreach ($sections as $section) {
+            $kind = (string) $section['kind'];
+            $form = $forms[(string) $section['id']] ?? '';
+
+            self::assertNotSame('', $form, 'форма блока ' . $kind . ' найдена');
+
+            preg_match_all('#name="((?:anchor|badge|title|lead_text|note|image_file|image_alt|image|buttons\[\d+\]\[[a-z]+\]|items\[\d+\]\[[a-z]+\]))"#', $form, $names);
+
+            $actual = array_values(array_unique($names[1]));
+            sort($actual);
+
+            $fields = ['anchor', 'badge', 'title', 'lead_text'];
+            $fields = array_merge($fields, $expected[$kind]['media']);
+
+            if ($expected[$kind]['buttons']) {
+                $fields = array_merge($fields, ['buttons[0][blank]', 'buttons[0][href]', 'buttons[0][label]']);
+            }
+
+            foreach ($expected[$kind]['items'] as $key) {
+                $fields[] = 'items[0][' . $key . ']';
+            }
+
+            sort($fields);
+
+            self::assertSame($fields, $actual, 'блок «' . $kind . '» показывает ровно свои поля');
+        }
     }
 
     public function testСохранениеКарточекНеСтираетСкрытыеПоля(): void

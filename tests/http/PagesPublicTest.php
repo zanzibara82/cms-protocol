@@ -322,6 +322,43 @@ final class PagesPublicTest extends TestCase
             ],
         ]), nowUtc());
 
+        // Ведомость: строка — характеристика (заголовок строки), значение и примечание. Строка без
+        // названия и строка без значения не печатаются — безымянная ячейка ничего не значит.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'table',
+            'anchor' => 'usloviya',
+            'title' => 'Условия обучения',
+            'lead_text' => 'Что входит в абонемент.',
+            'note' => 'Цены указаны в рублях',
+            'items' => [
+                ['title' => 'Абонемент', 'text' => '12 занятий', 'note' => 'Месяц'],
+                ['title' => 'Пробный урок', 'text' => 'Бесплатно', 'note' => ''],
+                ['title' => '', 'text' => 'Ячейка без названия', 'note' => ''],
+                ['title' => 'Обрывок без значения', 'text' => '', 'note' => ''],
+            ],
+        ]), nowUtc());
+
+        // Ведомость без строк: заголовок блока заполнен, печатать нечего — пустое место.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'table',
+            'anchor' => 'pustaya-vedomost',
+            'title' => 'Ведомость без строк',
+        ]), nowUtc());
+
+        // Вкладки: без скрипта переключение держит сам браузер — взаимоисключающие details одной
+        // группы, открыта первая вкладка. Вкладка без названия не печатается.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'tabs',
+            'anchor' => 'urovni',
+            'title' => 'Программы по уровням',
+            'lead_text' => 'Выберите свой уровень.',
+            'items' => [
+                ['title' => 'Начальный', 'text' => 'A1 — алфавит и первые фразы.'],
+                ['title' => 'Средний', 'text' => 'B1 — свободная речь.'],
+                ['title' => '', 'text' => 'Вкладка без названия'],
+            ],
+        ]), nowUtc());
+
         createSection((string) $vidy['id'], $values([
             'kind' => 'faq',
             'title' => 'Частые вопросы',
@@ -522,6 +559,61 @@ final class PagesPublicTest extends TestCase
         self::assertStringContainsString('Модули и уроки.', $page['body'], 'пояснение к ссылке напечатано');
         self::assertStringNotContainsString('Без адреса', $page['body'], 'строка без адреса ссылкой не становится');
         self::assertStringNotContainsString('Остаётся текстом.', $page['body'], 'пояснение обрывка тоже не печатается');
+    }
+
+    public function testTableПечатаетВедомостьСЗаголовкамиСтрок(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Условия обучения', $page['body'], 'заголовок ведомости напечатан');
+        self::assertStringContainsString('Что входит в абонемент.', $page['body'], 'лид ведомости напечатан');
+        self::assertMatchesRegularExpression('~<table\b~', $page['body'], 'ведомость печатается таблицей');
+        self::assertMatchesRegularExpression(
+            '~<th\b[^>]*scope="row"[^>]*>Абонемент</th>~',
+            $page['body'],
+            'первая ячейка строки — заголовок строки, а не просто текст'
+        );
+        self::assertStringContainsString('12 занятий', $page['body'], 'значение строки напечатано');
+        self::assertStringContainsString('Месяц', $page['body'], 'примечание строки напечатано');
+        self::assertStringContainsString('Пробный урок', $page['body'], 'строка без примечания печатается');
+        self::assertStringContainsString('Бесплатно', $page['body']);
+        self::assertStringNotContainsString('Ячейка без названия', $page['body'], 'безымянная ячейка не печатается');
+        self::assertStringNotContainsString('Обрывок без значения', $page['body'], 'строка без значения и примечания не печатается');
+        self::assertStringContainsString('Цены указаны в рублях', $page['body'], 'примечание блока — сноска под ведомостью');
+        self::assertStringNotContainsString('Ведомость без строк', $page['body'], 'ведомость без строк остаётся пустым местом');
+    }
+
+    public function testTabsПереключаютВкладкиБезСкрипта(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Программы по уровням', $page['body'], 'заголовок вкладок напечатан');
+        self::assertStringContainsString('Выберите свой уровень.', $page['body'], 'лид вкладок напечатан');
+        self::assertMatchesRegularExpression(
+            '~<summary\b[^>]*>Начальный</summary>~',
+            $page['body'],
+            'название вкладки печатается заголовком раскрытия'
+        );
+        self::assertStringContainsString('A1 — алфавит и первые фразы.', $page['body'], 'содержимое вкладки напечатано');
+        self::assertMatchesRegularExpression(
+            '~<details\b[^>]*\bopen\b[^>]*>\s*<summary\b[^>]*>Начальный</summary>~s',
+            $page['body'],
+            'первая вкладка открыта: остальное человек раскрывает сам'
+        );
+        self::assertMatchesRegularExpression(
+            '~<details\b[^>]*\bname="tabs-[^"]+"~',
+            $page['body'],
+            'вкладки одной группы взаимоисключающие: открыта всегда одна'
+        );
+
+        preg_match_all('~<details\b[^>]*\bname="([^"]+)"~', $page['body'], $groups);
+
+        self::assertCount(2, $groups[1], 'группу называют обе вкладки: без name переключение не работает');
+        self::assertCount(1, array_unique($groups[1]), 'группа у блока одна — два блока вкладок не закрывают друг друга');
+        self::assertStringContainsString('B1 — свободная речь.', $page['body'], 'вторая вкладка напечатана');
+        self::assertStringNotContainsString('Вкладка без названия', $page['body'], 'вкладка без названия не печатается');
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void

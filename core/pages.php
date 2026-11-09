@@ -34,10 +34,11 @@ const PAGES_HOME_ID = '';
 const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress'];
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
-// pricing и toc — третья, gallery и related — четвёртая. Остальные добираются своими пачками.
-// Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
+// pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая. Остальные
+// добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind>
+// (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -53,9 +54,72 @@ const PAGES_KIND_NAMES = [
     'toc' => 'Содержание страницы',
     'gallery' => 'Галерея',
     'related' => 'Соседние ссылки',
+    'table' => 'Ведомость',
+    'tabs' => 'Вкладки',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];
+
+// Набор полей формы у каждого вида: конструктор рисует только то, что шаблон вида читает.
+// anchor, badge, title и lead_text есть у всех — это шапка секции; note — примечание секции,
+// image — общая картинка, buttons — кнопки, items — строки (их состав задаёт
+// PAGES_KIND_ITEM_FIELDS). Лишние поля не печатаются вовсе: человек не правит то, что никуда
+// не попадёт. Вид приложения получает общие поля шапки и свои настройки из pages_block_kinds.
+/** @var array<string, list<string>> */
+const PAGES_KIND_FIELDS = [
+    'hero' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'image', 'buttons'],
+    'band' => ['anchor', 'badge', 'title', 'lead_text', 'note'],
+    'cards' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'steps' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'prose' => ['anchor', 'badge', 'title', 'lead_text', 'note'],
+    'split' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'buttons', 'note', 'image'],
+    'quote' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'pricing' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'note'],
+    'toc' => ['anchor', 'badge', 'title', 'lead_text'],
+    'gallery' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'note'],
+    'related' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'table' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'note'],
+    'tabs' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'cta' => ['anchor', 'badge', 'title', 'lead_text', 'buttons'],
+    'faq' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+];
+
+// Подполя строки по виду: у шагов только заголовок и текст, у карточек — картинка, ссылка и
+// подпись, у цитаты «заголовок» — автор, а «текст» — сама выдержка. Ключи совпадают с колонкой
+// items секции, меняется только состав и подписи.
+/** @var array<string, list<string>> */
+const PAGES_KIND_ITEM_FIELDS = [
+    'cards' => ['image', 'title', 'text', 'href', 'note'],
+    'steps' => ['title', 'text'],
+    'split' => ['title', 'text'],
+    'quote' => ['text', 'title', 'note', 'image'],
+    'pricing' => ['title', 'text', 'note', 'href'],
+    'gallery' => ['image', 'title', 'note'],
+    'related' => ['href', 'title', 'text'],
+    'table' => ['title', 'text', 'note'],
+    'tabs' => ['title', 'text'],
+    'faq' => ['title', 'text'],
+];
+
+// Подписи подполей строки: один ключ в разных видах значит разное (title у карточки —
+// заголовок, у цитаты — автор), поэтому словарь двухуровневый.
+/** @var array<string, array<string, string>> */
+const PAGES_KIND_ITEM_LABELS = [
+    'cards' => ['image' => 'Картинка', 'title' => 'Заголовок', 'text' => 'Текст', 'href' => 'Адрес ссылки', 'note' => 'Подпись'],
+    'steps' => ['title' => 'Шаг', 'text' => 'Описание'],
+    'split' => ['title' => 'Пункт', 'text' => 'Пояснение'],
+    'quote' => ['text' => 'Цитата', 'title' => 'Автор', 'note' => 'Подпись', 'image' => 'Фото'],
+    'pricing' => ['title' => 'Тариф', 'text' => 'Что входит', 'note' => 'Цена и период', 'href' => 'Адрес кнопки'],
+    'gallery' => ['image' => 'Картинка', 'title' => 'Подпись', 'note' => 'Место и дата'],
+    'related' => ['href' => 'Адрес', 'title' => 'Заголовок ссылки', 'text' => 'Пояснение'],
+    'table' => ['title' => 'Название', 'text' => 'Значение', 'note' => 'Примечание'],
+    'tabs' => ['title' => 'Название вкладки', 'text' => 'Содержимое'],
+    'faq' => ['title' => 'Вопрос', 'text' => 'Ответ'],
+];
+
+// Вид приложения (вклад конструктора) не описан в ядре: ему остаются общие поля шапки, а
+// остальное он объявляет сам в pages_block_kinds.
+const PAGES_APP_KIND_FIELDS = ['anchor', 'badge', 'title', 'lead_text', 'note'];
 
 // Пределы полей слоя: их читают и подписи форм, и серверные проверки, чтобы подпись поля не
 // расходилась с проверкой (образец — NEWS_FIELDS). Ключи повторяют поля формы: title — заголовок
@@ -563,6 +627,37 @@ function pagesFormRows(mixed $raw, array $keys): array
     }
 
     return $rows;
+}
+
+/**
+ * Поля формы вида секции: у вида ядра — свой набор, у вида приложения — общая шапка (сам он
+ * объявляет только настройки). Неизвестный вид получает шапку: экран не должен падать из-за
+ * вклада, который ещё не подключился.
+ *
+ * @return list<string>
+ */
+function pagesKindFieldsOf(string $kind): array
+{
+    return PAGES_KIND_FIELDS[$kind] ?? PAGES_APP_KIND_FIELDS;
+}
+
+/**
+ * Подполя строк вида: ключ и подпись, которую человек читает в форме. У вида без строк — пусто.
+ *
+ * @return list<array{key: string, label: string}>
+ */
+function pagesKindItemFieldsOf(string $kind): array
+{
+    $fields = [];
+
+    foreach (PAGES_KIND_ITEM_FIELDS[$kind] ?? [] as $key) {
+        $fields[] = [
+            'key' => $key,
+            'label' => PAGES_KIND_ITEM_LABELS[$kind][$key] ?? $key,
+        ];
+    }
+
+    return $fields;
 }
 
 /**
