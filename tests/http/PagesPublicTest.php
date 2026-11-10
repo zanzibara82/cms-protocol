@@ -182,6 +182,7 @@ final class PagesPublicTest extends TestCase
             'note' => '',
             'image' => '',
             'image_alt' => '',
+            'layout' => '',
             'buttons' => [],
             'items' => [],
             'settings' => [],
@@ -416,6 +417,38 @@ final class PagesPublicTest extends TestCase
                 ['image' => '/uploads/images/student.jpg', 'title' => 'Мария', 'text' => 'Заговорила за месяц.', 'note' => 'A2 → B1'],
                 ['image' => '', 'title' => 'Иван', 'text' => 'Грамматика наконец понятна.', 'note' => ''],
                 ['image' => '', 'title' => 'Пустой отзыв', 'text' => '', 'note' => ''],
+            ],
+        ]), nowUtc());
+
+        // Плавающая картинка: на широком экране текст обтекает картинку с выбранной стороны,
+        // на узком картинка занимает всю ширину. Абзацы — items (заголовок и текст).
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'float',
+            'anchor' => 'obtekanie',
+            'title' => 'Метод школы',
+            'lead_text' => 'Учим говорить с первого занятия.',
+            'note' => 'Методика проверена годами',
+            'image' => '/uploads/images/float.jpg',
+            'image_alt' => 'Занятие в классе',
+            'layout' => 'right',
+            'items' => [
+                ['title' => 'Разминка', 'text' => 'Повторяем прошлый урок.'],
+                ['title' => 'Практика', 'text' => 'Говорим новую тему.'],
+                ['title' => '', 'text' => ''],
+            ],
+        ]), nowUtc());
+
+        // Материалы: файлы со ссылками и плашкой формата из адреса; layout «cards» — сетка.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'files',
+            'anchor' => 'materialy',
+            'title' => 'Материалы для скачивания',
+            'lead_text' => 'Памятки и домашние задания.',
+            'note' => 'Файлы лежат на сайте',
+            'items' => [
+                ['title' => 'Памятка по временам', 'text' => 'Таблица глаголов.', 'href' => '/files/tenses.pdf', 'note' => '1 МБ'],
+                ['title' => 'Домашнее задание', 'text' => 'Страница 12.', 'href' => '/files/homework.docx', 'note' => ''],
+                ['title' => '', 'text' => 'Файл без названия', 'href' => '/files/x.pdf', 'note' => ''],
             ],
         ]), nowUtc());
 
@@ -752,6 +785,53 @@ final class PagesPublicTest extends TestCase
         self::assertStringContainsString('Иван', $page['body'], 'отзыв без фото печатается');
         self::assertStringContainsString('Грамматика наконец понятна.', $page['body']);
         self::assertStringNotContainsString('Пустой отзыв', $page['body'], 'отзыв без текста не печатается');
+    }
+
+    public function testFloatПечатаетКартинкуСОбтеканиемИАбзацы(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Метод школы', $page['body'], 'заголовок блока напечатан');
+        self::assertStringContainsString('Учим говорить с первого занятия.', $page['body'], 'лид блока напечатан');
+        self::assertStringContainsString('src="/uploads/images/float.jpg"', $page['body'], 'картинка блока напечатана');
+        self::assertStringContainsString('alt="Занятие в классе"', $page['body'], 'у картинки есть описание');
+        self::assertMatchesRegularExpression(
+            '~class="[^"]*\bsm:float-right\b[^"]*"~',
+            $page['body'],
+            'layout right обтекает картинку текстом справа'
+        );
+        self::assertStringContainsString('Разминка', $page['body'], 'заголовок абзаца напечатан');
+        self::assertStringContainsString('Повторяем прошлый урок.', $page['body'], 'текст абзаца напечатан');
+        self::assertStringContainsString('Практика', $page['body'], 'второй абзац напечатан');
+        self::assertStringContainsString('Говорим новую тему.', $page['body']);
+        self::assertStringContainsString('Методика проверена годами', $page['body'], 'примечание блока напечатано сноской');
+    }
+
+    public function testFilesПечатаетФайлыСсылкамиСПлашкойФормата(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Материалы для скачивания', $page['body'], 'заголовок блока напечатан');
+        self::assertStringContainsString('Памятки и домашние задания.', $page['body'], 'лид блока напечатан');
+        self::assertMatchesRegularExpression(
+            '~<a\b[^>]*href="/files/tenses\.pdf"[^>]*>\s*Памятка по временам</a>~s',
+            $page['body'],
+            'файл печатается ссылкой на свой адрес'
+        );
+        self::assertStringContainsString('Таблица глаголов.', $page['body'], 'описание файла напечатано');
+        self::assertStringContainsString('1 МБ', $page['body'], 'примечание файла напечатано');
+        self::assertStringContainsString('PDF', $page['body'], 'плашка формата собрана из адреса файла');
+        self::assertStringContainsString('DOCX', $page['body'], 'плашка второго файла собрана из его адреса');
+        self::assertMatchesRegularExpression(
+            '~<a\b[^>]*href="/files/homework\.docx"[^>]*>\s*Домашнее задание</a>~s',
+            $page['body'],
+            'второй файл печатается ссылкой'
+        );
+        self::assertStringContainsString('Страница 12.', $page['body'], 'описание второго файла напечатано');
+        self::assertStringNotContainsString('Файл без названия', $page['body'], 'строка без названия не печатается');
+        self::assertStringContainsString('Файлы лежат на сайте', $page['body'], 'примечание блока напечатано сноской');
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void

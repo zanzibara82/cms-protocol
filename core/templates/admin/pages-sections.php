@@ -35,6 +35,29 @@ $kindSelect = static function (string $current) use ($kinds, $input): string {
     return '<select class="min-h-[44px] ' . e($input) . '" name="kind">' . $options . '</select>';
 };
 
+/**
+ * Селект вёрстки: печатается только у видов, которые читают колонку layout (float и files).
+ * Пустое значение — запасной вид по умолчанию; у остальных видов поля нет вовсе.
+ */
+$layoutSelect = static function (array $section) use ($input): string {
+    $options = pagesLayoutOptionsOf((string) ($section['kind'] ?? ''));
+
+    if ($options === []) {
+        return '';
+    }
+
+    $current = (string) ($section['layout'] ?? '');
+    $html = '';
+
+    foreach ($options as $option) {
+        $selected = $option['value'] === $current ? ' selected' : '';
+        $html .= '<option value="' . e($option['value']) . '"' . $selected . '>' . e($option['label']) . '</option>';
+    }
+
+    return '<label class="block text-sm"><span class="font-medium">Вёрстка</span>'
+        . '<select class="min-h-[44px] ' . e($input) . '" name="layout">' . $html . '</select></label>';
+};
+
 /** Пара «скрытое поле» формы действия. */
 $field = static function (string $name, string $value): string {
     return '<input type="hidden" name="' . e($name) . '" value="' . e($value) . '">';
@@ -113,7 +136,7 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
  * пустым массивом: op — create-section, вид выбирается селектом, а поля вида появятся после
  * создания и перезагрузки (JS не угадывает состав строк).
  */
-$sectionForm = static function (array $section) use ($input, $target, $kindSelect, $kindFields, $buttonsRows, $itemsRows): string {
+$sectionForm = static function (array $section) use ($input, $target, $kindSelect, $kindFields, $buttonsRows, $itemsRows, $layoutSelect): string {
     $exists = (string) ($section['id'] ?? '') !== '';
     $id = $exists ? '<input type="hidden" name="section" value="' . e((string) $section['id']) . '">' : '';
     $op = $exists ? 'save-section' : 'create-section';
@@ -189,6 +212,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             pagesKindItemFieldsOf($currentKind)
         ) . '</div>'
         : '';
+    $layoutBlock = $allows('layout') ? $layoutSelect($section) : '';
 
     return '<form class="mt-3 space-y-3" method="post" action="' . e($target) . '" enctype="multipart/form-data" data-section-form>' . csrfField()
         . '<input type="hidden" name="op" value="' . e($op) . '">' . $id
@@ -207,6 +231,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         . '<label class="block text-sm"><span class="font-medium">Текст</span>'
         . '<textarea class="min-h-[44px] ' . e($input) . '" name="lead_text" rows="3">' . e($values('lead_text')) . '</textarea>'
         . '<span class="mt-1 block text-ink/60">Абзацы разделяются пустой строкой.</span></label>'
+        . $layoutBlock
         . $sectionMedia
         . $settingsBlock
         . $buttonsBlock

@@ -35,10 +35,10 @@ const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'comme
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
 // pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая, banner и video —
-// шестая, slider и review — седьмая. Остальные добираются своими пачками. Чужой вид ядро не
-// рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
+// шестая, slider и review — седьмая, float и files — восьмая. Остальные добираются своими
+// пачками. Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -60,6 +60,8 @@ const PAGES_KIND_NAMES = [
     'video' => 'Видео',
     'slider' => 'Карусель',
     'review' => 'Отзывы',
+    'float' => 'Картинка с обтеканием',
+    'files' => 'Файлы',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];
@@ -88,6 +90,8 @@ const PAGES_KIND_FIELDS = [
     'video' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'buttons'],
     'slider' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'review' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'float' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'image', 'items', 'buttons', 'layout'],
+    'files' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'items', 'layout'],
     'cta' => ['anchor', 'badge', 'title', 'lead_text', 'buttons'],
     'faq' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
 ];
@@ -110,6 +114,8 @@ const PAGES_KIND_ITEM_FIELDS = [
     'video' => ['video', 'image', 'title', 'text'],
     'slider' => ['image', 'title', 'text', 'note'],
     'review' => ['image', 'title', 'text', 'note'],
+    'float' => ['title', 'text'],
+    'files' => ['badge', 'href', 'title', 'text', 'note'],
     'faq' => ['title', 'text'],
 ];
 
@@ -130,12 +136,30 @@ const PAGES_KIND_ITEM_LABELS = [
     'video' => ['video' => 'Ссылка на видео или файл', 'image' => 'Обложка', 'title' => 'Заголовок', 'text' => 'Подпись'],
     'slider' => ['image' => 'Картинка', 'title' => 'Заголовок', 'text' => 'Текст', 'note' => 'Надпись'],
     'review' => ['image' => 'Фото', 'title' => 'Имя', 'text' => 'Отзыв', 'note' => 'Кто и откуда'],
+    'float' => ['title' => 'Заголовок', 'text' => 'Текст'],
+    'files' => ['badge' => 'Плашка', 'href' => 'Адрес файла', 'title' => 'Название', 'text' => 'Описание', 'note' => 'Примечание'],
     'faq' => ['title' => 'Вопрос', 'text' => 'Ответ'],
 ];
 
 // Вид приложения (вклад конструктора) не описан в ядре: ему остаются общие поля шапки, а
 // остальное он объявляет сам в pages_block_kinds.
 const PAGES_APP_KIND_FIELDS = ['anchor', 'badge', 'title', 'lead_text', 'note'];
+
+// Варианты колонки layout у видов, которые читают вёрстку: float обтекает картинку текстом с
+// выбранной стороны или ставит её во всю ширину, files печатается списком либо карточками.
+// Пустое значение — запасной вид по умолчанию; у остальных видов селект не печатается вовсе.
+/** @var array<string, list<array{value: string, label: string}>> */
+const PAGES_KIND_LAYOUTS = [
+    'float' => [
+        ['value' => '', 'label' => 'Картинка слева'],
+        ['value' => 'right', 'label' => 'Картинка справа'],
+        ['value' => 'full', 'label' => 'Картинка во всю ширину'],
+    ],
+    'files' => [
+        ['value' => '', 'label' => 'Список'],
+        ['value' => 'cards', 'label' => 'Карточки'],
+    ],
+];
 
 // Пределы полей слоя: их читают и подписи форм, и серверные проверки, чтобы подпись поля не
 // расходилась с проверкой (образец — NEWS_FIELDS). Ключи повторяют поля формы: title — заголовок
@@ -698,6 +722,18 @@ function pagesKindItemFieldsOf(string $kind): array
     }
 
     return $fields;
+}
+
+/**
+ * Варианты вёрстки вида для селекта конструктора: только те виды, у которых layout читается
+ * шаблоном. Неизвестный вид возвращает пустой список — селект не печатается, а человек не
+ * правит поле, которое никуда не попадёт.
+ *
+ * @return list<array{value: string, label: string}>
+ */
+function pagesLayoutOptionsOf(string $kind): array
+{
+    return PAGES_KIND_LAYOUTS[$kind] ?? [];
 }
 
 /**

@@ -58,11 +58,12 @@ final class PagesRulesTest extends TestCase
     public function testВидыПервогоЗаходаСперечнемИмен(): void
     {
         self::assertSame(
-            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'cta', 'faq'],
+            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'cta', 'faq'],
             PAGES_KINDS,
             'Решение 3 штурма: каркас и виды первого захода, остальные добираются пачками '
             . '(split и quote — вторая, pricing и toc — третья, gallery и related — четвёртая, '
-            . 'table и tabs — пятая, banner и video — шестая, slider и review — седьмая)'
+            . 'table и tabs — пятая, banner и video — шестая, slider и review — седьмая, '
+            . 'float и files — восьмая)'
         );
 
         foreach (PAGES_KINDS as $kind) {
@@ -108,6 +109,29 @@ final class PagesRulesTest extends TestCase
         self::assertSame('', pagesVideoFile('/files/plan.pdf'));
         self::assertSame('', pagesVideoFile(''));
         self::assertSame('', pagesVideoFile(null));
+    }
+
+    public function testВариантыВёрсткиЕстьТолькоУВидовСВерсткой(): void
+    {
+        // Варианты объявляет только вид, который их читает: у обычного вида селект не печатается,
+        // а человек не правит поле, которое никуда не попадёт.
+        self::assertSame(
+            [
+                ['value' => '', 'label' => 'Картинка слева'],
+                ['value' => 'right', 'label' => 'Картинка справа'],
+                ['value' => 'full', 'label' => 'Картинка во всю ширину'],
+            ],
+            pagesLayoutOptionsOf('float')
+        );
+        self::assertSame(
+            [
+                ['value' => '', 'label' => 'Список'],
+                ['value' => 'cards', 'label' => 'Карточки'],
+            ],
+            pagesLayoutOptionsOf('files')
+        );
+        self::assertSame([], pagesLayoutOptionsOf('hero'), 'у обычного вида вариантов вёрстки нет');
+        self::assertSame([], pagesLayoutOptionsOf('nesushestvuyushchiy'), 'неизвестный вид вёрстки не объявляет');
     }
 
     public function testПределыПолейЧитаютсяОднимСпособом(): void

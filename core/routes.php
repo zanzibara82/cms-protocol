@@ -352,6 +352,9 @@ function pagesSectionValuesFromPost(?array $existing = null): array
         'note' => $allows('note') ? $kept('note') : (string) ($existing['note'] ?? ''),
         'image' => $allows('image') ? $kept('image') : (string) ($existing['image'] ?? ''),
         'image_alt' => $allows('image') ? $kept('image_alt') : (string) ($existing['image_alt'] ?? ''),
+        // Вёрстка есть только у float и files; у остальных видов ключа в POST нет — прежнее
+        // значение остаётся, как у примечания и картинки.
+        'layout' => $allows('layout') ? $kept('layout') : (string) ($existing['layout'] ?? ''),
         'buttons' => $allows('buttons') && array_key_exists('buttons', $post)
             ? pagesFormRows($post['buttons'], ['label', 'href', 'blank'])
             : $existingButtons,
