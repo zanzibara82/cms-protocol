@@ -7,9 +7,9 @@ declare(strict_types=1);
 /** @var string $alertReason */
 /** @var list<array{id: string, title: string, slug: string, status: string, noindex: string, updated: string}> $rows */
 
-// Список страниц: правка и удаление живут в редакторе страницы, создание — форма с op.
-// Кнопки — отдельные формы, намерение приходит полем op: имя кнопки не попадает в POST,
-// если человек отправил форму клавишей Enter.
+// Список страниц: правка — по заголовку, создание — форма с op, а иконки справа сразу
+// открывают публичную страницу и удаляют её. Кнопки — отдельные формы, намерение
+// приходит полем op: имя кнопки не попадает в POST, если человек отправил форму клавишей Enter.
 $rowsHtml = '';
 foreach ($rows as $row) {
     $rowsHtml .= '<tr class="border-b border-ink/10">'
@@ -17,7 +17,28 @@ foreach ($rows as $row) {
         . '<td class="py-2 pr-3 text-sm text-ink/70">/' . e($row['slug']) . '</td>'
         . '<td class="py-2 pr-3 text-sm text-ink/70">' . e($row['status']) . '</td>'
         . '<td class="py-2 pr-3 text-sm text-ink/70">' . e($row['noindex']) . '</td>'
-        . '<td class="py-2 pr-4 text-sm text-ink/60">' . e($row['updated']) . '</td>'
+        . '<td class="py-2 pr-3 text-sm text-ink/60">' . e($row['updated']) . '</td>'
+        . '<td class="py-2 pr-4">'
+        . '<div class="flex items-center justify-end gap-1">'
+        . '<a class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-ink/60 hover:bg-ink/5 hover:text-ink"'
+        . ' href="/' . e($row['slug']) . '" target="_blank" rel="noopener noreferrer"'
+        . ' aria-label="Открыть страницу «' . e($row['title']) . '»" title="Открыть страницу">'
+        . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+        . '<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
+        . '<circle cx="12" cy="12" r="2.75" stroke="currentColor" stroke-width="1.8"/>'
+        . '</svg>'
+        . '</a>'
+        . '<form method="post" action="/admin/pages/' . e($row['id']) . '">' . csrfField()
+        . '<input type="hidden" name="op" value="delete-page">'
+        . '<button class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-bad hover:bg-bad/10" type="submit"'
+        . ' aria-label="Удалить страницу «' . e($row['title']) . '»" title="Удалить страницу">'
+        . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+        . '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+        . '</svg>'
+        . '</button>'
+        . '</form>'
+        . '</div>'
+        . '</td>'
         . '</tr>';
 }
 
@@ -27,7 +48,8 @@ $table = $rows === []
         . '<table class="w-full min-w-[40rem] text-sm"><thead><tr class="border-b border-ink/10 text-left text-ink/60">'
         . '<th class="py-2 pr-3 pl-4 font-medium">Заголовок</th><th class="py-2 pr-3 font-medium">Адрес</th>'
         . '<th class="py-2 pr-3 font-medium">Статус</th><th class="py-2 pr-3 font-medium">Скрыта от поиска</th>'
-        . '<th class="py-2 pr-4 font-medium">Обновлено</th></tr></thead><tbody>' . $rowsHtml . '</tbody></table></div>';
+        . '<th class="py-2 pr-3 font-medium">Обновлено</th>'
+        . '<th class="py-2 pr-4 font-medium"><span class="sr-only">Действия</span></th></tr></thead><tbody>' . $rowsHtml . '</tbody></table></div>';
 
 $home = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<h2 class="font-semibold">Блоки главной</h2>'

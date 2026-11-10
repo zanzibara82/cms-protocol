@@ -391,6 +391,34 @@ final class PagesPublicTest extends TestCase
             ],
         ]), nowUtc());
 
+        // Карусель: слайд — это картинка с необязательными подписью, текстом и надписью; слайд
+        // без картинки не печатается. Переключение держит горизонтальная прокрутка — публичные
+        // страницы живут без собственного скрипта.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'slider',
+            'anchor' => 'karusel',
+            'title' => 'Как мы работаем',
+            'lead_text' => 'Листайте слайды горизонтально.',
+            'items' => [
+                ['image' => '/uploads/images/slide-1.jpg', 'title' => 'Первый слайд', 'text' => 'Знакомство и пробный урок.', 'note' => 'Шаг 1'],
+                ['image' => '/uploads/images/slide-2.jpg', 'title' => '', 'text' => 'Практика в группе.', 'note' => ''],
+                ['image' => '', 'title' => 'Пустой слайд', 'text' => '', 'note' => ''],
+            ],
+        ]), nowUtc());
+
+        // Отзывы: карточка — фото, имя, текст отзыва и роль. Отзыв без текста не печатается.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'review',
+            'anchor' => 'otzyvy-uchenikov',
+            'title' => 'Отзывы учеников',
+            'lead_text' => 'Что говорят после курса.',
+            'items' => [
+                ['image' => '/uploads/images/student.jpg', 'title' => 'Мария', 'text' => 'Заговорила за месяц.', 'note' => 'A2 → B1'],
+                ['image' => '', 'title' => 'Иван', 'text' => 'Грамматика наконец понятна.', 'note' => ''],
+                ['image' => '', 'title' => 'Пустой отзыв', 'text' => '', 'note' => ''],
+            ],
+        ]), nowUtc());
+
         createSection((string) $vidy['id'], $values([
             'kind' => 'faq',
             'title' => 'Частые вопросы',
@@ -687,6 +715,43 @@ final class PagesPublicTest extends TestCase
         self::assertStringContainsString('Урок — Фрагмент занятия.', $page['body'], 'подпись ролика собрана из заголовка и текста');
         self::assertStringNotContainsString('Чужой ролик', $page['body'], 'чужая площадка под CSP плеером не становится');
         self::assertStringNotContainsString('Не видео', $page['body'], 'файл не-видео плеером не становится');
+    }
+
+    public function testSliderПечатаетКарусельИМолчитНаПустомСлайде(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Как мы работаем', $page['body'], 'заголовок карусели напечатан');
+        self::assertStringContainsString('Листайте слайды горизонтально.', $page['body'], 'лид карусели напечатан');
+        self::assertMatchesRegularExpression(
+            '~class="[^"]*\bsnap-x\b[^"]*"~',
+            $page['body'],
+            'карусель — горизонтальная прокрутка со snap-точками'
+        );
+        self::assertStringContainsString('src="/uploads/images/slide-1.jpg"', $page['body'], 'слайд печатается картинкой');
+        self::assertStringContainsString('alt="Первый слайд"', $page['body'], 'подпись слайда служит описанием картинки');
+        self::assertStringContainsString('Знакомство и пробный урок.', $page['body'], 'текст слайда напечатан');
+        self::assertStringContainsString('Шаг 1', $page['body'], 'надпись слайда напечатана');
+        self::assertStringContainsString('src="/uploads/images/slide-2.jpg"', $page['body'], 'слайд без заголовка печатается');
+        self::assertStringContainsString('Практика в группе.', $page['body']);
+        self::assertStringNotContainsString('Пустой слайд', $page['body'], 'слайд без картинки и текста не печатается');
+    }
+
+    public function testReviewПечатаетОтзывыИМолчитНаПустом(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Отзывы учеников', $page['body'], 'заголовок отзывов напечатан');
+        self::assertStringContainsString('Что говорят после курса.', $page['body'], 'лид отзывов напечатан');
+        self::assertMatchesRegularExpression('~<blockquote\b[^>]*>Заговорила за месяц\.</blockquote>~', $page['body'], 'отзыв печатается выдержкой');
+        self::assertStringContainsString('src="/uploads/images/student.jpg"', $page['body'], 'фото автора печатается');
+        self::assertStringContainsString('Мария', $page['body'], 'имя автора напечатано');
+        self::assertStringContainsString('A2 → B1', $page['body'], 'роль автора напечатана');
+        self::assertStringContainsString('Иван', $page['body'], 'отзыв без фото печатается');
+        self::assertStringContainsString('Грамматика наконец понятна.', $page['body']);
+        self::assertStringNotContainsString('Пустой отзыв', $page['body'], 'отзыв без текста не печатается');
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void

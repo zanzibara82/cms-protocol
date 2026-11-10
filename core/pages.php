@@ -35,10 +35,10 @@ const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'comme
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
 // pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая, banner и video —
-// шестая. Остальные добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру
-// pages_block_<kind> (вклад приложения).
+// шестая, slider и review — седьмая. Остальные добираются своими пачками. Чужой вид ядро не
+// рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -58,6 +58,8 @@ const PAGES_KIND_NAMES = [
     'tabs' => 'Вкладки',
     'banner' => 'Баннер',
     'video' => 'Видео',
+    'slider' => 'Карусель',
+    'review' => 'Отзывы',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];
@@ -84,6 +86,8 @@ const PAGES_KIND_FIELDS = [
     'tabs' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'banner' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'image', 'items', 'buttons'],
     'video' => ['anchor', 'badge', 'title', 'lead_text', 'items', 'buttons'],
+    'slider' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'review' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'cta' => ['anchor', 'badge', 'title', 'lead_text', 'buttons'],
     'faq' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
 ];
@@ -104,6 +108,8 @@ const PAGES_KIND_ITEM_FIELDS = [
     'tabs' => ['title', 'text'],
     'banner' => ['note', 'text'],
     'video' => ['video', 'image', 'title', 'text'],
+    'slider' => ['image', 'title', 'text', 'note'],
+    'review' => ['image', 'title', 'text', 'note'],
     'faq' => ['title', 'text'],
 ];
 
@@ -122,6 +128,8 @@ const PAGES_KIND_ITEM_LABELS = [
     'tabs' => ['title' => 'Название вкладки', 'text' => 'Содержимое'],
     'banner' => ['note' => 'Надпись', 'text' => 'Текст'],
     'video' => ['video' => 'Ссылка на видео или файл', 'image' => 'Обложка', 'title' => 'Заголовок', 'text' => 'Подпись'],
+    'slider' => ['image' => 'Картинка', 'title' => 'Заголовок', 'text' => 'Текст', 'note' => 'Надпись'],
+    'review' => ['image' => 'Фото', 'title' => 'Имя', 'text' => 'Отзыв', 'note' => 'Кто и откуда'],
     'faq' => ['title' => 'Вопрос', 'text' => 'Ответ'],
 ];
 

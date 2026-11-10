@@ -70,7 +70,8 @@ $buttonsRows = static function (array $rows) use ($input): string {
 
 /**
  * Строки items секции: состав и подписи полей приходят из вида — у шагов только «Шаг» и
- * «Описание», у карточек картинка, ссылка и подпись. Пустая последняя строка — место для новой.
+ * «Описание», у карточек картинка, ссылка и подпись. Пустая последняя строка — место для новой;
+ * плюс справа под строками добавляет ещё одну пустую строку без перезагрузки (admin-sections.js).
  *
  * @param list<array<string, mixed>> $rows
  * @param list<array{key: string, label: string}> $fields
@@ -81,18 +82,28 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
         $empty[$field['key']] = '';
     }
 
-    $html = '';
+    $rowsHtml = '';
     foreach (array_merge($rows, [$empty]) as $index => $row) {
-        $html .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-5">';
+        $rowsHtml .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-5" data-item-row="' . e((string) $index) . '">';
         foreach ($fields as $field) {
             $key = $field['key'];
-            $html .= '<label class="text-sm"><span class="font-medium">' . e($field['label']) . '</span>'
+            $rowsHtml .= '<label class="text-sm"><span class="font-medium">' . e($field['label']) . '</span>'
                 . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . e($key) . ']" value="' . e((string) ($row[$key] ?? '')) . '"></label>';
         }
-        $html .= '</div>';
+        $rowsHtml .= '</div>';
     }
 
-    return $html;
+    return '<div class="space-y-2" data-items-editor>'
+        . '<div class="space-y-2" data-items-rows>' . $rowsHtml . '</div>'
+        . '<div class="flex justify-end">'
+        . '<button class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-ink/20 bg-white text-ink hover:bg-ink/5" type="button"'
+        . ' data-items-add aria-label="Добавить строку" title="Добавить строку" hidden>'
+        . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+        . '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'
+        . '</svg>'
+        . '</button>'
+        . '</div>'
+        . '</div>';
 };
 
 /**
@@ -153,10 +164,12 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             . '<div class="mt-1 flex items-start gap-2">'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image" value="' . e($values('image')) . '">'
             . '<input class="sr-only" id="' . e($imageFieldId) . '" type="file" name="image_file" accept="image/jpeg,image/png,image/webp">'
-            . '<label class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5" for="' . e($imageFieldId) . '" title="Выбрать картинку с компьютера">'
+            . '<label class="inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5" for="' . e($imageFieldId) . '" title="Выбрать картинку с компьютера">'
             . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>'
             . '<span class="sr-only">Выбрать картинку с компьютера</span></label>'
-            . '<span class="mt-1 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ.</span></div>'
+            . '</div>'
+            . '<span class="mt-1 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ.</span>'
+            . '</div>'
             . '<label class="order-4 block text-sm sm:col-start-3 sm:row-start-2"><span class="font-medium">Описание картинки</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image_alt" value="' . e($values('image_alt')) . '"></label>'
             . '</div>';
@@ -199,7 +212,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         . $buttonsBlock
         . $itemsBlock
         . adminCheckbox('visible', 'Показывать на странице', '1', $visible)
-        . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:opacity-90" type="submit">Сохранить блок</button>'
+        . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-cream hover:opacity-90" type="submit">Сохранить блок</button>'
         . '</form>';
 };
 

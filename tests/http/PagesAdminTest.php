@@ -85,6 +85,11 @@ final class PagesAdminTest extends TestCase
         self::assertStringContainsString('О нас', $list['body'], 'созданная страница в списке');
         self::assertStringContainsString('href="/admin/pages/home"', $list['body'], 'блоки главной редактируются отдельным экраном');
         self::assertStringContainsString('href="/admin/pages/' . (string) $page['id'] . '"', $list['body'], 'страница ведёт в свой редактор');
+        self::assertStringContainsString('href="/o-nas" target="_blank" rel="noopener noreferrer"', $list['body'], 'иконка открывает публичную страницу');
+        self::assertStringContainsString('aria-label="Открыть страницу «О нас»"', $list['body'], 'у иконки просмотра есть подпись для чтения с экрана');
+        self::assertStringContainsString('action="/admin/pages/' . (string) $page['id'] . '"', $list['body'], 'у строки есть форма удаления');
+        self::assertStringContainsString('aria-label="Удалить страницу «О нас»"', $list['body'], 'у иконки корзины есть подпись для чтения с экрана');
+        self::assertStringContainsString('name="op" value="delete-page"', $list['body'], 'корзина отправляет действие удаления');
         self::assertStringContainsString('name="op" value="create-page"', $list['body'], 'создание — форма с op, а не отдельный адрес');
     }
 
@@ -322,7 +327,7 @@ final class PagesAdminTest extends TestCase
         self::assertStringContainsString('id="novoe-nazvanie"', $public['body'], 'якорь секции печатается');
     }
 
-    public function testУдалениеСтраницыУноситАдрес(): void
+    public function testУдалениеСтраницыИзСпискаУноситАдрес(): void
     {
         $page = createPage([
             'title' => 'Ушла',
@@ -348,10 +353,17 @@ final class PagesAdminTest extends TestCase
         ], nowUtc());
 
         $this->login();
-        $token = $this->token('/admin/pages/' . (string) $page['id']);
+
+        $list = Kernel::get('/admin/pages');
+
+        self::assertStringContainsString(
+            'action="/admin/pages/' . (string) $page['id'] . '"',
+            $list['body'],
+            'корзина в списке отправляет форму удаления этой страницы'
+        );
 
         $deleted = Kernel::post('/admin/pages/' . (string) $page['id'], [
-            '_token' => $token,
+            '_token' => Kernel::tokenFrom($list['body']),
             'op' => 'delete-page',
         ]);
 
@@ -460,6 +472,47 @@ final class PagesAdminTest extends TestCase
         self::assertSame(1, substr_count($body, 'name="image_file"'), 'выбор файла остался только у блока с картинкой');
         self::assertStringContainsString('name="items[0][image]"', $body, 'у карточки своя картинка в строке');
         self::assertStringContainsString('name="items[0][note]"', $body, 'у карточки своя подпись в строке');
+    }
+
+    public function testПлюсДобавляетСтрокиВКарточкахВопросахИШагах(): void
+    {
+        $page = createPage([
+            'title' => 'Блоки со строками',
+            'slug' => 'bloki-so-strokami',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        foreach (['cards' => 'Карточки', 'faq' => 'Вопросы и ответы', 'steps' => 'Шаги'] as $kind => $title) {
+            createSection((string) $page['id'], [
+                'kind' => $kind,
+                'anchor' => '',
+                'badge' => '',
+                'title' => $title,
+                'lead_text' => '',
+                'note' => '',
+                'image' => '',
+                'image_alt' => '',
+                'buttons' => [],
+                'items' => [],
+                'settings' => [],
+                'visible' => true,
+            ], nowUtc());
+        }
+
+        $this->login();
+        $body = Kernel::get('/admin/pages/' . (string) $page['id'])['body'];
+
+        self::assertSame(3, substr_count($body, 'data-items-editor'), 'редактор строк есть у каждого блока со строками');
+        self::assertSame(3, substr_count($body, 'data-items-rows'), 'строки каждого блока лежат в своей обёртке');
+        self::assertSame(3, substr_count($body, 'data-items-add'), 'плюс есть у карточек, вопросов и шагов');
+        self::assertSame(3, substr_count($body, 'name="items[0][text]"'), 'у всех трёх видов есть текст строки');
+        self::assertStringContainsString(
+            'data-items-add aria-label="Добавить строку" title="Добавить строку" hidden',
+            $body,
+            'без JavaScript плюс скрыт: одна пустая строка уже напечатана сервером'
+        );
     }
 
     public function testКаждыйВидБлокаПоказываетТолькоСвоиПоля(): void
@@ -615,6 +668,9 @@ final class PagesAdminTest extends TestCase
         self::assertStringContainsString('localStorage', $script['body'], 'состояние хранится в браузере');
         self::assertStringContainsString("addEventListener('toggle'", $script['body'], 'скрипт слушает сворачивание блока');
         self::assertStringContainsString('cms-sections-collapsed:', $script['body'], 'ключ хранилища привязан к странице');
+        self::assertStringContainsString('data-items-add', $script['body'], 'скрипт включает плюс добавления строк');
+        self::assertStringContainsString('data-item-row', $script['body'], 'скрипт перенумеровывает добавленную строку');
+        self::assertStringContainsString('renameIndex', $script['body'], 'имена items[N][…] получают следующий индекс');
     }
 
     public function testКартинкуБлокаМожноЗагрузитьСКомпьютера(): void

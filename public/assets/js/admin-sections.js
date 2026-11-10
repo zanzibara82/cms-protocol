@@ -52,6 +52,93 @@
         });
     });
 
+    // Плюс у повторяющихся строк (карточки, вопросы-ответы, шаги): добавляет ещё одну пустую
+    // строку с теми же полями и следующим индексом items[N][…]. Без скрипта кнопка скрыта,
+    // а сервер по-прежнему печатает одну пустую строку для следующего сохранения.
+    function clearControl(control) {
+        if (control.tagName === 'SELECT') {
+            control.selectedIndex = 0;
+
+            return;
+        }
+
+        if (control.type === 'checkbox' || control.type === 'radio') {
+            control.checked = false;
+
+            return;
+        }
+
+        control.value = '';
+    }
+
+    function renameIndex(value, from, to) {
+        return value.replace(new RegExp('items\\[' + from + '\\]', 'g'), 'items[' + to + ']');
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-items-add]'), function (addButton) {
+        addButton.hidden = false;
+
+        addButton.addEventListener('click', function () {
+            var editor = addButton.parentNode;
+
+            while (editor && !editor.hasAttribute('data-items-editor')) {
+                editor = editor.parentNode;
+            }
+
+            if (!editor) {
+                return;
+            }
+
+            var rows = editor.querySelector('[data-items-rows]');
+            var source = rows ? rows.lastElementChild : null;
+
+            if (!rows || !source) {
+                return;
+            }
+
+            var nextIndex = 0;
+            Array.prototype.forEach.call(rows.querySelectorAll('[data-item-row]'), function (row) {
+                var index = parseInt(row.getAttribute('data-item-row') || '0', 10);
+
+                if (index >= nextIndex) {
+                    nextIndex = index + 1;
+                }
+            });
+
+            var previousIndex = parseInt(source.getAttribute('data-item-row') || '0', 10);
+            var row = source.cloneNode(true);
+            row.setAttribute('data-item-row', String(nextIndex));
+
+            Array.prototype.forEach.call(row.querySelectorAll('input, select, textarea'), function (control) {
+                var name = control.getAttribute('name');
+                var controlId = control.getAttribute('id');
+
+                if (name) {
+                    control.setAttribute('name', renameIndex(name, previousIndex, nextIndex));
+                }
+
+                if (controlId) {
+                    control.setAttribute('id', renameIndex(controlId, previousIndex, nextIndex));
+                }
+
+                clearControl(control);
+            });
+
+            Array.prototype.forEach.call(row.querySelectorAll('label[for]'), function (label) {
+                label.setAttribute('for', renameIndex(label.getAttribute('for') || '', previousIndex, nextIndex));
+            });
+
+            rows.appendChild(row);
+
+            var first = row.querySelector('input, select, textarea');
+            if (first) {
+                first.focus({preventScroll: true});
+            }
+
+            row.scrollIntoView({block: 'nearest'});
+        });
+    });
+
     var button = document.querySelector('[data-save-button]');
 
     if (!button) {
@@ -104,14 +191,24 @@
 
     function isDirty(form) {
         var dirty = false;
+        var known = initial.get(form) || new Map();
 
-        initial.get(form).forEach(function (value, control) {
+        known.forEach(function (value, control) {
             if (!dirty && controlValue(control) !== value) {
                 dirty = true;
             }
         });
 
         if (dirty) {
+            return true;
+        }
+
+        // Строка, добавленная плюсом, в снимке отсутствует: заполненное новое поле — изменение.
+        var added = Array.prototype.some.call(controlsOf(form), function (control) {
+            return !known.has(control) && controlValue(control) !== '';
+        });
+
+        if (added) {
             return true;
         }
 
