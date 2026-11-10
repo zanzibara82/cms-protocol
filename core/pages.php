@@ -35,10 +35,11 @@ const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'comme
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
 // pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая, banner и video —
-// шестая, slider и review — седьмая, float и files — восьмая. Остальные добираются своими
-// пачками. Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
+// шестая, slider и review — седьмая, float и files — восьмая, contacts и chain — девятая.
+// Остальные добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру
+// pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'contacts', 'chain', 'cta', 'faq'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -62,6 +63,8 @@ const PAGES_KIND_NAMES = [
     'review' => 'Отзывы',
     'float' => 'Картинка с обтеканием',
     'files' => 'Файлы',
+    'contacts' => 'Контакты',
+    'chain' => 'Цепочка шагов',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
 ];
@@ -92,6 +95,8 @@ const PAGES_KIND_FIELDS = [
     'review' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'float' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'image', 'items', 'buttons', 'layout'],
     'files' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'items', 'layout'],
+    'contacts' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'items'],
+    'chain' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'cta' => ['anchor', 'badge', 'title', 'lead_text', 'buttons'],
     'faq' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
 ];
@@ -116,6 +121,8 @@ const PAGES_KIND_ITEM_FIELDS = [
     'review' => ['image', 'title', 'text', 'note'],
     'float' => ['title', 'text'],
     'files' => ['badge', 'href', 'title', 'text', 'note'],
+    'contacts' => ['title', 'href', 'text', 'note'],
+    'chain' => ['title'],
     'faq' => ['title', 'text'],
 ];
 
@@ -138,6 +145,8 @@ const PAGES_KIND_ITEM_LABELS = [
     'review' => ['image' => 'Фото', 'title' => 'Имя', 'text' => 'Отзыв', 'note' => 'Кто и откуда'],
     'float' => ['title' => 'Заголовок', 'text' => 'Текст'],
     'files' => ['badge' => 'Плашка', 'href' => 'Адрес файла', 'title' => 'Название', 'text' => 'Описание', 'note' => 'Примечание'],
+    'contacts' => ['title' => 'Подпись', 'href' => 'Адрес ссылки', 'text' => 'Значение', 'note' => 'Примечание'],
+    'chain' => ['title' => 'Шаг'],
     'faq' => ['title' => 'Вопрос', 'text' => 'Ответ'],
 ];
 

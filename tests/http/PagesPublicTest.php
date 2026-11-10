@@ -452,6 +452,36 @@ final class PagesPublicTest extends TestCase
             ],
         ]), nowUtc());
 
+        // Контакты: строка — способ связи. title — подпись («Телефон», «Адрес»), href/text —
+        // значение (ссылка, если адрес есть), note — примечание. Строка без значения не печатается:
+        // подпись без телефона или адреса ничего не сообщает.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'contacts',
+            'anchor' => 'kontakty',
+            'title' => 'Как с нами связаться',
+            'lead_text' => 'Звоните, пишите, приходите.',
+            'note' => 'Отвечаем в будни',
+            'items' => [
+                ['title' => 'Телефон', 'href' => 'tel:+71234567890', 'text' => '+7 123 456-78-90', 'note' => 'с 9 до 18'],
+                ['title' => 'Адрес', 'href' => '', 'text' => 'ул. Школьная, 1', 'note' => 'офис 12'],
+                ['title' => 'Обрывок', 'href' => '', 'text' => '', 'note' => ''],
+            ],
+        ]), nowUtc());
+
+        // Цепочка шагов: путь курса короткими плашками с переходами-стрелками; первый шаг выделен,
+        // шаг без названия не печатается.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'chain',
+            'anchor' => 'etapy',
+            'title' => 'Как устроен курс',
+            'lead_text' => 'От первого занятия до свободной речи.',
+            'items' => [
+                ['title' => 'Пробный урок'],
+                ['title' => 'Абонемент'],
+                ['title' => ''],
+            ],
+        ]), nowUtc());
+
         createSection((string) $vidy['id'], $values([
             'kind' => 'faq',
             'title' => 'Частые вопросы',
@@ -832,6 +862,47 @@ final class PagesPublicTest extends TestCase
         self::assertStringContainsString('Страница 12.', $page['body'], 'описание второго файла напечатано');
         self::assertStringNotContainsString('Файл без названия', $page['body'], 'строка без названия не печатается');
         self::assertStringContainsString('Файлы лежат на сайте', $page['body'], 'примечание блока напечатано сноской');
+    }
+
+    public function testContactsПечатаетСпособСвязиИМолчитНаПустом(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Как с нами связаться', $page['body'], 'заголовок блока напечатан');
+        self::assertStringContainsString('Звоните, пишите, приходите.', $page['body'], 'лид блока напечатан');
+        self::assertStringContainsString('Телефон', $page['body'], 'подпись строки напечатана');
+        self::assertMatchesRegularExpression(
+            '~<a\b[^>]*href="tel:\+71234567890"[^>]*>\+7 123 456-78-90</a>~',
+            $page['body'],
+            'значение с адресом печатается ссылкой на телефон'
+        );
+        self::assertStringContainsString('с 9 до 18', $page['body'], 'примечание строки напечатано');
+        self::assertStringContainsString('Адрес', $page['body'], 'вторая подпись напечатана');
+        self::assertStringContainsString('ул. Школьная, 1', $page['body'], 'значение без адреса печатается текстом');
+        self::assertStringContainsString('офис 12', $page['body'], 'примечание второй строки напечатано');
+        self::assertStringNotContainsString('Обрывок', $page['body'], 'строка без значения не печатается');
+        self::assertStringContainsString('Отвечаем в будни', $page['body'], 'примечание блока напечатано сноской');
+    }
+
+    public function testChainПечатаетЦепочкуШаговИМолчитНаПустом(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Как устроен курс', $page['body'], 'заголовок блока напечатан');
+        self::assertStringContainsString('От первого занятия до свободной речи.', $page['body'], 'лид блока напечатан');
+        self::assertMatchesRegularExpression(
+            '~<span class="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream">Пробный урок</span>~',
+            $page['body'],
+            'первый шаг выделен заливкой'
+        );
+        self::assertStringContainsString('Абонемент', $page['body'], 'второй шаг напечатан');
+        self::assertSame(
+            1,
+            preg_match_all('~<span class="text-ink/50"[^>]*>→</span>~', $page['body'], $m),
+            'переход-стрелка между двумя шагами одна: пустой шаг её не создаёт'
+        );
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void
