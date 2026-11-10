@@ -142,16 +142,16 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . ' value="' . e((string) $form['og_image']) . '">'
     . $fieldError('og_image')
     . '</label>'
-    . '<label class="flex items-start gap-3">'
-    . '<input type="checkbox" name="noindex" value="1"' . ($noindexChecked ? ' checked' : '')
-    . ' class="min-h-[44px] size-11 rounded border border-ink/20 bg-white">'
-    . '<span class="text-sm">Закрыть адрес от индексации: страница получит метку noindex, nofollow и перестанет отдаваться из кэша.</span>'
-    . '</label>'
-    . '<label class="flex items-start gap-3">'
-    . '<input type="checkbox" name="in_sitemap" value="1"' . ($sitemapChecked ? ' checked' : '')
-    . ' class="min-h-[44px] size-11 rounded border border-ink/20 bg-white">'
-    . '<span class="text-sm">Включить адрес в карту сайта: закрытые адреса в карту не попадают.</span>'
-    . '</label>'
+    . partial('partials/checkbox', [
+        'name' => 'noindex',
+        'label' => 'Закрыть адрес от индексации: страница получит метку noindex, nofollow и перестанет отдаваться из кэша.',
+        'checked' => $noindexChecked,
+    ])
+    . partial('partials/checkbox', [
+        'name' => 'in_sitemap',
+        'label' => 'Включить адрес в карту сайта: закрытые адреса в карту не попадают.',
+        'checked' => $sitemapChecked,
+    ])
     . '<div class="mt-1 flex flex-wrap gap-2">'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-5 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">'
     . e($isEdit ? 'Сохранить метаданные' : 'Добавить метаданные') . '</button>'

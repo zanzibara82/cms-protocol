@@ -90,10 +90,7 @@ $noticeKey = queryString('notice');
                         <input class="sr-only" id="lead-company" type="text" name="company" tabindex="-1" autocomplete="off">
                     </div>
 
-                    <label class="flex min-h-[44px] cursor-pointer items-start gap-2 text-sm select-none">
-                        <input class="mt-0.5 h-5 w-5 min-h-[44px] shrink-0 accent-ink" type="checkbox" required>
-                        <span>Согласие на обработку персональных данных</span>
-                    </label>
+                    <?= partial('partials/checkbox', ['name' => 'consent', 'label' => 'Согласие на обработку персональных данных', 'required' => true]) /* @safe html */ ?>
                     <p class="text-xs text-ink/50">
                         Данные нужны только чтобы ответить на заявку; подробности — в
                         <a class="inline-flex min-h-[44px] items-center text-accent underline-offset-4 hover:underline" href="/privacy">политике конфиденциальности</a>.

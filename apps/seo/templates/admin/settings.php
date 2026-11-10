@@ -22,12 +22,11 @@ $dntChecked = $settings['respectDnt'];
 $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6" method="post" action="/seo/admin/settings">'
     . csrfField()
     . '<input type="hidden" name="op" value="stats_settings">'
-    . '<label class="flex items-start gap-3">'
-    . '<input type="checkbox" name="enabled" value="1"' . ($enabledChecked ? ' checked' : '')
-    . ' class="min-h-[44px] size-11 rounded border border-ink/20 bg-white">'
-    . '<span class="text-sm">Собирать статистику: без этого счётчик не подключается к страницам, '
-    . 'а приёмник отвечает «выключено».</span>'
-    . '</label>'
+    . partial('partials/checkbox', [
+        'name' => 'enabled',
+        'label' => 'Собирать статистику: без этого счётчик не подключается к страницам, а приёмник отвечает «выключено».',
+        'checked' => $enabledChecked,
+    ])
     . '<label class="block" for="stats_timeout">'
     . '<span class="text-sm text-ink/60">Сессия — окно бездействия, минут</span>'
     . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" type="number"'
@@ -44,12 +43,11 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '<span class="mt-1 block text-sm text-ink/60">Допустимо от ' . e((string) SEO_STATS_RETENTION_MIN)
     . ' до ' . e((string) SEO_STATS_RETENTION_MAX) . ' дней. Старые записи удаляются при очистке.</span>'
     . '</label>'
-    . '<label class="flex items-start gap-3">'
-    . '<input type="checkbox" name="respect_dnt" value="1"' . ($dntChecked ? ' checked' : '')
-    . ' class="min-h-[44px] size-11 rounded border border-ink/20 bg-white">'
-    . '<span class="text-sm">Уважать «не отслеживать» (Do Not Track): браузер просит не следить — '
-    . 'значит, и мы не следим.</span>'
-    . '</label>'
+    . partial('partials/checkbox', [
+        'name' => 'respect_dnt',
+        'label' => 'Уважать «не отслеживать» (Do Not Track): браузер просит не следить — значит, и мы не следим.',
+        'checked' => $dntChecked,
+    ])
     . '<div class="mt-1">'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-5 py-2 text-sm font-medium text-cream hover:bg-ink/90"'
     . ' type="submit">Сохранить настройки</button>'

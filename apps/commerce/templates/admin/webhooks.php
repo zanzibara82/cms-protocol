@@ -66,11 +66,11 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . ' value="' . e($value('secret')) . '">'
     . $fieldError('secret')
     . '</label>'
-    . '<label class="flex items-start gap-3">'
-    . '<input type="checkbox" name="active" value="1"' . ($checked ? ' checked' : '')
-    . ' class="min-h-[44px] size-11 rounded border border-ink/20 bg-white">'
-    . '<span class="text-sm">Приёмник активен: пока флажок снят, событие не уходит.</span>'
-    . '</label>'
+    . partial('partials/checkbox', [
+        'name' => 'active',
+        'label' => 'Приёмник активен: пока флажок снят, событие не уходит.',
+        'checked' => $checked,
+    ])
     . '<div class="mt-1 flex flex-wrap gap-2">'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-5 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">'
     . e($isEdit ? 'Сохранить вебхук' : 'Добавить вебхук') . '</button>'
