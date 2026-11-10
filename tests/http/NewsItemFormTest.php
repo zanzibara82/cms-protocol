@@ -17,6 +17,9 @@ final class NewsItemFormTest extends TestCase
     private const EDITOR_PASSWORD = 'верный-пароль';
     private const EDITOR = ['id' => 'redaktor-form-1', 'email' => 'redaktor-form@shkola.ru'];
 
+    /** @var list<string> файлы, которые лежали в загрузках до прогона класса */
+    private static array $uploadsBefore = [];
+
     public static function setUpBeforeClass(): void
     {
         TestDb::reset();
@@ -24,6 +27,10 @@ final class NewsItemFormTest extends TestCase
         TestDb::seedUser(self::EDITOR_EMAIL, self::EDITOR_PASSWORD, 'editor');
 
         installApp('news');
+
+        // Каталог загрузок общий с dev-сайтом: запоминаем чужие картинки, чтобы уборка класса
+        // не стёрла их вместе с тестовыми.
+        self::$uploadsBefore = self::uploadFiles();
 
         // Адрес заготовленной строки совпадает с тем, что даёт `slugify()` по таблице `NEWS_TRANSLIT`
         // (`й` → `y`), и только поэтому проверка «занятый адрес» ниже остаётся проверкой: форма
@@ -44,8 +51,9 @@ final class NewsItemFormTest extends TestCase
         Kernel::stop();
 
         // Загрузки проверяются настоящие, файл остаётся на диске: подчищаем только картинки,
-        // `.gitkeep` обязан выжить.
-        foreach (self::uploadFiles() as $file) {
+        // появившиеся за время этого класса. Чужие файлы (в том числе загрузки dev-сайта)
+        // и `.gitkeep` обязаны выжить.
+        foreach (array_diff(self::uploadFiles(), self::$uploadsBefore) as $file) {
             unlink($file);
         }
     }
