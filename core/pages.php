@@ -35,11 +35,11 @@ const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'comme
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
 // pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая, banner и video —
-// шестая, slider и review — седьмая, float и files — восьмая, contacts и chain — девятая.
-// Остальные добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру
-// pages_block_<kind> (вклад приложения).
+// шестая, slider и review — седьмая, float и files — восьмая, contacts и chain — девятая,
+// lead — десятая (§17 «заявки и рассылка»). Остальные добираются своими пачками. Чужой вид ядро
+// не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'contacts', 'chain', 'cta', 'faq'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'contacts', 'chain', 'cta', 'faq', 'lead'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -67,6 +67,7 @@ const PAGES_KIND_NAMES = [
     'chain' => 'Цепочка шагов',
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
+    'lead' => 'Форма заявки',
 ];
 
 // Набор полей формы у каждого вида: конструктор рисует только то, что шаблон вида читает.
@@ -99,6 +100,7 @@ const PAGES_KIND_FIELDS = [
     'chain' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'cta' => ['anchor', 'badge', 'title', 'lead_text', 'buttons'],
     'faq' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
+    'lead' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'items'],
 ];
 
 // Подполя строки по виду: у шагов только заголовок и текст, у карточек — картинка, ссылка и
@@ -124,6 +126,7 @@ const PAGES_KIND_ITEM_FIELDS = [
     'contacts' => ['title', 'href', 'text', 'note'],
     'chain' => ['title'],
     'faq' => ['title', 'text'],
+    'lead' => ['text'],
 ];
 
 // Подписи подполей строки: один ключ в разных видах значит разное (title у карточки —
@@ -148,6 +151,7 @@ const PAGES_KIND_ITEM_LABELS = [
     'contacts' => ['title' => 'Подпись', 'href' => 'Адрес ссылки', 'text' => 'Значение', 'note' => 'Примечание'],
     'chain' => ['title' => 'Шаг'],
     'faq' => ['title' => 'Вопрос', 'text' => 'Ответ'],
+    'lead' => ['text' => 'Пункт'],
 ];
 
 // Вид приложения (вклад конструктора) не описан в ядре: ему остаются общие поля шапки, а

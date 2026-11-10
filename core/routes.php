@@ -30,6 +30,11 @@ function registerCoreRoutes(): void
     // Текст и логотипы шапки/подвала — настройки контента, поэтому право то же, что у меню.
     addRoute('GET', '/admin/settings', 'coreAdminSettings', ['private' => true, 'permission' => 'login']);
     addRoute('POST', '/admin/settings', 'coreAdminSettingsAction', ['private' => true, 'permission' => 'login']);
+    // Заявки с публичных форм: приём — публичный POST, список и действия — только администратор
+    // (контакты — личные данные; портал зовёт requireAdmin, здесь право manage, как /admin/apps).
+    addRoute('POST', '/lead', 'coreLeadSubmit');
+    addRoute('GET', '/admin/leads', 'coreAdminLeads', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/leads', 'coreAdminLeadsAction', ['private' => true, 'permission' => 'manage']);
     addRoute('GET', '/sitemap.xml', 'coreSitemap');
     addRoute('GET', '/robots.txt', 'coreRobots');
     // Страницы живут на /{slug} одним сегментом, поэтому маршрут идёт в конец реестра: точные
@@ -734,6 +739,199 @@ function coreAdminSettingsAction(array $params = []): void
     logInfo('settings.saved', ['keys' => implode(',', array_keys(SITE_SETTINGS_FIELDS))]);
 
     finishAppAction(['ok' => true, 'error' => ''], '/admin/settings', 'settings_saved');
+}
+
+// ---------------------------------------------------------------------------
+// Заявки с публичных форм и их админка (§17)
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function coreLeadSubmit(array $params = []): void
+{
+    csrfCheck();
+
+    $ip = clientIp();
+    $source = leadSourceOrEmpty(postString('source'));
+
+    // Лимит считается и записывается до ловушки и валидации, как в портале: вызов сверх предела
+    // отказывает, а обычный — пишет попытку.
+    if (leadRateTooMany('ip:' . $ip, LEAD_RATE_LIMIT, LEAD_RATE_WINDOW_MINUTES)) {
+        leadRedirect($source, 'lead_failed', 'Заявки с одного адреса принимаются не чаще пяти в час. Попробуйте позже.');
+    }
+
+    $data = [
+        'name' => postString('name'),
+        'contact' => postString('contact'),
+        'message' => postString('message'),
+        'source' => $source,
+        'company' => postString('company'),
+    ];
+
+    // Ловушка для ботов отвечает тем же «спасибо», что и настоящему человеку: по ответу нельзя
+    // определить, сработала она или нет.
+    if (leadIsJunk($data)) {
+        leadRedirect($source, 'lead_sent', '');
+    }
+
+    $error = leadValidationError($data);
+
+    if ($error !== '') {
+        leadRedirect($source, 'lead_failed', $error);
+    }
+
+    $created = leadCreate($data);
+
+    if (!($created['ok'] ?? false)) {
+        leadRedirect($source, 'lead_failed', (string) ($created['error'] ?? 'Заявка не сохранилась.'));
+    }
+
+    leadConfirmSend((string) $created['id'], trim((string) $data['name']), trim((string) $data['contact']));
+
+    leadRedirect($source, 'lead_sent', '', trim((string) $data['contact']));
+}
+
+/**
+ * PRG-редирект обратно к форме: человек остаётся у блока, а не прыгает вверх страницы. Цель
+ * собирается из нормализованного источника — чужой домен и «//» в него не проходят. Ошибка
+ * показывается flash-причиной, успешный контакт — подписью «подтверждение придёт на почту».
+ */
+function leadRedirect(string $source, string $notice, string $error, string $acceptedContact = ''): never
+{
+    startSession();
+
+    if ($error !== '') {
+        $_SESSION['lead_error'] = $error;
+    } else {
+        unset($_SESSION['lead_error']);
+    }
+
+    if ($acceptedContact !== '') {
+        $_SESSION['lead_accepted'] = $acceptedContact;
+    } else {
+        unset($_SESSION['lead_accepted']);
+    }
+
+    $target = leadRedirectTarget($source);
+    redirect(queryAppend($target, 'notice', $notice) . leadSourceFragment($source));
+}
+
+// Путь для редиректа без якоря: queryAppend() обязан добавить notice до «#», иначе параметр
+// уедет в якорь и не прочитается. Путь без схемы гарантирован leadSourceOrEmpty().
+function leadRedirectTarget(string $source): string
+{
+    if ($source === '') {
+        return '/';
+    }
+
+    $path = (string) (strtok($source, '?#') ?: '/');
+
+    if (!str_starts_with($path, '/') || str_starts_with($path, '//')) {
+        return '/';
+    }
+
+    $query = str_contains($source, '?draft=1') ? '?draft=1' : '';
+
+    return $path . $query;
+}
+
+function leadSourceFragment(string $source): string
+{
+    $pos = strpos($source, '#');
+
+    return $pos === false ? '' : substr($source, $pos);
+}
+
+// Читает и стирает flash-причину отказа публичной формы: показывается ровно один раз.
+function takeLeadFlashReason(): string
+{
+    startSession();
+    $reason = $_SESSION['lead_error'] ?? '';
+    unset($_SESSION['lead_error']);
+
+    return is_string($reason) ? $reason : '';
+}
+
+// Читает и стирает принятый контакт (для подписи «подтверждение придёт на …»).
+function takeLeadAcceptedContact(): string
+{
+    startSession();
+    $contact = $_SESSION['lead_accepted'] ?? '';
+    unset($_SESSION['lead_accepted']);
+
+    return is_string($contact) ? $contact : '';
+}
+
+/** @param array<string, string> $params */
+function coreAdminLeads(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $status = leadAdminStatus(queryString('status'));
+    $query = trim((string) queryString('q', ''));
+    $page = max(1, (int) queryString('page', '1'));
+    $result = leadsPage($status, $query, $page);
+
+    render('admin/leads', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => $result['rows'],
+        'total' => $result['total'],
+        'pages' => $result['pages'],
+        'page' => min($page, $result['pages']),
+        'status' => $status,
+        'query' => $query,
+    ], ['title' => 'Заявки — админка', 'noindex' => true]);
+}
+
+// Фильтр админки: NEW (по умолчанию), DONE, ALL. Чужое значение тихо сводится к NEW — открывать
+// пустую вкладку не за чем.
+function leadAdminStatus(mixed $raw): string
+{
+    return $raw === LEAD_STATUS_DONE || $raw === 'ALL' ? (string) $raw : LEAD_STATUS_NEW;
+}
+
+/** @param array<string, string> $params */
+function coreAdminLeadsAction(array $params = []): void
+{
+    csrfCheck();
+
+    $op = postString('op');
+    $id = postString('lead');
+    $status = leadAdminStatus(postString('status'));
+    $query = trim(postString('q'));
+
+    $result = match ($op) {
+        'set-status' => leadSetStatus($id, postString('target')),
+        'delete' => leadDelete($id),
+        'reply' => leadReplySend($id, postString('text'), (string) (currentUser()['email'] ?? '')),
+        default => ['ok' => false, 'error' => 'Неизвестное действие.'],
+    };
+
+    $notice = match ($op) {
+        'set-status' => 'lead_status_saved',
+        'delete' => 'lead_deleted',
+        'reply' => 'lead_reply_sent',
+        default => '',
+    };
+
+    finishAppAction($result, '/admin/leads' . leadAdminQuery($status, $query), $notice);
+}
+
+// Адресная часть списка после действия: фильтр и поиск возвращаются, чтобы человек остался в
+// том же списке, а не прыгнул в «Новые».
+function leadAdminQuery(string $status, string $query): string
+{
+    $parts = [];
+
+    if ($status !== LEAD_STATUS_NEW) {
+        $parts[] = 'status=' . rawurlencode($status);
+    }
+
+    if (trim($query) !== '') {
+        $parts[] = 'q=' . rawurlencode(trim($query));
+    }
+
+    return $parts === [] ? '' : '?' . implode('&', $parts);
 }
 
 /**

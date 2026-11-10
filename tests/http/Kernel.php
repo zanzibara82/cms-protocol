@@ -68,8 +68,17 @@ final class Kernel
         // переменную читают — при внешнем -e остаётся одно падение, SitemapTest.php:68 с
         // absoluteUrl(). Его совпадение с заготовкой держится на равенстве значений, а не на
         // изоляции: ключ не снимает окружение в процессе PHPUnit и больше обещать не вправе.
+        //
+        // Почтовые ключи снимаются по той же причине: контейнер разработки выставляет
+        // CMS_SMTP_HOST=mailpit (docker-compose.dev.yml:23) ради SmtpIntegrationTest, и без
+        // снятия серверные ответы отправляли бы настоящие письма. Проверки «без SMTP отказ
+        // честный» (AdminLeadsTest, LeadFormTest) тогда падали бы на успешной отправке — то есть
+        // на живом почтовом контуре, а не на своём предмете. Класс, которому нужна почта,
+        // передаёт ключи через $env: присваивание идёт после -u.
         $command = sprintf(
-            'env -u CMS_EXTRA_APPS_DIR -u CMS_EXTRA_THEME_DIR -u CMS_SITE_URL %s php -S %s:%d -t %s/public %s/public/index.php',
+            'env -u CMS_EXTRA_APPS_DIR -u CMS_EXTRA_THEME_DIR -u CMS_SITE_URL'
+            . ' -u CMS_SMTP_HOST -u CMS_SMTP_PORT -u CMS_SMTP_USER -u CMS_SMTP_PASS -u CMS_MAIL_FROM'
+            . ' %s php -S %s:%d -t %s/public %s/public/index.php',
             $prefix,
             self::HOST,
             self::PORT,
