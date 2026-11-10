@@ -617,6 +617,13 @@ final class PagesPublicTest extends TestCase
 
         self::assertStringContainsString('Как начать', $page['body']);
         self::assertMatchesRegularExpression('~<ol\b[^>]*>.*?Заявка.*?Пробный урок.*?</ol>~s', $page['body'], 'шаги — нумерованный список по порядку');
+        // Кружок номера больше строки заголовка (32 px против 24): без сдвига его центр на 4 px
+        // ниже центра первой строки, и номер стоит «утопленным» относительно названия шага.
+        self::assertStringContainsString(
+            '<span class="-mt-1 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink font-semibold text-cream">',
+            $page['body'],
+            'кружок номера выровнен по центру первой строки названия шага'
+        );
         self::assertStringContainsString('Оставьте заявку на сайте.', $page['body']);
         self::assertStringContainsString('Приходите на пробное занятие.', $page['body']);
     }
@@ -845,6 +852,13 @@ final class PagesPublicTest extends TestCase
         self::assertSame(200, $page['status']);
         self::assertStringContainsString('Материалы для скачивания', $page['body'], 'заголовок блока напечатан');
         self::assertStringContainsString('Памятки и домашние задания.', $page['body'], 'лид блока напечатан');
+        // Плашка формата и название файла стоят в коробках одной высоты: ссылка несёт зону нажатия
+        // 44 px, и без такой же коробки у плашки её центр оказывается на 10 px ниже центра текста.
+        self::assertStringContainsString(
+            '<span class="flex min-h-[44px] shrink-0 items-center">',
+            $page['body'],
+            'плашка формата стоит в коробке той же высоты, что ссылка на файл'
+        );
         self::assertMatchesRegularExpression(
             '~<a\b[^>]*href="/files/tenses\.pdf"[^>]*>\s*Памятка по временам</a>~s',
             $page['body'],
@@ -973,6 +987,13 @@ final class PagesPublicTest extends TestCase
             'содержание печатается навигацией, а не простым списком'
         );
         self::assertStringContainsString('Содержание страницы', $page['body'], 'заголовок блока напечатан');
+        // Кружок с номером и ссылка стоят в коробках одной высоты: у ссылки зона нажатия 44 px, и
+        // без такой же коробки у кружка его центр оказывается на 6 px выше центра текста.
+        self::assertStringContainsString(
+            '<span class="flex min-h-[44px] w-8 shrink-0 items-center">',
+            $page['body'],
+            'кружок с номером стоит в коробке той же высоты, что ссылка на место'
+        );
         self::assertMatchesRegularExpression(
             '~href="#verh"[^>]*>Школа английского языка</a>~',
             $page['body'],

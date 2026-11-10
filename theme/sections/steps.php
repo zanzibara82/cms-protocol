@@ -18,8 +18,11 @@ $anchor = (string) $section['anchor'];
         <?php if ($items !== []): ?>
             <ol class="mt-8 space-y-4">
                 <?php foreach ($items as $index => $row): ?>
+                    <?php // Кружок номера выше строки заголовка (32 px против 24): без сдвига его центр
+                    // на 4 px ниже центра названия, и номер стоит «утопленным». Ровно на столько же
+                    // поднимаем кружок — центр кружка и центр первой строки совпадают.?>
                     <li class="flex gap-4">
-                        <span class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink font-semibold text-cream"><?= e((string) ((int) $index + 1)) ?></span>
+                        <span class="-mt-1 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink font-semibold text-cream"><?= e((string) ((int) $index + 1)) ?></span>
                         <div>
                             <h3 class="font-semibold"><?= e((string) $row['title']) ?></h3>
                             <?php if (trim((string) ($row['text'] ?? '')) !== ''): ?>

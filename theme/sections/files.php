@@ -72,12 +72,19 @@ $listClass = $layout === 'cards'
                     </li>
                 <?php else: ?>
                     <li class="flex items-start gap-3 p-4 sm:gap-4 sm:p-5">
-                        <span class="shrink-0 rounded-lg bg-accent/10 px-2 py-1 text-xs font-semibold text-accent tabular-nums"><?= e($file['chip']) ?></span>
+                        <?php // Плашка и название стоят в коробках одной высоты: у ссылки зона нажатия
+                        // 44 px, и без такой же коробки у плашки её центр оказывается выше центра
+                        // названия. Строка без адреса печатается текстом 24 px и совпадает сама.?>
+                        <span class="flex min-h-[44px] shrink-0 items-center">
+                            <span class="rounded-lg bg-accent/10 px-2 py-1 text-xs font-semibold text-accent tabular-nums"><?= e($file['chip']) ?></span>
+                        </span>
                         <div class="min-w-0">
                             <?php if ($file['href'] !== ''): ?>
                                 <a class="inline-flex min-h-[44px] items-center break-words font-medium text-accent underline-offset-4 hover:underline" href="<?= e($file['href']) ?>"><?= e($file['title']) ?></a>
                             <?php else: ?>
-                                <span class="block break-words font-medium"><?= e($file['title']) ?></span>
+                                <?php // Название без адреса стоит в коробке той же высоты, что ссылка выше:
+                                // иначе плашка сбоку оказывается ниже первой строки названия.?>
+                                <span class="flex min-h-[44px] items-center break-words font-medium"><?= e($file['title']) ?></span>
                             <?php endif; ?>
                             <?php if ($file['text'] !== ''): ?>
                                 <p class="mt-1 text-sm text-ink/70"><?= e($file['text']) ?></p>
