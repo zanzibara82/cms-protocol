@@ -272,29 +272,83 @@ $moduleIds = importIds(importRows($dumpDir, 'Module'));
 $lessonIds = importIds(importRows($dumpDir, 'Lesson'));
 $testIds = importIds(importRows($dumpDir, 'Test'));
 
-$itogi['Level'] = importPlain($write, $dumpDir, 'Level', 'learn_level',
+$itogi['Level'] = importPlain(
+    $write,
+    $dumpDir,
+    'Level',
+    'learn_level',
     ['code' => 'code', 'title' => 'title', 'order' => 'sort'],
-    [], [], ['sort'], [], $problemy);
+    [],
+    [],
+    ['sort'],
+    [],
+    $problemy
+);
 
-$itogi['Course'] = importPlain($write, $dumpDir, 'Course', 'learn_course',
+$itogi['Course'] = importPlain(
+    $write,
+    $dumpDir,
+    'Course',
+    'learn_course',
     ['levelId' => 'level_id', 'title' => 'title', 'description' => 'description', 'status' => 'status', 'order' => 'sort'],
-    ['description' => ''], ['levelId' => $levelIds], ['sort'], [], $problemy);
+    ['description' => ''],
+    ['levelId' => $levelIds],
+    ['sort'],
+    [],
+    $problemy
+);
 
-$itogi['Module'] = importPlain($write, $dumpDir, 'Module', 'learn_module',
+$itogi['Module'] = importPlain(
+    $write,
+    $dumpDir,
+    'Module',
+    'learn_module',
     ['courseId' => 'course_id', 'title' => 'title', 'description' => 'description', 'status' => 'status', 'order' => 'sort'],
-    ['description' => ''], ['courseId' => $courseIds], ['sort'], [], $problemy);
+    ['description' => ''],
+    ['courseId' => $courseIds],
+    ['sort'],
+    [],
+    $problemy
+);
 
-$itogi['Lesson'] = importPlain($write, $dumpDir, 'Lesson', 'learn_lesson',
+$itogi['Lesson'] = importPlain(
+    $write,
+    $dumpDir,
+    'Lesson',
+    'learn_lesson',
     ['moduleId' => 'module_id', 'slug' => 'slug', 'title' => 'title', 'description' => 'description', 'status' => 'status', 'order' => 'sort'],
-    ['description' => ''], ['moduleId' => $moduleIds], ['sort'], [], $problemy);
+    ['description' => ''],
+    ['moduleId' => $moduleIds],
+    ['sort'],
+    [],
+    $problemy
+);
 
-$itogi['LearningObjective'] = importPlain($write, $dumpDir, 'LearningObjective', 'learn_objective',
+$itogi['LearningObjective'] = importPlain(
+    $write,
+    $dumpDir,
+    'LearningObjective',
+    'learn_objective',
     ['lessonId' => 'lesson_id', 'text' => 'text', 'order' => 'sort'],
-    [], ['lessonId' => $lessonIds], ['sort'], [], $problemy);
+    [],
+    ['lessonId' => $lessonIds],
+    ['sort'],
+    [],
+    $problemy
+);
 
-$itogi['VocabItem'] = importPlain($write, $dumpDir, 'VocabItem', 'learn_vocab',
+$itogi['VocabItem'] = importPlain(
+    $write,
+    $dumpDir,
+    'VocabItem',
+    'learn_vocab',
     ['lessonId' => 'lesson_id', 'word' => 'word', 'translation' => 'translation', 'ipa' => 'ipa', 'exampleEn' => 'example_en', 'exampleRu' => 'example_ru', 'order' => 'sort'],
-    [], ['lessonId' => $lessonIds], ['sort'], [], $problemy);
+    [],
+    ['lessonId' => $lessonIds],
+    ['sort'],
+    [],
+    $problemy
+);
 
 $grammarStat = statNew();
 foreach (importRows($dumpDir, 'GrammarTopic') as $topic) {
@@ -387,9 +441,19 @@ foreach (importRows($dumpDir, 'ExerciseAttempt') as $attempt) {
 }
 $itogi['ExerciseAttempt'] = $attemptStat;
 
-$itogi['Test'] = importPlain($write, $dumpDir, 'Test', 'learn_test',
+$itogi['Test'] = importPlain(
+    $write,
+    $dumpDir,
+    'Test',
+    'learn_test',
     ['kind' => 'kind', 'lessonId' => 'lesson_id', 'moduleId' => 'module_id', 'title' => 'title', 'passScore' => 'pass_score', 'status' => 'status'],
-    [], [], ['pass_score'], [], $problemy, ['lesson_id', 'module_id']);
+    [],
+    [],
+    ['pass_score'],
+    [],
+    $problemy,
+    ['lesson_id', 'module_id']
+);
 
 $testQuestionStat = statNew();
 foreach (importRows($dumpDir, 'TestQuestion') as $question) {

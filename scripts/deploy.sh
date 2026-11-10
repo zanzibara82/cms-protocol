@@ -46,6 +46,12 @@ cd "$REPO"
 
 # Dev-only файлы на сервере не нужны, а их наличие в документ-корне — это подсказка постороннему
 # о сборке (phpunit.xml, composer.lock с точными версиями). sql/ остаётся: его читает setup.php.
+#
+# Из scripts/ на сервер едет ровно один файл — backup.sh: его ставит в cron раздел «Мониторинг и
+# бэкапы» чек-листа, и без него пункт про регулярные копии невыполним. Остальные скрипты —
+# инструменты разработчика и выкладки, им на сервере делать нечего. Порядок правил значим: rsync
+# берёт первое совпадение, поэтому каталог разрешается, разрешённый файл включается, а всё
+# остальное содержимое закрывается маской.
 rsync "${RSYNC_OPTS[@]}" \
   --exclude='/config.php' \
   --exclude='/public/install.lock' \
@@ -55,7 +61,9 @@ rsync "${RSYNC_OPTS[@]}" \
   --exclude='/docs/' \
   --exclude='/docker/' \
   --exclude='/docker-compose.dev.yml' \
-  --exclude='/scripts/' \
+  --include='/scripts/' \
+  --include='/scripts/backup.sh' \
+  --exclude='/scripts/*' \
   --exclude='/src-css/' \
   --exclude='/vendor/' \
   --exclude='/node_modules/' \
