@@ -143,32 +143,4 @@ final class MenuRulesTest extends TestCase
         self::assertTrue($groups[0]['links'][1]['blank'], 'Флаг «в новом окне» терять нельзя');
         self::assertSame('Карта сайта', $groups[1]['links'][0]['label']);
     }
-
-    public function testСсылкиРазделовБерутсяИзВключённыхМанифестов(): void
-    {
-        // Включённое приложение отдаёт навигацию манифеста: пары «адрес — подпись»,
-        // «в новом окне» разделам сайта не нужен.
-        $news = ['id' => 'news', 'publicNav' => [['/news', ' Новости ']]];
-        self::assertSame(
-            [['href' => '/news', 'label' => 'Новости', 'blank' => false]],
-            menuPublicLinksOf($news, true)
-        );
-
-        // Выключенное приложение ссылки не отдаёт: пункт вёл бы на 404.
-        self::assertSame([], menuPublicLinksOf($news, false));
-
-        // Битые записи прочь: не пара, не строки, пустая подпись, пустой и кривой адрес.
-        $mangled = [
-            ['/news'],
-            ['/news', 'Новости', 'лишнее'],
-            ['/news', ''],
-            ['', 'Новости'],
-            ['javascript:alert(1)', 'Новости'],
-            'не массив',
-        ];
-        self::assertSame([], menuPublicLinksOf(['id' => 'news', 'publicNav' => $mangled], true));
-
-        // Навигации нет — ссылок нет.
-        self::assertSame([], menuPublicLinksOf(['id' => 'seo'], true));
-    }
 }

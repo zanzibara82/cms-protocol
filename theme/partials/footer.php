@@ -2,14 +2,17 @@
 
 declare(strict_types=1);
 
-// Подвал: колонки пунктов читаются из базы (menuFooterSections), текст и логотип — из настроек
-// шапки/подвала (/admin/settings), «Карта сайта» остаётся статикой — адрес машины состояния, не
-// контента. Пустое меню день-1 печатает только брендовый ряд: колонок нет, заглушка не рисуется.
+// Подвал: колонки пунктов читаются из базы (menuFooterSections), текст, логотип и копирайт — из
+// настроек шапки/подвала (/admin/settings). Пустое меню день-1 печатает только брендовый ряд:
+// колонок нет, заглушка не рисуется.
 $footerSections = menuFooterSections();
 $footerLogo = function_exists('siteSettingValue') ? siteSettingValue('footer_logo') : '';
 $footerText = function_exists('siteSettingValue')
     ? siteSettingValue('footer_text')
     : (string) configValue('SITE_NAME', 'Школа') . ' — новости, курсы и объявления школы.';
+$footerCopyright = function_exists('siteSettingValue')
+    ? siteSettingValue('footer_copyright')
+    : 'Сделано с котом и заботой о языке.';
 ?>
 <footer class="mt-12 border-t border-ink/10 bg-cream">
     <div class="mx-auto w-full max-w-5xl px-4 py-8 text-sm sm:px-6">
@@ -36,10 +39,9 @@ $footerText = function_exists('siteSettingValue')
             <?php if ($footerText !== ''): ?>
                 <p><?= e($footerText) ?></p>
             <?php endif; ?>
-            <nav class="flex flex-wrap gap-x-4 gap-y-2 sm:ml-auto">
-                <a class="inline-flex min-h-[44px] items-center hover:underline" href="/sitemap.xml">Карта сайта</a>
-            </nav>
         </div>
     </div>
-    <div class="pb-6 text-center text-xs text-ink/60">Сделано с котом и заботой о языке.</div>
+    <?php if ($footerCopyright !== ''): ?>
+        <div class="pb-6 text-center text-xs text-ink/60"><?= e($footerCopyright) ?></div>
+    <?php endif; ?>
 </footer>

@@ -8,9 +8,10 @@ use Cms\Tests\TestDb;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Публичная навигация читает базу: шапка печатает пункты по sort и следом ссылки включённых
- * разделов (publicNav манифеста), подвал группирует пункты в колонки по подписи. Смотрится
- * гостьей на главной — состояние экрана описывают данные, а не роль.
+ * Публичная навигация читает базу: шапка печатает только созданные администратором пункты
+ * по sort, подвал группирует их в колонки по подписи. Включение и выключение приложений
+ * состав меню не меняет. Смотрится гостьей на главной — состояние экрана описывают данные,
+ * а не роль.
  */
 final class MenuPublicTest extends TestCase
 {
@@ -37,7 +38,7 @@ final class MenuPublicTest extends TestCase
 
         self::assertSame(200, $home['status']);
         self::assertStringContainsString('href="/login"', $home['body'], 'вход остаётся статикой шапки');
-        self::assertStringContainsString('Карта сайта', $home['body'], 'карта сайта остаётся статикой подвала');
+        self::assertStringNotContainsString('Карта сайта', $home['body'], 'статической карты сайта в подвале больше нет — там своё меню');
         self::assertStringNotContainsString('>Новости</a>', $home['body'], 'раздел не установлен — навигационной ссылки «Новости» нет: статика ушла, пункт из базы не создан');
     }
 
@@ -85,29 +86,39 @@ final class MenuPublicTest extends TestCase
         self::assertSame(0, substr_count($body, '/dossier'), 'скрытый пункт не печатается публично');
     }
 
-    public function testСсылкиВключённыхРазделовИдутПослеПунктов(): void
+    public function testВключениеРазделаНеДобавляетПунктСамо(): void
     {
-        $result = installApp('news');
-
-        self::assertTrue(($result['ok'] ?? false) === true, 'раздел «Новости» не установился: ' . (string) ($result['error'] ?? ''));
+        $this->ensureNewsInstalled();
 
         $body = Kernel::get('/')['body'];
 
-        self::assertTrue(
-            $this->inOrder($body, '>О школе</a>', '>Расписание</a>', '>Новости</a>'),
-            'publicNav включённого раздела печатается следом за пунктами базы'
+        self::assertStringNotContainsString(
+            '>Новости</a>',
+            $body,
+            'пункт появляется только после создания администратором, а не при включении раздела'
         );
+
+        createMenuItem('HEADER', ['label' => 'Новости', 'href' => '/news'], nowUtc());
+
+        self::assertStringContainsString('>Новости</a>', Kernel::get('/')['body'], 'созданный вручную пункт печатается');
     }
 
-    public function testВыключенныйРазделПрячетСсылку(): void
+    public function testПунктМенюНеЗависитОтСостоянияРаздела(): void
     {
+        $this->ensureNewsInstalled();
+        createMenuItem('HEADER', ['label' => 'Новости', 'href' => '/news'], nowUtc());
+
         run('UPDATE ' . t('app_installation') . " SET enabled = 0 WHERE id = 'news'");
 
-        self::assertStringNotContainsString('>Новости</a>', Kernel::get('/')['body']);
+        self::assertStringContainsString(
+            '>Новости</a>',
+            Kernel::get('/')['body'],
+            'выключение раздела не удаляет пункт, созданный администратором'
+        );
 
         run('UPDATE ' . t('app_installation') . " SET enabled = 1 WHERE id = 'news'");
 
-        self::assertStringContainsString('>Новости</a>', Kernel::get('/')['body'], 'включённый раздел возвращает ссылку живьём');
+        self::assertStringContainsString('>Новости</a>', Kernel::get('/')['body']);
     }
 
     public function testПодвалГруппируетПунктыПоКолонкам(): void
@@ -119,7 +130,7 @@ final class MenuPublicTest extends TestCase
 
         $body = Kernel::get('/')['body'];
 
-        foreach (['Обучение', 'Связь', 'Ссылки', 'Карта сайта'] as $text) {
+        foreach (['Обучение', 'Связь', 'Ссылки'] as $text) {
             self::assertStringContainsString($text, $body, 'заголовки колонок: подписи базы и запасная «Ссылки»');
         }
 
@@ -128,6 +139,22 @@ final class MenuPublicTest extends TestCase
             'группы печатаются по первому появлению подписи, пустая подпись заменяется «Ссылками»'
         );
         self::assertSame(1, substr_count($body, 'href="/abonement"'), 'пункт подвала печатается один раз — в подвале, не в шапке');
+        self::assertStringNotContainsString('href="/sitemap.xml"', $body, 'статическая ссылка на карту сайта из подвала убрана');
+    }
+
+    /** Раздел «Новости» нужен тестам независимости меню от приложений; ставим один раз. */
+    private function ensureNewsInstalled(): void
+    {
+        if (one('SELECT id FROM ' . t('app_installation') . " WHERE id = 'news'") !== null) {
+            return;
+        }
+
+        $result = installApp('news');
+
+        self::assertTrue(
+            ($result['ok'] ?? false) === true,
+            'раздел «Новости» не установился: ' . (string) ($result['error'] ?? '')
+        );
     }
 
     /** Каждая следующая подстрока впервые встречается строго после предыдущей. */

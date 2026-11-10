@@ -10,8 +10,8 @@ use PHPUnit\Framework\TestCase;
 
 /**
  * Экран «Настройки» /admin/settings: гость уходит на вход или получает 403, редактор видит поля
- * шапки и подвала и сохраняет их одной формой. Тексты после сохранения печатаются темой на
- * каждой странице; ключ уведомления — settings_saved.
+ * шапки и подвала и сохраняет их одной формой. Тексты и копирайт после сохранения печатаются
+ * темой на каждой странице; ключ уведомления — settings_saved.
  */
 final class SettingsAdminTest extends TestCase
 {
@@ -80,6 +80,7 @@ final class SettingsAdminTest extends TestCase
         self::assertStringContainsString('name="footer_logo"', $screen['body'], 'поле пути логотипа подвала');
         self::assertStringContainsString('name="footer_logo_file"', $screen['body'], 'выбор файла логотипа подвала');
         self::assertStringContainsString('name="footer_text"', $screen['body'], 'текст подвала');
+        self::assertStringContainsString('name="footer_copyright"', $screen['body'], 'копирайт подвала');
         self::assertStringContainsString('noindex, nofollow', $screen['body'], 'приватный экран поисковой машине закрыт');
         self::assertStringContainsString('href="/admin/menu"', $screen['body'], 'вкладка меню в каркасе админки');
     }
@@ -95,6 +96,7 @@ final class SettingsAdminTest extends TestCase
             'header_text' => 'Школа у реки',
             'footer_logo' => '',
             'footer_text' => 'Подпись подвала из настроек.',
+            'footer_copyright' => 'Сделано командой школы.',
         ]);
 
         self::assertSame(302, $saved['status']);
@@ -105,11 +107,13 @@ final class SettingsAdminTest extends TestCase
         self::assertStringContainsString('Настройки шапки и подвала сохранены.', $screen['body'], 'плашка успеха');
         self::assertStringContainsString('value="Школа у реки"', $screen['body'], 'текст шапки вернулся в форму');
         self::assertStringContainsString('Подпись подвала из настроек.', $screen['body'], 'текст подвала вернулся в форму');
+        self::assertStringContainsString('value="Сделано командой школы."', $screen['body'], 'копирайт вернулся в форму');
 
         $home = Kernel::get('/');
 
         self::assertStringContainsString('Школа у реки', $home['body'], 'текст шапки печатается темой');
         self::assertStringContainsString('Подпись подвала из настроек.', $home['body'], 'текст подвала печатается темой');
+        self::assertStringContainsString('Сделано командой школы.', $home['body'], 'копирайт печатается темой');
     }
 
     public function testЛоготипШапкиМожноЗагрузитьСКомпьютера(): void
@@ -128,6 +132,7 @@ final class SettingsAdminTest extends TestCase
                 'header_text' => 'Школа у реки',
                 'footer_logo' => '',
                 'footer_text' => 'Подпись подвала из настроек.',
+                'footer_copyright' => 'Сделано командой школы.',
                 'header_logo_file' => new CURLFile($source, 'image/png', 'shapka.png'),
             ]);
 
@@ -157,5 +162,26 @@ final class SettingsAdminTest extends TestCase
 
             deleteOption('header_logo');
         }
+    }
+
+    public function testПустойКопирайтУбираетСтрокуИзПодвала(): void
+    {
+        $this->login();
+        $token = Kernel::tokenFrom(Kernel::get('/admin/settings')['body']);
+
+        $saved = Kernel::post('/admin/settings', [
+            '_token' => $token,
+            'header_logo' => '',
+            'header_text' => 'Школа у реки',
+            'footer_logo' => '',
+            'footer_text' => 'Подпись подвала из настроек.',
+            'footer_copyright' => '',
+        ]);
+
+        self::assertSame(302, $saved['status']);
+
+        $home = Kernel::get('/');
+
+        self::assertStringNotContainsString('Сделано с котом и заботой о языке.', $home['body'], 'пустой копирайт не печатается');
     }
 }

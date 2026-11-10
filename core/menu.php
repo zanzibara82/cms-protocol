@@ -5,7 +5,8 @@ declare(strict_types=1);
 // Слой меню шапки и подвала: пункты живут в tbl_menu_item, правятся на /admin/menu, тема
 // рисует их помощниками menuHeaderLinks()/menuFooterSections() (решение 1 дизайн-документа).
 // Читатели и операции записи растут в задачах 2–4; в этом файле — пределы, валидатор адреса,
-// нормализация строки формы, группировка колонок и сбор ссылок разделов из манифестов.
+// нормализация строки формы и группировка колонок. Пункты меню создаёт только администратор:
+// включение приложения не добавляет и не убирает ссылки само.
 
 // Два слота, как у портала; MENU_SLOT_NAMES — названия карт на экране админки.
 const MENU_SLOTS = ['HEADER', 'FOOTER'];
@@ -146,41 +147,7 @@ function menuFooterGroups(array $rows): array
 }
 
 /**
- * Навигация одного приложения из манифеста: publicNav — список пар «адрес — подпись».
- * Выключенное приложение ссылок не отдаёт (пункт вёл бы на 404); битая пара пропускается
- * молча — манифест правит программист, падать на нём сайт не должен. «В новом окне»
- * разделам сайта не нужно (решение 5).
- *
- * @param array<string, mixed> $manifest манифест одного приложения
- * @return list<array{href: string, label: string, blank: bool}>
- */
-function menuPublicLinksOf(array $manifest, bool $active): array
-{
-    $nav = $manifest['publicNav'] ?? null;
-    if (!$active || !is_array($nav)) {
-        return [];
-    }
-
-    $max = fieldLimit(MENU_FIELDS, 'label', 'max');
-    $links = [];
-    foreach ($nav as $entry) {
-        if (!is_array($entry) || count($entry) !== 2) {
-            continue;
-        }
-
-        $href = is_string($entry[0]) ? trim($entry[0]) : '';
-        $label = is_string($entry[1]) ? mb_substr(trim($entry[1]), 0, $max) : '';
-        if ($href === '' || $label === '' || !menuHrefValid($href)) {
-            continue;
-        }
-
-        $links[] = ['href' => $href, 'label' => $label, 'blank' => false];
-    }
-
-    return $links;
-}
-
-/** Пункт по идентификатору: операции правят живую строку, а не воображаемую.
+ * Пункт по идентификатору: операции правят живую строку, а не воображаемую.
  * @return array<string, mixed>|null
  */
 function menuById(string $id): ?array
@@ -211,9 +178,9 @@ function menuRowsForAdmin(string $slot): array
 }
 
 /**
- * Шапка публичной страницы: видимые пункты слота HEADER по порядку, следом ссылки разделов
- * из publicNav манифестов ВКЛЮЧЁННЫХ приложений (решение 5: администратор не обязан помнить,
- * что доска включена, а пункт вести на 404). Пустое меню день-1 отдаёт пустой список.
+ * Шапка публичной страницы: видимые пункты слота HEADER по порядку. Состав меню задаёт
+ * только администратор: включение раздела не дописывает ссылку само, иначе пункт появлялся
+ * бы на сайте без его ведома. Пустое меню день-1 отдаёт пустой список.
  *
  * @return list<array{label: string, href: string, blank: bool}>
  */
@@ -223,12 +190,6 @@ function menuHeaderLinks(): array
     foreach (menuRowsForAdmin('HEADER') as $row) {
         if ((int) $row['visible'] === 1) {
             $links[] = ['label' => (string) $row['label'], 'href' => (string) $row['href'], 'blank' => (bool) $row['blank']];
-        }
-    }
-
-    foreach (appManifests() as $appId => $manifest) {
-        foreach (menuPublicLinksOf($manifest, isAppActive((string) $appId)) as $link) {
-            $links[] = ['label' => (string) $link['label'], 'href' => (string) $link['href'], 'blank' => (bool) $link['blank']];
         }
     }
 

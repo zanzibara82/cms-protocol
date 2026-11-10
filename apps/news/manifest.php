@@ -11,7 +11,6 @@ return [
     'requiresCore' => '1.1.0',
     'privatePaths' => ['/news/admin'],
     'sql' => __DIR__ . '/sql',
-    'publicNav' => [['/news', 'Новости']],
     'adminNav' => [['href' => '/news/admin', 'label' => 'Новости']],
     'seed' => __DIR__ . '/seed.php',
 ];

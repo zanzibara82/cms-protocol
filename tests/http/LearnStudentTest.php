@@ -989,9 +989,14 @@ final class LearnStudentTest extends TestCase
         }
     }
 
-    public function testВыключенноеПриложениеСнимаетАдресаИСсылкуШапки(): void
+    public function testВыключенноеПриложениеСнимаетАдресаИНеДобавляетПунктМеню(): void
     {
         $this->login();
+        self::assertStringNotContainsString(
+            '>Курсы</a>',
+            Kernel::get('/')['body'],
+            'включение раздела не добавляет пункт меню само'
+        );
         self::assertTrue(setAppEnabled('learn', false)['ok']);
 
         try {

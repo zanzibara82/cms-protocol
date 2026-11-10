@@ -80,7 +80,8 @@ final class MenuAdminTest extends TestCase
         self::assertStringContainsString('Меню в футере', $screen['body'], 'вторая вкладка');
         self::assertStringContainsString('href="/admin/menu?tab=header"', $screen['body'], 'вкладка шапки — ссылка');
         self::assertStringContainsString('href="/admin/menu?tab=footer"', $screen['body'], 'вкладка подвала — ссылка');
-        self::assertStringContainsString('Строки шапки печатаются', $screen['body'], 'по умолчанию открыта шапка');
+        self::assertStringContainsString('Пункты шапки печатаются', $screen['body'], 'по умолчанию открыта шапка');
+        self::assertStringContainsString('Включение раздела не добавляет ссылку само', $screen['body'], 'меню создаётся только вручную');
         self::assertStringNotContainsString('Пункты подвала группируются', $screen['body'], 'карта подвала скрыта за вкладкой');
         self::assertStringContainsString('name="op" value="create-item"', $screen['body'], 'добавление — форма с op, а не отдельный адрес');
         self::assertStringContainsString('Пунктов ещё нет', $screen['body'], 'пустой день-1 экран не ломается');
@@ -90,11 +91,11 @@ final class MenuAdminTest extends TestCase
 
         self::assertSame(200, $footer['status']);
         self::assertStringContainsString('Пункты подвала группируются', $footer['body'], 'вкладка подвала открывает свою карту');
-        self::assertStringNotContainsString('Строки шапки печатаются', $footer['body'], 'карта шапки скрыта за вкладкой');
+        self::assertStringNotContainsString('Пункты шапки печатаются', $footer['body'], 'карта шапки скрыта за вкладкой');
 
         $unknown = Kernel::get('/admin/menu?tab=chuzhaya');
 
-        self::assertStringContainsString('Строки шапки печатаются', $unknown['body'], 'неизвестная вкладка возвращает к шапке');
+        self::assertStringContainsString('Пункты шапки печатаются', $unknown['body'], 'неизвестная вкладка возвращает к шапке');
     }
 
     public function testДействиеВПодвалеВозвращаетНаВкладкуПодвала(): void

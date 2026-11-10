@@ -56,6 +56,7 @@ $footer = '<section class="space-y-4 rounded-lg border border-ink/10 bg-white p-
     . '<p class="text-sm text-ink/70">Логотип и подпись печатаются в нижней полосе каждой страницы.</p>'
     . $logoField('footer_logo', 'footer_logo_file', 'Логотип подвала')
     . $textField('footer_text', 'Текст подвала', 'Подпись сайта под колонками меню.', true)
+    . $textField('footer_copyright', 'Копирайт подвала', 'Строка в самом низу подвала. Пусто — строки нет.')
     . '</section>';
 
 $form = '<form class="space-y-4" method="post" action="/admin/settings" enctype="multipart/form-data">' . csrfField()
