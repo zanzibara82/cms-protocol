@@ -118,7 +118,7 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . $dayInput('starts', 'promo_starts', 'Начало (пусто — без ограничения)')
     . $dayInput('ends', 'promo_ends', 'Конец (пусто — без ограничения)')
     . '<label class="mt-6 flex min-h-[44px] items-center gap-2" for="promo_active">'
-    . '<input id="promo_active" name="active" type="checkbox" value="1" class="min-h-[44px] size-11 rounded border border-ink/20 bg-white"'
+    . '<input id="promo_active" name="active" type="checkbox" value="1" class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20 bg-white"'
     . ($value('active') === '1' ? ' checked' : '')
     . '> Правило активно</label>'
     . '</div>'

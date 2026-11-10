@@ -26,7 +26,16 @@ use PHPUnit\Framework\TestCase;
 final class CheckboxAlignTest extends TestCase
 {
     /** Классы, которыми поле растягивают по высоте ради зоны нажатия. */
-    private const STRETCH_CLASSES = ['min-h-[44px]', 'size-11'];
+    private const STRETCH_CLASSES = ['min-h-[44px]', 'size-11', 'size-10', 'h-11', 'w-11', 'h-10', 'w-10'];
+
+    /**
+     * Классы, задающие нарисованный квадратик размером с текст (20 px).
+     *
+     * Нативное поле с зоной нажатия выглядит как 44-пиксельный квадрат — на скриншоте это
+     * «огромные» флажки формы материала. Поэтому видимый флажок размера текста несёт либо явные
+     * 20 px, либо классы скрытия: тогда 44 px даёт подпись, а рисует квадрат разметка.
+     */
+    private const COMPACT_CLASSES = ['h-5', 'w-5', 'h-[22px]', 'w-[22px]', 'h-4', 'w-4'];
 
     /** Выравнивание подписи, при котором центр квадратика совпадает с центром строки. */
     private const ALIGN_CLASS = 'items-center';
@@ -50,6 +59,70 @@ final class CheckboxAlignTest extends TestCase
             $violations,
             'Растянутый чекбокс в подписи без ' . self::ALIGN_CLASS . ': квадратик уезжает от текста'
         );
+    }
+
+    // Второе правило того же файла: видимый флажок размером с текст, а не с зону нажатия.
+    //
+    // Причина измерена на стенде: в форме материала новости оба поля были нарисованы 44×44 px
+    // (на 360 px — 27×44) при тексте 14 px, и человек видел два огромных квадрата рядом с
+    // подписью. Требование 44 px относится к зоне нажатия, а не к рисунку: правильный приём
+    // уже есть в админке ядра — поле скрыто (sr-only), квадратик 20 px нарисован соседним span,
+    // а 44 px несёт подпись. Компактное нативное поле (h-5 w-5) при подписи с min-h-[44px]
+    // тоже годится: рисовать его меньше текста незачем, а зона нажатия остаётся у подписи.
+    public function testВидимыйЧекбоксНеРастянутДоРазмераЗоныНажатия(): void
+    {
+        $violations = [];
+
+        foreach ($this->templates() as $relative) {
+            $code = (string) file_get_contents($this->root() . '/' . $relative);
+
+            foreach ($this->oversizedViolations($code, $relative) as $found) {
+                $violations[] = $found;
+            }
+        }
+
+        self::assertSame(
+            [],
+            $violations,
+            'Видимый чекбокс растянут до 44+ px: флажок рисунка должен быть 20 px, а зону нажатия несёт подпись'
+        );
+    }
+
+    public function testСтражЛовитОгромныйЧекбоксИПропускаетКомпактный(): void
+    {
+        // Разметка формы материала новости до правки: поле нарисовано 44×44.
+        self::assertSame(
+            ['probe.php: строка 1: <input type="checkbox"> нарисован 44 px вместо 20 — флажок выглядит огромным'],
+            $this->oversizedViolations(
+                '<label class="flex min-h-[44px] items-center gap-2 text-sm">'
+                . '<input class="min-h-[44px] size-11 rounded border border-ink/20 bg-white" type="checkbox" name="pinned" value="on">'
+                . '<span>Закрепить первым</span></label>',
+                'probe.php'
+            )
+        );
+
+        // Приём админки: поле скрыто, 20 px нарисованы рядом, зону нажатия несёт подпись.
+        self::assertSame([], $this->oversizedViolations(
+            '<label class="flex min-h-[44px] items-center gap-2 text-sm">'
+            . '<input class="peer sr-only" type="checkbox" name="pinned" value="on">'
+            . '<span class="flex h-5 w-5 shrink-0 rounded border border-ink/20" aria-hidden="true"></span>'
+            . '<span>Закрепить первым</span></label>',
+            'probe.php'
+        ));
+
+        // Компактное нативное поле: рисунок 20 px, зона нажатия у подписи.
+        self::assertSame([], $this->oversizedViolations(
+            '<label class="flex min-h-[44px] items-center gap-2 text-sm">'
+            . '<input class="h-5 w-5 min-h-[44px]" type="checkbox" name="show_phone" value="1">'
+            . '<span>Показывать телефон</span></label>',
+            'probe.php'
+        ));
+
+        // Проверка не путает чекбокс с обычным полем формы.
+        self::assertSame([], $this->oversizedViolations(
+            '<label class="block"><input class="min-h-[44px] w-full" type="text" name="q"></label>',
+            'probe.php'
+        ));
     }
 
     public function testУТегаОдинАтрибутClass(): void
@@ -144,6 +217,57 @@ final class CheckboxAlignTest extends TestCase
             '<input id="promo_active" name="active" type="checkbox" value="1" class="min-h-[44px] size-11 rounded" checked>',
             'probe.php'
         ));
+    }
+
+    /**
+     * Видимые чекбоксы, нарисованные размером зоны нажатия вместо размера текста.
+     *
+     * @return list<string>
+     */
+    private function oversizedViolations(string $code, string $relative): array
+    {
+        if (preg_match_all('/<input\b/i', $code, $matches, PREG_OFFSET_CAPTURE) === false) {
+            return [];
+        }
+
+        $found = [];
+
+        foreach ($matches[0] as $match) {
+            $start = (int) $match[1];
+            $end = $this->tagEnd($code, $start + strlen($match[0]));
+
+            if ($end === null) {
+                continue;
+            }
+
+            $text = substr($code, $start, $end - $start + 1);
+
+            if (preg_match('/[\s"\']type[\s]*=[\s]*"checkbox"/', $text) !== 1) {
+                continue;
+            }
+
+            $tokens = $this->classTokens($text);
+
+            // Скрытое поле не рисуется: квадратик рисует разметка рядом.
+            if (in_array('sr-only', $tokens, true)) {
+                continue;
+            }
+
+            // Рисунок размера текста: компактные классы задают квадрат 16–22 px.
+            if (array_intersect(self::COMPACT_CLASSES, $tokens) !== []) {
+                continue;
+            }
+
+            if (array_intersect(self::STRETCH_CLASSES, $tokens) === []) {
+                continue;
+            }
+
+            $line = 1 + substr_count($code, "\n", 0, $start);
+            $found[] = $relative . ': строка ' . $line
+                . ': <input type="checkbox"> нарисован 44 px вместо 20 — флажок выглядит огромным';
+        }
+
+        return $found;
     }
 
     /**

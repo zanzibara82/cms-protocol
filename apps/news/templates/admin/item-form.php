@@ -66,7 +66,7 @@ $check = static function (array $field, array $values, array $errors): string {
     $error = (string) ($errors[$name] ?? '');
 
     return '<label class="flex min-h-[44px] items-center gap-2 text-sm">'
-        . '<input class="min-h-[44px] size-11 rounded border border-ink/20 bg-white" type="checkbox" id="f-' . e($name) . '"'
+        . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20 bg-white" type="checkbox" id="f-' . e($name) . '"'
         . ' name="' . e($name) . '" value="on"' . ($values[$name] === 'on' ? ' checked' : '') . '>'
         . '<span><span class="font-medium">' . e((string) $field['label']) . '</span>'
         . '<span class="block ' . e($error === '' ? 'text-ink/60' : 'text-bad') . '"'

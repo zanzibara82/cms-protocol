@@ -116,7 +116,7 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . $fieldError('max_uses')
     . '</label>'
     . '<label class="mt-6 flex min-h-[44px] items-center gap-2" for="coupon_active">'
-    . '<input id="coupon_active" name="active" type="checkbox" value="1" class="min-h-[44px] size-11 rounded border border-ink/20 bg-white"'
+    . '<input id="coupon_active" name="active" type="checkbox" value="1" class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20 bg-white"'
     . ($value('active') === '1' ? ' checked' : '')
     . '> Купон активен (снят — покупатель получит «Купон снят с продаж»)</label>'
     . '</div>'

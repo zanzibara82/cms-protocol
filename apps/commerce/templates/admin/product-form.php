@@ -177,7 +177,7 @@ $fieldset = '<fieldset class="space-y-2 mt-6">'
     . '<legend class="text-sm text-ink/60">Рубрики товара</legend>';
 foreach ($categories as $row) {
     $fieldset .= '<label class="inline-flex min-h-[44px] items-center gap-2 text-sm">'
-        . '<input class="size-11 min-h-[44px] rounded border border-ink/20 bg-white" type="checkbox" name="categories[]" value="'
+        . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20 bg-white" type="checkbox" name="categories[]" value="'
         . e((string) $row['id']) . '"'
         . (in_array((string) $row['id'], (array) $chosen, true) ? ' checked' : '') . '>'
         . e((string) $row['title'])
@@ -189,7 +189,7 @@ $fieldset .= '</fieldset>';
 $indexBlock = '<fieldset class="space-y-2 mt-6">'
     . '<legend class="text-sm text-ink/60">Индексация</legend>'
     . '<label class="inline-flex min-h-[44px] items-center gap-2 text-sm">'
-    . '<input class="size-11 min-h-[44px] rounded border border-ink/20 bg-white" type="checkbox" name="noindex"'
+    . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20 bg-white" type="checkbox" name="noindex"'
     . ($value('noindex') === '1' ? ' checked' : '') . '>'
     . 'Не индексировать в поисковиках'
     . '</label>'

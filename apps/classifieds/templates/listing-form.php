@@ -108,7 +108,7 @@ $attributeFields = static function (array $attribute) use ($form, $error, $inval
             . ' name="' . e($name) . '"' . $required . $invalid($errorKey) . '>' . $choices . '</select>';
     } elseif ($attribute['kind'] === 'bool') {
         $control = '<label class="flex min-h-[44px] items-center gap-3 text-sm">'
-            . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" id="' . e($fieldId) . '"'
+            . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20" type="checkbox" id="' . e($fieldId) . '"'
             . ' name="' . e($name) . '" value="1"' . ($value === '1' ? ' checked' : '') . $invalid($errorKey) . '>'
             . '<span>' . e((string) $attribute['title']) . '</span></label>';
     } else {
@@ -144,7 +144,7 @@ if ($gallery !== []) {
         $items .= '<li class="space-y-2 rounded-lg border border-ink/10 p-2">'
             . '<img class="h-28 w-full rounded object-cover" src="' . e($image['href']) . '" alt="Дополнительное изображение">'
             . '<label class="flex min-h-[44px] items-center gap-2 text-sm">'
-            . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="remove_gallery[]" value="' . e($image['id']) . '">'
+            . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20" type="checkbox" name="remove_gallery[]" value="' . e($image['id']) . '">'
             . '<span>Убрать</span></label>'
             . '</li>';
     }
@@ -205,17 +205,17 @@ $content .= '<label class="block" for="body">'
     . '</div>'
     . '<div class="space-y-3">'
     . '<label class="flex min-h-[44px] items-center gap-3 text-sm">'
-    . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="negotiable" value="1"'
+    . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20" type="checkbox" name="negotiable" value="1"'
     . ($form['negotiable'] === 1 ? ' checked' : '') . '>'
     . '<span>Договорная цена</span>'
     . '</label>'
     . '<label class="flex min-h-[44px] items-center gap-3 text-sm">'
-    . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="noindex" value="1"'
+    . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20" type="checkbox" name="noindex" value="1"'
     . ($form['noindex'] === 1 ? ' checked' : '') . '>'
     . '<span>Не индексировать в поисковиках</span>'
     . '</label>'
     . '<label class="flex min-h-[44px] items-center gap-3 text-sm">'
-    . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="views_public" value="1"'
+    . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20" type="checkbox" name="views_public" value="1"'
     . ($form['views_public'] === 1 ? ' checked' : '') . '>'
     . '<span>Показывать счётчик просмотров</span>'
     . '</label>'
@@ -225,7 +225,7 @@ $currentImage = '';
 if ((string) $form['image'] !== '') {
     $currentImage = adminImagePreview((string) $form['image'], 'Текущее изображение')
         . '<label class="mb-3 flex min-h-[44px] items-center gap-3 text-sm">'
-        . '<input class="size-11 min-h-[44px] rounded border border-ink/20" type="checkbox" name="remove_image" value="1">'
+        . '<input class="min-h-[44px] h-5 w-5 shrink-0 rounded border border-ink/20" type="checkbox" name="remove_image" value="1">'
         . '<span>Убрать текущее изображение</span>'
         . '</label>';
 }
