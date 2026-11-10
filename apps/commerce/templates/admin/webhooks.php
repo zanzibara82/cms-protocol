@@ -53,7 +53,7 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '<input type="hidden" name="op" value="' . e($op) . '">'
     . '<label class="block" for="webhook_url">'
     . '<span class="text-sm text-ink/60">Адрес приёмника (http:// или https://)</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('url') . ' px-3 py-2"'
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('url') . ' px-3 py-2"'
     . ' id="webhook_url" name="url" maxlength="' . e((string) COMMERCE_WEBHOOK_URL_MAX) . '"'
     . ' placeholder="https://пример.рф/nova-commerce"'
     . ' value="' . e($value('url')) . '">'
@@ -61,7 +61,7 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '</label>'
     . '<label class="block" for="webhook_secret">'
     . '<span class="text-sm text-ink/60">Секрет подписи (не короче ' . e((string) COMMERCE_WEBHOOK_SECRET_MIN) . ')</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('secret') . ' px-3 py-2"'
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('secret') . ' px-3 py-2"'
     . ' id="webhook_secret" name="secret" maxlength="' . e((string) COMMERCE_WEBHOOK_SECRET_MAX) . '"'
     . ' value="' . e($value('secret')) . '">'
     . $fieldError('secret')

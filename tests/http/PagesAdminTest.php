@@ -774,6 +774,27 @@ final class PagesAdminTest extends TestCase
         self::assertSame('Новое название', (string) ($stored['title'] ?? ''));
     }
 
+    public function testБлокиГлавнойПечатаютПодзаголовокПослеЗаголовка(): void
+    {
+        $this->login();
+        $page = Kernel::get('/admin/pages/home');
+
+        self::assertSame(200, $page['status']);
+
+        // Поля шапки идут в порядке чтения: сначала крупная мысль (заголовок), под ней уточнение.
+        // Прежний порядок ставил «Надзаголовок» первым — админка диктовала неверную
+        // последовательность тому, кто заполняет блок.
+        $title = strpos($page['body'], 'name="title"');
+        $badge = strpos($page['body'], 'name="badge"');
+
+        self::assertIsInt($title, 'поле заголовка напечатано');
+        self::assertIsInt($badge, 'поле подзаголовка напечатано');
+        self::assertLessThan($badge, $title, 'заголовок стоит перед подзаголовком');
+
+        self::assertStringContainsString('>Подзаголовок<', $page['body'], 'надпись переименована');
+        self::assertStringNotContainsString('>Надзаголовок<', $page['body'], 'прежняя надпись убрана');
+    }
+
     public function testКартинкаБлокаПоказываетсяПревьюНадПолем(): void
     {
         $page = createPage([

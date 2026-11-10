@@ -37,7 +37,7 @@ $kindOptions = static function (string $selected) use ($kinds): string {
 
 $picker = '<form class="flex flex-wrap items-end gap-3 rounded-xl border border-ink/10 bg-white p-4" method="get" action="/classifieds/admin/attributes">'
     . '<label class="block" for="attribute-category"><span class="text-sm text-ink/60">Категория</span>'
-    . '<select class="mt-1 min-h-[44px] min-w-64 rounded-lg border border-ink/20 bg-white px-3 py-2" id="attribute-category" name="category">'
+    . '<select class="mt-1.5 min-h-[44px] min-w-64 rounded-lg border border-ink/20 bg-white px-3 py-2" id="attribute-category" name="category">'
     . $categoryOptions
     . '</select></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">Показать</button>'
@@ -57,15 +57,15 @@ if ($category === null) {
         . '<input type="hidden" name="category" value="' . e($categoryId) . '">'
         . '<div class="flex flex-wrap items-end gap-3">'
         . '<label class="block" for="title-new"><span class="text-sm text-ink/60">Название</span>'
-        . '<input class="mt-1 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="title-new" name="title" maxlength="120" value="" placeholder="Год выпуска"></label>'
+        . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="title-new" name="title" maxlength="120" value="" placeholder="Год выпуска"></label>'
         . '<label class="block" for="key-new"><span class="text-sm text-ink/60">Код (пусто — из названия)</span>'
-        . '<input class="mt-1 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2 font-mono" id="key-new" name="key" maxlength="40" value=""></label>'
+        . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2 font-mono" id="key-new" name="key" maxlength="40" value=""></label>'
         . '<label class="block" for="kind-new"><span class="text-sm text-ink/60">Тип</span>'
-        . '<select class="mt-1 min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2" id="kind-new" name="kind">'
+        . '<select class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2" id="kind-new" name="kind">'
         . $kindOptions('text')
         . '</select></label>'
         . '<label class="block" for="unit-new"><span class="text-sm text-ink/60">Единица (для числа)</span>'
-        . '<input class="mt-1 min-h-[44px] w-32 rounded-lg border border-ink/20 px-3 py-2" id="unit-new" name="unit" maxlength="20" value=""></label>'
+        . '<input class="mt-1.5 min-h-[44px] w-32 rounded-lg border border-ink/20 px-3 py-2" id="unit-new" name="unit" maxlength="20" value=""></label>'
         . '<label class="flex min-h-[44px] items-center gap-2 text-sm">'
         . '<input class="min-h-[44px] size-11 rounded border border-ink/20" type="checkbox" name="required" value="1">'
         . '<span>Обязательное</span></label>'
@@ -74,7 +74,7 @@ if ($category === null) {
         . '<span>В фильтрах</span></label>'
         . '</div>'
         . '<label class="mt-3 block" for="options-new"><span class="text-sm text-ink/60">Варианты списка — по одному в строке</span>'
-        . '<textarea class="mt-1 h-[80px] min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2" id="options-new" name="options" maxlength="4000"></textarea></label>'
+        . '<textarea class="mt-1.5 h-[80px] min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2" id="options-new" name="options" maxlength="4000"></textarea></label>'
         . '<button class="mt-3 inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">Добавить характеристику</button>'
         . '</form>';
 

@@ -14,7 +14,7 @@ declare(strict_types=1);
 // конструктора). Внизу карты — форма добавления пункта со скрытым слотом. Класс min-h-[44px]
 // стоит литералом в каждом атрибуте class (страж TapTargetTest читает классы значения атрибута).
 // У строки шапки поля «колонка» нет: раздел — подпись только подвала.
-$input = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
+$input = 'mt-1.5 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
 $tab = $tab === 'footer' ? 'footer' : 'header';
 
 /** Пара «скрытое поле» формы действия. */
@@ -76,7 +76,7 @@ $itemCard = static function (array $row) use ($input, $field, $actionForm, $tab)
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="label" value="' . e((string) $row['label']) . '"></label>'
         . '<label class="block text-sm"><span class="font-medium">Адрес</span>'
         . '<input class="min-h-[44px] ' . e($input) . ' font-mono" type="text" name="href" value="' . e((string) $row['href']) . '">'
-        . '<span class="mt-1 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
+        . '<span class="mt-1.5 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
         . '</div>'
         . adminCheckbox('blank', 'Открыть в новом окне', '1', (int) $row['blank'] === 1)
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Сохранить пункт</button>'
@@ -93,7 +93,7 @@ $addForm = static function (string $slot) use ($input, $field, $tab): string {
     $sectionField = $slot === 'FOOTER'
         ? '<label class="block text-sm"><span class="font-medium">Колонка</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="section" value="">'
-            . '<span class="mt-1 block text-ink/60">Подпись колонки подвала; пусто — запасная «Ссылки».</span></label>'
+            . '<span class="mt-1.5 block text-ink/60">Подпись колонки подвала; пусто — запасная «Ссылки».</span></label>'
         : '';
 
     return '<form class="mt-3 space-y-3 border-t border-ink/10 pt-3" method="post" action="/admin/menu">' . csrfField()
@@ -103,7 +103,7 @@ $addForm = static function (string $slot) use ($input, $field, $tab): string {
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="label" required></label>'
         . '<label class="block text-sm"><span class="font-medium">Адрес</span>'
         . '<input class="min-h-[44px] ' . e($input) . ' font-mono" type="text" name="href" required>'
-        . '<span class="mt-1 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
+        . '<span class="mt-1.5 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
         . $sectionField
         . '</div>'
         . adminCheckbox('blank', 'Открыть в новом окне')
@@ -127,7 +127,7 @@ $empty = $rows === [] ? '<p class="text-sm text-ink/60">Пунктов ещё н
 
 $cardsHtml = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<h2 class="font-semibold">' . e($slot === 'FOOTER' ? 'Меню в футере' : 'Верхнее меню') . '</h2>'
-    . '<p class="mt-1 text-sm text-ink/70">' . e($hint) . '</p>'
+    . '<p class="mt-1.5 text-sm text-ink/70">' . e($hint) . '</p>'
     . $empty
     . $itemsHtml
     . $addForm($slot)

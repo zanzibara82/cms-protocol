@@ -109,7 +109,7 @@ $textField = static function (string $id, string $label, string $name, string $m
 
     return '<label class="block" for="' . e($id) . '">'
         . '<span class="text-sm text-ink/60">' . e($label) . '</span>'
-        . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . ($message !== '' ? ' border-red-400' : ' border-ink/20')
+        . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . ($message !== '' ? ' border-red-400' : ' border-ink/20')
         . ' px-3 py-2" id="' . e($id) . '" name="' . e($name) . '"'
         . ($max !== '' ? ' maxlength="' . e($max) . '"' : '')
         . ' value="' . e($value($id)) . '">'
@@ -135,7 +135,7 @@ $formPrices = '<div class="grid gap-4 sm:grid-cols-3">';
 foreach (['price_retail' => 'Цена', 'price_promo' => 'Промо-цена (ниже обычной)', 'price_cost' => 'Себестоимость служебная'] as $name => $label) {
     $formPrices .= '<label class="block" for="' . e($name) . '">'
         . '<span class="text-sm text-ink/60">' . e($label) . '</span>'
-        . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError($name)
+        . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError($name)
         . ' px-3 py-2" id="' . e($name) . '" name="' . e($name) . '" inputmode="decimal"'
         . ' value="' . e($priceValue($name)) . '">'
         . $fieldError($name)
@@ -144,7 +144,7 @@ foreach (['price_retail' => 'Цена', 'price_promo' => 'Промо-цена (�
 
 $formPrices .= '<label class="block" for="currency">'
     . '<span class="text-sm text-ink/60">Валюта</span>'
-    . '<select class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('currency')
+    . '<select class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('currency')
     . ' px-3 py-2" id="currency" name="currency">';
 foreach (COMMERCE_CURRENCIES as $code) {
     $formPrices .= '<option value="' . e($code) . '"' . ($value('currency') === $code ? ' selected' : '') . '>'
@@ -154,7 +154,7 @@ $formPrices .= '</select>' . $fieldError('currency') . '</label>';
 
 $formPrices .= '<label class="block" for="stock">'
     . '<span class="text-sm text-ink/60">Остаток</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('stock')
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('stock')
     . ' px-3 py-2" id="stock" name="stock" type="number" min="0" max="'
     . e((string) COMMERCE_QTY_MAX) . '" value="'
     . e($value('stock') !== '' ? (string) $value('stock') : '0') . '">'
@@ -163,7 +163,7 @@ $formPrices .= '<label class="block" for="stock">'
 
 $formPrices .= '<label class="block" for="status">'
     . '<span class="text-sm text-ink/60">Состояние</span>'
-    . '<select class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('status')
+    . '<select class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('status')
     . ' px-3 py-2" id="status" name="status">';
 foreach (COMMERCE_PRODUCT_STATUSES as $key) {
     $formPrices .= '<option value="' . e($key) . '"' . ($value('status') === $key ? ' selected' : '') . '>'
@@ -224,7 +224,7 @@ if ($attributes !== []) {
 
             $attributesBlock .= '<label class="block" for="attr_' . $attrId . '">'
                 . '<span class="text-sm text-ink/60">' . e((string) $attribute['label']) . '</span>'
-                . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2"'
+                . '<select class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2"'
                 . ' id="attr_' . $attrId . '" name="' . e($name) . '">'
                 . $options
                 . '</select></label>';
@@ -234,7 +234,7 @@ if ($attributes !== []) {
 
             $attributesBlock .= '<label class="block" for="attr_' . $attrId . '">'
                 . '<span class="text-sm text-ink/60">' . e((string) $attribute['label']) . $unitSuffix . '</span>'
-                . '<input class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2"'
+                . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2"'
                 . ' id="attr_' . $attrId . '" name="' . e($name) . '" inputmode="decimal"'
                 . ' value="' . e($current) . '">'
                 . '</label>';

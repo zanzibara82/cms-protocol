@@ -103,7 +103,7 @@ $formError = (string) ($errors['form'] ?? '');
             <?= csrfField() /* @safe html */ ?>
             <label class="block" for="coupon-code">
                 <span class="text-sm text-ink/60">Код купона</span>
-                <input class="mt-1 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="coupon-code" name="code" maxlength="<?= e((string) COMMERCE_COUPON_CODE_MAX) ?>" value="<?= e((string) $totals['coupon_code']) ?>" placeholder="SUMMER">
+                <input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="coupon-code" name="code" maxlength="<?= e((string) COMMERCE_COUPON_CODE_MAX) ?>" value="<?= e((string) $totals['coupon_code']) ?>" placeholder="SUMMER">
             </label>
             <button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">Применить</button>
             <?php if ((string) $totals['coupon_code'] !== ''): ?>
@@ -119,7 +119,7 @@ $formError = (string) ($errors['form'] ?? '');
                 <?php $error = (string) ($errors[$field] ?? ''); ?>
                 <label class="block" for="<?= e($field) ?>">
                     <span class="text-sm text-ink/60"><?= e($label) ?></span>
-                    <input class="mt-1 w-full min-h-[44px] rounded-lg border <?= e($error !== '' ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="<?= e($field) ?>" name="<?= e($field) ?>" type="<?= e($field === 'customer_email' ? 'email' : 'text') ?>" value="<?= e((string) ($values[$field] ?? '')) ?>">
+                    <input class="mt-1.5 w-full min-h-[44px] rounded-lg border <?= e($error !== '' ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="<?= e($field) ?>" name="<?= e($field) ?>" type="<?= e($field === 'customer_email' ? 'email' : 'text') ?>" value="<?= e((string) ($values[$field] ?? '')) ?>">
                     <?php if ($error !== ''): ?>
                         <span class="mt-1 block text-sm text-red-700"><?= e($error) ?></span>
                     <?php endif; ?>
@@ -128,7 +128,7 @@ $formError = (string) ($errors['form'] ?? '');
 
             <label class="block" for="address">
                 <span class="text-sm text-ink/60">Адрес доставки (необязательно)</span>
-                <input class="mt-1 w-full min-h-[44px] rounded-lg border <?= e(isset($errors['address']) ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="address" name="address" type="text" value="<?= e((string) ($values['address'] ?? '')) ?>">
+                <input class="mt-1.5 w-full min-h-[44px] rounded-lg border <?= e(isset($errors['address']) ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="address" name="address" type="text" value="<?= e((string) ($values['address'] ?? '')) ?>">
                 <?php $error = (string) ($errors['address'] ?? ''); ?>
                 <?php if ($error !== ''): ?>
                     <span class="mt-1 block text-sm text-red-700"><?= e($error) ?></span>
@@ -137,7 +137,7 @@ $formError = (string) ($errors['form'] ?? '');
 
             <label class="block" for="comment">
                 <span class="text-sm text-ink/60">Комментарий (необязательно)</span>
-                <textarea class="mt-1 w-full min-h-[44px] rounded-lg border <?= e(isset($errors['comment']) ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="comment" name="comment" rows="3" maxlength="<?= e((string) COMMERCE_ORDER_COMMENT_MAX) ?>"><?= e((string) ($values['comment'] ?? '')) ?></textarea>
+                <textarea class="mt-1.5 w-full min-h-[44px] rounded-lg border <?= e(isset($errors['comment']) ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="comment" name="comment" rows="3" maxlength="<?= e((string) COMMERCE_ORDER_COMMENT_MAX) ?>"><?= e((string) ($values['comment'] ?? '')) ?></textarea>
                 <?php $error = (string) ($errors['comment'] ?? ''); ?>
                 <?php if ($error !== ''): ?>
                     <span class="mt-1 block text-sm text-red-700"><?= e($error) ?></span>

@@ -62,7 +62,7 @@ $breadcrumbs[] = ['label' => (string) $product['title'], 'href' => ''];
             <input type="hidden" name="back" value="<?= e('/shop/' . rawurlencode((string) $product['slug'])) ?>">
             <label for="qty">
                 <span class="block text-sm text-ink/60">Количество</span>
-                <input class="mt-1 min-h-[44px] w-24 rounded-lg border border-ink/20 bg-white px-3 py-2" id="qty" name="qty" type="number" min="1" max="<?= e((string) min((int) $product['stock'], COMMERCE_CART_MAX_QTY)) ?>" value="1">
+                <input class="mt-1.5 min-h-[44px] w-24 rounded-lg border border-ink/20 bg-white px-3 py-2" id="qty" name="qty" type="number" min="1" max="<?= e((string) min((int) $product['stock'], COMMERCE_CART_MAX_QTY)) ?>" value="1">
             </label>
             <button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">В корзину</button>
             <a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 py-2 text-sm hover:bg-ink/5" href="/shop/cart">Корзина<?= e($cartCount > 0 ? ' (' . $cartCount . ')' : '') ?></a>

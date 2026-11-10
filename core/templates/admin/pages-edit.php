@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 // Редактор страницы: поля страницы (адрес, статус, noindex) и секции под ними. Удаление —
 // отдельная форма: формы не вкладываются друг в друга.
-$input = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
+$input = 'mt-1.5 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
 $target = '/admin/pages/' . (string) $page['id'];
 
 $statusOptions = '';
@@ -30,7 +30,7 @@ $pageForm = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="title" value="' . e((string) $page['title']) . '" required></label>'
     . '<label class="block text-sm"><span class="font-medium">Адрес</span>'
     . '<input class="min-h-[44px] ' . e($input) . ' font-mono" type="text" name="slug" value="' . e((string) $page['slug']) . '" required>'
-    . '<span class="mt-1 block text-ink/60">При смене адреса прежний продолжит работать — переезд запишется автоматически.</span></label>'
+    . '<span class="mt-1.5 block text-ink/60">При смене адреса прежний продолжит работать — переезд запишется автоматически.</span></label>'
     . '</div>'
     . '<label class="block text-sm"><span class="font-medium">Описание</span>'
     . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="description" value="' . e((string) $page['description']) . '"></label>'
@@ -51,7 +51,7 @@ $deleteForm = '<section class="rounded-lg border border-bad/30 bg-white p-4">'
 
 $sectionsCard = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<h2 class="font-semibold">Блоки страницы</h2>'
-    . '<p class="mt-1 text-sm text-ink/70">Порядок на странице — как в этом списке, сверху вниз.</p>'
+    . '<p class="mt-1.5 text-sm text-ink/70">Порядок на странице — как в этом списке, сверху вниз.</p>'
     . '</section>'
     . partial('admin/pages-sections', ['sections' => $sections, 'target' => $target, 'kinds' => $kinds]);
 

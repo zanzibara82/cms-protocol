@@ -21,12 +21,12 @@ declare(strict_types=1);
         <?php endif; ?>
         <label class="block text-sm">
             <span class="font-medium">Почта</span>
-            <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="email" name="email"
+            <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="email" name="email"
                    value="<?= e($email) ?>" autocomplete="username" required maxlength="190">
         </label>
         <label class="block text-sm">
             <span class="font-medium">Пароль</span>
-            <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password" name="password"
+            <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password" name="password"
                    autocomplete="current-password" required>
         </label>
         <button class="min-h-[44px] w-full rounded-lg bg-ink px-4 py-2 font-medium text-cream hover:opacity-90" type="submit">Войти</button>

@@ -20,7 +20,7 @@ $keptQuery = (string) ($filters['query'] ?? '');
                 <?php if ((string) $row['type'] === 'CHOICE'): ?>
                     <label class="block" for="f_<?= e($key) ?>">
                         <span class="text-sm text-ink/60"><?= e((string) $row['label']) ?></span>
-                        <select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2 sm:w-44" id="f_<?= e($key) ?>" name="<?= e($key) ?>">
+                        <select class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2 sm:w-44" id="f_<?= e($key) ?>" name="<?= e($key) ?>">
                             <option value="">— не важно</option>
                             <?php foreach ((array) $row['choices'] as $choice): ?>
                                 <option value="<?= e((string) $choice) ?>"<?= e((string) $row['raw'] === (string) $choice ? ' selected' : '') ?>><?= e((string) $choice) ?></option>

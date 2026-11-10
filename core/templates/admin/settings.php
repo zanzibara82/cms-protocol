@@ -10,7 +10,7 @@ declare(strict_types=1);
 // Настройки шапки и подвала: текст и логотип каждого места. Одна форма на оба блока — экран
 // показывает их как одно целое, и сохраняются они одной транзакцией. Класс min-h-[44px] стоит
 // литералом в каждом атрибуте class (страж TapTargetTest читает классы значения атрибута).
-$input = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
+$input = 'mt-1.5 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
 
 /** Поле логотипа: путь в опции, выбор файла и превью того, что стоит сейчас. */
 $logoField = static function (string $key, string $fileKey, string $label) use ($input, $values): string {
@@ -21,7 +21,7 @@ $logoField = static function (string $key, string $fileKey, string $label) use (
     return '<div class="space-y-2">' . $preview
         . '<label class="block text-sm"><span class="font-medium">' . e($label) . '</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="' . e($key) . '" value="' . e($value) . '">'
-        . '<span class="mt-1 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ. Пусто — логотипа нет.</span></label>'
+        . '<span class="mt-1.5 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ. Пусто — логотипа нет.</span></label>'
         . '<div class="flex items-start gap-2">'
         . '<input class="sr-only" id="' . e($fieldId) . '" type="file" name="' . e($fileKey) . '" accept="image/jpeg,image/png,image/webp">'
         . '<label class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5" for="' . e($fieldId) . '" title="Выбрать логотип с компьютера">'
@@ -41,7 +41,7 @@ $textField = static function (string $key, string $label, string $hint, bool $mu
 
     return '<label class="block text-sm"><span class="font-medium">' . e($label) . '</span>'
         . $control
-        . '<span class="mt-1 block text-ink/60">' . e($hint) . '</span></label>';
+        . '<span class="mt-1.5 block text-ink/60">' . e($hint) . '</span></label>';
 };
 
 $header = '<section class="space-y-4 rounded-lg border border-ink/10 bg-white p-4">'

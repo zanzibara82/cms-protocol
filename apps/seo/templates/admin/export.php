@@ -40,7 +40,7 @@ foreach (SEO_STATS_PERIODS as $days) {
 $sourceField = $filter['split'] === true
     ? '<label class="block" for="export_source">'
         . '<span class="text-sm text-ink/60">Источник</span>'
-        . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_source" name="source">'
+        . '<select class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_source" name="source">'
         . '<option value=""' . ($filter['source'] === '' ? ' selected' : '') . '>Все источники</option>'
         . $sourceOptions
         . '</select></label>'
@@ -49,12 +49,12 @@ $sourceField = $filter['split'] === true
 $filterForm = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6" method="get" action="' . e($filter['base']) . '">'
     . '<label class="block" for="export_kind">'
     . '<span class="text-sm text-ink/60">Отчёт</span>'
-    . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_kind" name="kind">'
+    . '<select class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_kind" name="kind">'
     . $kindOptions
     . '</select></label>'
     . '<label class="block" for="export_days">'
     . '<span class="text-sm text-ink/60">Период, дней</span>'
-    . '<select class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_days" name="days">'
+    . '<select class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="export_days" name="days">'
     . $periodOptions
     . '</select></label>'
     . $sourceField

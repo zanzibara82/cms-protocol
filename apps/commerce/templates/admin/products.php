@@ -68,7 +68,7 @@ $search = '<form class="flex flex-wrap items-end gap-2" method="get" action="/co
     . ($category !== '' ? '<input type="hidden" name="cat" value="' . e($category) . '">' : '')
     . '<label class="block min-w-0 flex-1 sm:max-w-xs" for="q">'
     . '<span class="text-sm text-ink/60">Поиск по названию или артикулу</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm" id="q" name="q" '
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm" id="q" name="q" '
     . 'value="' . e($query) . '" placeholder="Электроколонка">'
     . '</label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-2 text-sm hover:bg-ink/5" type="submit">Найти</button>'

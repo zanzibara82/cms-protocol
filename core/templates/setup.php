@@ -38,7 +38,7 @@ $fields = [
         <?php foreach ($fields as $name => $field): ?>
             <label class="block text-sm">
                 <span class="font-medium"><?= e($field['label']) ?></span>
-                <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2"
+                <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2"
                        type="<?= e($field['type']) ?>" name="<?= e((string) $name) ?>"
                        value="<?= e($values[(string) $name]) ?>" required
                        maxlength="<?= e((string) $field['max']) ?>"
@@ -51,7 +51,7 @@ $fields = [
 
         <label class="block text-sm">
             <span class="font-medium">Пароль</span>
-            <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password"
+            <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password"
                    name="password" required minlength="<?= e((string) SETUP_PASSWORD_MIN) ?>" autocomplete="new-password">
             <?php if (isset($errors['password'])): ?>
                 <span class="mt-1 block text-bad"><?= e($errors['password']) ?></span>
@@ -60,7 +60,7 @@ $fields = [
 
         <label class="block text-sm">
             <span class="font-medium">Пароль ещё раз</span>
-            <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password"
+            <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password"
                    name="password_again" required autocomplete="new-password">
             <?php if (isset($errors['password_again'])): ?>
                 <span class="mt-1 block text-bad"><?= e($errors['password_again']) ?></span>

@@ -37,7 +37,7 @@ $formError = (string) ($errors['form'] ?? '');
         <?php $error = (string) ($errors['number'] ?? ''); ?>
         <label class="block" for="number">
             <span class="text-sm text-ink/60">Номер заказа</span>
-            <input class="mt-1 w-full min-h-[44px] rounded-lg border <?= e($error !== '' ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="number" name="number" type="text" inputmode="numeric" value="<?= e((string) ($values['number'] ?? '')) ?>">
+            <input class="mt-1.5 w-full min-h-[44px] rounded-lg border <?= e($error !== '' ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="number" name="number" type="text" inputmode="numeric" value="<?= e((string) ($values['number'] ?? '')) ?>">
             <?php if ($error !== ''): ?>
                 <span class="mt-1 block text-sm text-red-700"><?= e($error) ?></span>
             <?php endif; ?>
@@ -46,7 +46,7 @@ $formError = (string) ($errors['form'] ?? '');
         <?php $error = (string) ($errors['customer_email'] ?? ''); ?>
         <label class="block" for="customer_email">
             <span class="text-sm text-ink/60">E-mail</span>
-            <input class="mt-1 w-full min-h-[44px] rounded-lg border <?= e($error !== '' ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="customer_email" name="customer_email" type="email" value="<?= e((string) ($values['customer_email'] ?? '')) ?>">
+            <input class="mt-1.5 w-full min-h-[44px] rounded-lg border <?= e($error !== '' ? 'border-red-400' : 'border-ink/20') ?> px-3 py-2" id="customer_email" name="customer_email" type="email" value="<?= e((string) ($values['customer_email'] ?? '')) ?>">
             <?php if ($error !== ''): ?>
                 <span class="mt-1 block text-sm text-red-700"><?= e($error) ?></span>
             <?php endif; ?>

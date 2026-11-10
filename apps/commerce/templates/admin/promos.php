@@ -77,7 +77,7 @@ foreach (COMMERCE_DISCOUNT_KIND_LABELS as $kindValue => $kindLabel) {
 $sumInput = static function (string $field, string $id, string $label) use ($value, $isError, $fieldError): string {
     return '<label class="block" for="' . $id . '">'
         . '<span class="text-sm text-ink/60">' . $label . '</span>'
-        . '<input class="mt-1 min-h-[44px] w-full rounded-lg border' . $isError($field) . ' px-3 py-2"'
+        . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border' . $isError($field) . ' px-3 py-2"'
         . ' id="' . $id . '" name="' . $field . '" inputmode="decimal" value="' . e($value($field)) . '">'
         . $fieldError($field)
         . '</label>';
@@ -87,7 +87,7 @@ $sumInput = static function (string $field, string $id, string $label) use ($val
 $dayInput = static function (string $field, string $id, string $label) use ($value, $isError, $fieldError): string {
     return '<label class="block" for="' . $id . '">'
         . '<span class="text-sm text-ink/60">' . $label . '</span>'
-        . '<input class="mt-1 min-h-[44px] w-full rounded-lg border' . $isError($field) . ' px-3 py-2"'
+        . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border' . $isError($field) . ' px-3 py-2"'
         . ' id="' . $id . '" name="' . $field . '" value="' . e($value($field)) . '" placeholder="2026-12-31">'
         . $fieldError($field)
         . '</label>';
@@ -101,13 +101,13 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '<div class="grid gap-4 sm:grid-cols-2">'
     . '<label class="block" for="promo_title">'
     . '<span class="text-sm text-ink/60">Название правила</span>'
-    . '<input class="mt-1 min-h-[44px] w-full rounded-lg border' . $isError('title') . ' px-3 py-2"'
+    . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border' . $isError('title') . ' px-3 py-2"'
     . ' id="promo_title" name="title" maxlength="160" value="' . e($value('title')) . '" placeholder="Новогодние скидки">'
     . $fieldError('title')
     . '</label>'
     . '<label class="block" for="promo_kind">'
     . '<span class="text-sm text-ink/60">Вид скидки</span>'
-    . '<select class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2" id="promo_kind" name="kind">'
+    . '<select class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2" id="promo_kind" name="kind">'
     . $kindOptions
     . '</select>'
     . '</label>'

@@ -58,7 +58,7 @@ $filters .= '</div>';
 $search = '<form class="flex flex-wrap items-end gap-2" method="get" action="/admin/leads">'
     . '<input type="hidden" name="status" value="' . e($status) . '">'
     . '<label class="block text-sm"><span class="font-medium">Поиск</span>'
-    . '<input class="mt-1 min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2" type="search" name="q"'
+    . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2" type="search" name="q"'
     . ' value="' . e($query) . '" placeholder="Имя или контакт"></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Найти</button>'
     . '</form>';

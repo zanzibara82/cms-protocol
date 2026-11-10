@@ -12,7 +12,7 @@ declare(strict_types=1);
  */
 $itemForms = ['материал', 'материала', 'материалов'];
 
-$input = 'mt-1 w-full rounded-lg border border-ink/20 px-3 py-2 text-sm';
+$input = 'mt-1.5 w-full rounded-lg border border-ink/20 px-3 py-2 text-sm';
 $button = 'rounded-lg border border-ink/20 px-3 py-1.5 text-sm hover:bg-ink/5';
 $danger = 'rounded-lg border border-bad/30 px-3 py-1.5 text-sm text-bad hover:bg-bad/10';
 

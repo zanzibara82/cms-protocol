@@ -53,19 +53,19 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '<div class="grid gap-4 sm:grid-cols-2">'
     . '<label class="block" for="attribute_label">'
     . '<span class="text-sm text-ink/60">Название характеристики</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('label') . ' px-3 py-2" id="attribute_label"'
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('label') . ' px-3 py-2" id="attribute_label"'
     . ' name="label" maxlength="120" value="' . e($value('label')) . '" placeholder="Мощность">'
     . $fieldError('label')
     . '</label>'
     . '<label class="block" for="attribute_slug">'
     . '<span class="text-sm text-ink/60">Ключ фильтра (пусто — соберётся из названия)</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('slug') . ' px-3 py-2" id="attribute_slug"'
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('slug') . ' px-3 py-2" id="attribute_slug"'
     . ' name="slug" maxlength="' . e((string) COMMERCE_SLUG_MAX) . '" value="' . e($value('slug')) . '" placeholder="moschnost">'
     . $fieldError('slug')
     . '</label>'
     . '<label class="block" for="attribute_type">'
     . '<span class="text-sm text-ink/60">Тип</span>'
-    . '<select class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('type') . ' px-3 py-2" id="attribute_type"'
+    . '<select class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('type') . ' px-3 py-2" id="attribute_type"'
     . ' name="type">'
     . $typeOptions
     . '</select>'
@@ -73,7 +73,7 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '</label>'
     . '<label class="block" for="attribute_unit">'
     . '<span class="text-sm text-ink/60">Единица измерения (необязательно)</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border' . $isError('unit') . ' px-3 py-2" id="attribute_unit"'
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('unit') . ' px-3 py-2" id="attribute_unit"'
     . ' name="unit" maxlength="32" value="' . e($value('unit')) . '" placeholder="Вт">'
     . $fieldError('unit')
     . '</label>'

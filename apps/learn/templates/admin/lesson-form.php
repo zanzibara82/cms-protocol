@@ -13,7 +13,7 @@ declare(strict_types=1);
  * @var string $notice
  */
 
-const LEARN_FORM_INPUT_CLASS = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
+const LEARN_FORM_INPUT_CLASS = 'mt-1.5 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
 
 $row = static function (array $field, array $values, array $errors): string {
     $name = (string) $field['name'];

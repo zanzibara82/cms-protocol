@@ -68,19 +68,19 @@ $noticeKey = queryString('notice');
                     <input type="hidden" name="source" value="<?= e($source) ?>">
                     <label class="block text-sm">
                         <span class="font-medium">Как к вам обращаться</span>
-                        <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm" type="text" name="name" autocomplete="name" required
+                        <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm" type="text" name="name" autocomplete="name" required
                                minlength="<?= e((string) LEAD_NAME_MIN) ?>" maxlength="<?= e((string) LEAD_NAME_MAX) ?>"
                                placeholder="Мария">
                     </label>
                     <label class="block text-sm">
                         <span class="font-medium">Телефон или почта</span>
-                        <input class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm" type="text" name="contact" autocomplete="tel" required
+                        <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm" type="text" name="contact" autocomplete="tel" required
                                minlength="<?= e((string) LEAD_CONTACT_MIN) ?>" maxlength="<?= e((string) LEAD_CONTACT_MAX) ?>"
                                placeholder="+7 900 000-00-00 или maria@example.ru">
                     </label>
                     <label class="block text-sm">
                         <span class="font-medium">Вопрос</span>
-                        <textarea class="mt-1 h-[96px] min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm"
+                        <textarea class="mt-1.5 h-[96px] min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm"
                                   name="message" rows="3" maxlength="<?= e((string) LEAD_MESSAGE_MAX) ?>"
                                   placeholder="Уровень, сколько человек, удобное время для занятия"></textarea>
                     </label>

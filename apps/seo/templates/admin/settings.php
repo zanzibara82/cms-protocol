@@ -30,7 +30,7 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '</label>'
     . '<label class="block" for="stats_timeout">'
     . '<span class="text-sm text-ink/60">Сессия — окно бездействия, минут</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" type="number"'
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" type="number"'
     . ' id="stats_timeout" name="timeout" min="' . e((string) SEO_STATS_TIMEOUT_MIN) . '"'
     . ' max="' . e((string) SEO_STATS_TIMEOUT_MAX) . '" value="' . e((string) $settings['timeout']) . '">'
     . '<span class="mt-1 block text-sm text-ink/60">Допустимо от ' . e((string) SEO_STATS_TIMEOUT_MIN)
@@ -38,7 +38,7 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '</label>'
     . '<label class="block" for="stats_retention">'
     . '<span class="text-sm text-ink/60">Сколько дней хранить сырьё</span>'
-    . '<input class="mt-1 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" type="number"'
+    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" type="number"'
     . ' id="stats_retention" name="retention" min="' . e((string) SEO_STATS_RETENTION_MIN) . '"'
     . ' max="' . e((string) SEO_STATS_RETENTION_MAX) . '" value="' . e((string) $settings['retention']) . '">'
     . '<span class="mt-1 block text-sm text-ink/60">Допустимо от ' . e((string) SEO_STATS_RETENTION_MIN)

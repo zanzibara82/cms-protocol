@@ -21,7 +21,7 @@ declare(strict_types=1);
 // Зона нажатия min-h-[44px] стоит литералом в каждом атрибуте class (страж TapTargetTest читает
 // классы значения атрибута, а `e($INPUT)` даёт ему только имя переменной): в $INPUT остаются
 // размеры и цвета поля, которые к зоне нажатия отношения не имеют.
-$INPUT = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
+$INPUT = 'mt-1.5 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
 $TITLE_MIN = fieldLimit(NEWS_FIELDS, 'title', 'min');
 $textHint = 'Картинка горизонтальная, 1200×630.';
 

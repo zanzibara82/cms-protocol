@@ -12,7 +12,7 @@ declare(strict_types=1);
 // (образец — характеристики доски); пустая последняя строка — место для новой.
 // Класс min-h-[44px] стоит литералом в каждом атрибуте class (страж TapTargetTest читает
 // классы значения атрибута, `e($input)` даёт ему только имя переменной).
-$input = 'mt-1 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
+$input = 'mt-1.5 w-full rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm';
 
 // Имена и поля настроек видов: имена карточек и селекта читаются из одного перечня — вклад
 // приложения печатается своей подписью, а не технической меткой.
@@ -130,7 +130,7 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
 };
 
 /**
- * Форма одной секции: только поля её вида — шапка (якорь, надзаголовок, заголовок, текст) есть
+ * Форма одной секции: только поля её вида — шапка (якорь, подзаголовок, заголовок, текст) есть
  * у всех, примечание, картинка, кнопки и строки печатаются тогда, когда шаблон вида их читает.
  * Настройки вклада приложения рисуются из описания pages_block_kinds. Новая секция приходит
  * пустым массивом: op — create-section, вид выбирается селектом, а поля вида появятся после
@@ -161,7 +161,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             $hint = (string) $setting['hint'];
             $settingsRows .= '<label class="block text-sm"><span class="font-medium">' . e($label) . '</span>'
                 . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="settings[' . e($key) . ']" value="' . e((string) ($settings[$key] ?? '')) . '">'
-                . ($hint !== '' ? '<span class="mt-1 block text-ink/60">' . e($hint) . '</span>' : '')
+                . ($hint !== '' ? '<span class="mt-1.5 block text-ink/60">' . e($hint) . '</span>' : '')
                 . '</label>';
         }
 
@@ -184,14 +184,14 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="note" value="' . e($values('note')) . '"></label>'
             . $imagePreviewBlock
             . '<div class="order-3 text-sm sm:col-start-2 sm:row-start-2"><label class="font-medium" for="' . e($imageFieldId) . '">Картинка</label>'
-            . '<div class="mt-1 flex items-start gap-2">'
+            . '<div class="mt-1.5 flex items-start gap-2">'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image" value="' . e($values('image')) . '">'
             . '<input class="sr-only" id="' . e($imageFieldId) . '" type="file" name="image_file" accept="image/jpeg,image/png,image/webp">'
             . '<label class="inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5" for="' . e($imageFieldId) . '" title="Выбрать картинку с компьютера">'
             . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>'
             . '<span class="sr-only">Выбрать картинку с компьютера</span></label>'
             . '</div>'
-            . '<span class="mt-1 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ.</span>'
+            . '<span class="mt-1.5 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ.</span>'
             . '</div>'
             . '<label class="order-4 block text-sm sm:col-start-3 sm:row-start-2"><span class="font-medium">Описание картинки</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image_alt" value="' . e($values('image_alt')) . '"></label>'
@@ -220,17 +220,17 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         . '<label class="block text-sm"><span class="font-medium">Вид</span>' . $kindSelect($exists ? (string) $section['kind'] : '') . '</label>'
         . '<label class="block text-sm"><span class="font-medium">Якорь</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="anchor" value="' . e($values('anchor')) . '">'
-        . '<span class="mt-1 block text-ink/60">Ссылка на место секции: /страница#якорь. Пусто — ключ соберётся из заголовка.</span></label>'
+        . '<span class="mt-1.5 block text-ink/60">Ссылка на место секции: /страница#якорь. Пусто — ключ соберётся из заголовка.</span></label>'
         . '</div>'
         . '<div class="grid gap-3 sm:grid-cols-2">'
-        . '<label class="block text-sm"><span class="font-medium">Надзаголовок</span>'
-        . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="badge" value="' . e($values('badge')) . '"></label>'
         . '<label class="block text-sm"><span class="font-medium">Заголовок</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="title" value="' . e($values('title')) . '"></label>'
+        . '<label class="block text-sm"><span class="font-medium">Подзаголовок</span>'
+        . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="badge" value="' . e($values('badge')) . '"></label>'
         . '</div>'
         . '<label class="block text-sm"><span class="font-medium">Текст</span>'
         . '<textarea class="min-h-[44px] ' . e($input) . '" name="lead_text" rows="3">' . e($values('lead_text')) . '</textarea>'
-        . '<span class="mt-1 block text-ink/60">Абзацы разделяются пустой строкой.</span></label>'
+        . '<span class="mt-1.5 block text-ink/60">Абзацы разделяются пустой строкой.</span></label>'
         . $layoutBlock
         . $sectionMedia
         . $settingsBlock

@@ -75,7 +75,7 @@ foreach (COMMERCE_DISCOUNT_KIND_LABELS as $kindValue => $kindLabel) {
 $sumInput = static function (string $field, string $id, string $label) use ($value, $isError, $fieldError): string {
     return '<label class="block" for="' . $id . '">'
         . '<span class="text-sm text-ink/60">' . $label . '</span>'
-        . '<input class="mt-1 min-h-[44px] w-full rounded-lg border' . $isError($field) . ' px-3 py-2"'
+        . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border' . $isError($field) . ' px-3 py-2"'
         . ' id="' . $id . '" name="' . $field . '" inputmode="decimal" value="' . e($value($field)) . '">'
         . $fieldError($field)
         . '</label>';
@@ -89,13 +89,13 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . '<div class="grid gap-4 sm:grid-cols-2">'
     . '<label class="block" for="coupon_code">'
     . '<span class="text-sm text-ink/60">Код (латиница, цифры, дефис — без регистра)</span>'
-    . '<input class="mt-1 min-h-[44px] w-full rounded-lg border' . $isError('code') . ' px-3 py-2 uppercase"'
+    . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border' . $isError('code') . ' px-3 py-2 uppercase"'
     . ' id="coupon_code" name="code" maxlength="' . e((string) COMMERCE_COUPON_CODE_MAX) . '" value="' . e($value('code')) . '" placeholder="SUMMER">'
     . $fieldError('code')
     . '</label>'
     . '<label class="block" for="coupon_kind">'
     . '<span class="text-sm text-ink/60">Вид скидки</span>'
-    . '<select class="mt-1 min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2" id="coupon_kind" name="kind">'
+    . '<select class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 px-3 py-2" id="coupon_kind" name="kind">'
     . $kindOptions
     . '</select>'
     . '</label>'
@@ -105,13 +105,13 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . $sumInput('min_total', 'coupon_min_total', 'Минимум корзины (пусто — без порога)')
     . '<label class="block" for="coupon_expires">'
     . '<span class="text-sm text-ink/60">Действует до (включительно)</span>'
-    . '<input class="mt-1 min-h-[44px] w-full rounded-lg border' . $isError('expires') . ' px-3 py-2"'
+    . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border' . $isError('expires') . ' px-3 py-2"'
     . ' id="coupon_expires" name="expires" value="' . e($value('expires')) . '" placeholder="2026-12-31">'
     . $fieldError('expires')
     . '</label>'
     . '<label class="block" for="coupon_max_uses">'
     . '<span class="text-sm text-ink/60">Лимит визитов (пусто — без лимита)</span>'
-    . '<input class="mt-1 min-h-[44px] w-full rounded-lg border' . $isError('max_uses') . ' px-3 py-2"'
+    . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border' . $isError('max_uses') . ' px-3 py-2"'
     . ' id="coupon_max_uses" name="max_uses" type="number" min="0" value="' . e($value('max_uses')) . '">'
     . $fieldError('max_uses')
     . '</label>'
