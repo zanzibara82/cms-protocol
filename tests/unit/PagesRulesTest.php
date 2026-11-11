@@ -58,12 +58,13 @@ final class PagesRulesTest extends TestCase
     public function testВидыПервогоЗаходаСперечнемИмен(): void
     {
         self::assertSame(
-            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'contacts', 'chain', 'cta', 'faq', 'lead'],
+            ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'contacts', 'chain', 'cta', 'faq', 'lead', 'partners', 'share'],
             PAGES_KINDS,
             'Решение 3 штурма: каркас и виды первого захода, остальные добираются пачками '
             . '(split и quote — вторая, pricing и toc — третья, gallery и related — четвёртая, '
             . 'table и tabs — пятая, banner и video — шестая, slider и review — седьмая, '
-            . 'float и files — восьмая, contacts и chain — девятая, lead — десятая)'
+            . 'float и files — восьмая, contacts и chain — девятая, lead — десятая, '
+            . 'partners и share — одиннадцатая)'
         );
 
         foreach (PAGES_KINDS as $kind) {
@@ -109,6 +110,30 @@ final class PagesRulesTest extends TestCase
         self::assertSame('', pagesVideoFile('/files/plan.pdf'));
         self::assertSame('', pagesVideoFile(''));
         self::assertSame('', pagesVideoFile(null));
+    }
+
+    public function testСсылкиПоделитьсяВедутВСетиИПочту(): void
+    {
+        // Скриптов в блоке нет: ссылки собираются как обычные адреса, а адрес страницы уходит
+        // значением параметра — закодированным один раз.
+        $links = pagesShareLinks('https://example.com/put?x=1');
+
+        self::assertSame(
+            ['Telegram', 'WhatsApp', 'ВКонтакте', 'Одноклассники', 'Почта'],
+            array_column($links, 'label'),
+            'порядок и подписи кнопок задаёт ядро'
+        );
+        self::assertSame(
+            [
+                'https://t.me/share/url?url=https%3A%2F%2Fexample.com%2Fput%3Fx%3D1',
+                'https://wa.me/?text=https%3A%2F%2Fexample.com%2Fput%3Fx%3D1',
+                'https://vk.com/share.php?url=https%3A%2F%2Fexample.com%2Fput%3Fx%3D1',
+                'https://connect.ok.ru/offer?url=https%3A%2F%2Fexample.com%2Fput%3Fx%3D1',
+                'mailto:?subject=%D0%A1%D1%81%D1%8B%D0%BB%D0%BA%D0%B0&body=https%3A%2F%2Fexample.com%2Fput%3Fx%3D1',
+            ],
+            array_column($links, 'href'),
+            'адрес страницы кодируется один раз и уходит значением параметра'
+        );
     }
 
     public function testВариантыВёрсткиЕстьТолькоУВидовСВерсткой(): void

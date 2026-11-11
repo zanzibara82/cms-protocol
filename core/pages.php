@@ -36,10 +36,11 @@ const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'comme
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
 // pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая, banner и video —
 // шестая, slider и review — седьмая, float и files — восьмая, contacts и chain — девятая,
-// lead — десятая (§17 «заявки и рассылка»). Остальные добираются своими пачками. Чужой вид ядро
-// не рисует само — уходит фильтру pages_block_<kind> (вклад приложения).
+// lead — десятая (§17 «заявки и рассылка»), partners и share — одиннадцатая. Остальные
+// добираются своими пачками. Чужой вид ядро не рисует само — уходит фильтру pages_block_<kind>
+// (вклад приложения).
 /** @var list<string> */
-const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'contacts', 'chain', 'cta', 'faq', 'lead'];
+const PAGES_KINDS = ['hero', 'band', 'cards', 'steps', 'prose', 'split', 'quote', 'pricing', 'toc', 'gallery', 'related', 'table', 'tabs', 'banner', 'video', 'slider', 'review', 'float', 'files', 'contacts', 'chain', 'cta', 'faq', 'lead', 'partners', 'share'];
 
 // Подписи видов в конструкторе: человек выбирает «Большой первый экран», а не «hero».
 /** @var array<string, string> */
@@ -68,6 +69,8 @@ const PAGES_KIND_NAMES = [
     'cta' => 'Призыв к действию',
     'faq' => 'Вопросы и ответы',
     'lead' => 'Форма заявки',
+    'partners' => 'Партнёры',
+    'share' => 'Поделиться',
 ];
 
 // Набор полей формы у каждого вида: конструктор рисует только то, что шаблон вида читает.
@@ -101,6 +104,8 @@ const PAGES_KIND_FIELDS = [
     'cta' => ['anchor', 'badge', 'title', 'lead_text', 'buttons'],
     'faq' => ['anchor', 'badge', 'title', 'lead_text', 'items'],
     'lead' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'items'],
+    'partners' => ['anchor', 'badge', 'title', 'lead_text', 'note', 'items'],
+    'share' => ['anchor', 'badge', 'title', 'lead_text'],
 ];
 
 // Подполя строки по виду: у шагов только заголовок и текст, у карточек — картинка, ссылка и
@@ -127,6 +132,7 @@ const PAGES_KIND_ITEM_FIELDS = [
     'chain' => ['title'],
     'faq' => ['title', 'text'],
     'lead' => ['text'],
+    'partners' => ['image', 'title', 'href', 'note'],
 ];
 
 // Подписи подполей строки: один ключ в разных видах значит разное (title у карточки —
@@ -152,6 +158,7 @@ const PAGES_KIND_ITEM_LABELS = [
     'chain' => ['title' => 'Шаг'],
     'faq' => ['title' => 'Вопрос', 'text' => 'Ответ'],
     'lead' => ['text' => 'Пункт'],
+    'partners' => ['image' => 'Логотип', 'title' => 'Название', 'href' => 'Адрес сайта', 'note' => 'Подпись'],
 ];
 
 // Вид приложения (вклад конструктора) не описан в ядре: ему остаются общие поля шапки, а
@@ -562,6 +569,27 @@ function pagesButtonsOf(mixed $raw): array
     }
 
     return $buttons;
+}
+
+/**
+ * Ссылки «Поделиться»: сети и мессенджеры, которым достаточно адреса страницы, плюс письмо.
+ * Скриптов нет — это обычные ссылки, поэтому блок работает под строгой CSP и без JavaScript.
+ * Адрес кодируется один раз: он уходит значением параметра, а не готовым адресом запроса.
+ * Подписи печатает шаблон вида, порядок сетей задаёт этот список.
+ *
+ * @return list<array{label: string, href: string}>
+ */
+function pagesShareLinks(string $url): array
+{
+    $shared = rawurlencode($url);
+
+    return [
+        ['label' => 'Telegram', 'href' => 'https://t.me/share/url?url=' . $shared],
+        ['label' => 'WhatsApp', 'href' => 'https://wa.me/?text=' . $shared],
+        ['label' => 'ВКонтакте', 'href' => 'https://vk.com/share.php?url=' . $shared],
+        ['label' => 'Одноклассники', 'href' => 'https://connect.ok.ru/offer?url=' . $shared],
+        ['label' => 'Почта', 'href' => 'mailto:?subject=' . rawurlencode('Ссылка') . '&body=' . $shared],
+    ];
 }
 
 /**

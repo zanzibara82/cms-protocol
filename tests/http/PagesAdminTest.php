@@ -535,6 +535,8 @@ final class PagesAdminTest extends TestCase
             'tabs' => ['media' => [], 'buttons' => false, 'items' => ['title', 'text']],
             'cta' => ['media' => [], 'buttons' => true, 'items' => []],
             'faq' => ['media' => [], 'buttons' => false, 'items' => ['title', 'text']],
+            'partners' => ['media' => ['note'], 'buttons' => false, 'items' => ['image', 'title', 'href', 'note']],
+            'share' => ['media' => [], 'buttons' => false, 'items' => []],
         ];
 
         $page = createPage([

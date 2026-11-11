@@ -482,6 +482,45 @@ final class PagesPublicTest extends TestCase
             ],
         ]), nowUtc());
 
+        // Партнёры: строка — логотип, название и адрес сайта. Название обязательно: строка без
+        // него не печатается, иначе описание логотипа осталось бы пустым. Без картинки печатается
+        // монограмма из первой буквы.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'partners',
+            'anchor' => 'partnery',
+            'title' => 'Наши партнёры',
+            'lead_text' => 'Школы и компании, с которыми мы работаем.',
+            'note' => 'Список обновляется каждый год',
+            'items' => [
+                [
+                    'image' => '/uploads/images/partner-lingua.svg',
+                    'title' => 'Lingua School',
+                    'href' => 'https://lingua.example',
+                    'note' => 'языковая школа',
+                ],
+                [
+                    'image' => '',
+                    'title' => 'Bridge',
+                    'href' => '/o-nas',
+                    'note' => 'внутренняя ссылка',
+                ],
+                [
+                    'image' => '/uploads/images/partner-empty.svg',
+                    'title' => '',
+                    'href' => 'https://empty.example',
+                    'note' => 'без названия',
+                ],
+            ],
+        ]), nowUtc());
+
+        // Поделиться: обычные ссылки на сети и мессенджеры, без скрипта и внешних библиотек.
+        createSection((string) $vidy['id'], $values([
+            'kind' => 'share',
+            'anchor' => 'podelitsya',
+            'title' => 'Поделиться страницей',
+            'lead_text' => 'Ссылка откроется в выбранной сети.',
+        ]), nowUtc());
+
         createSection((string) $vidy['id'], $values([
             'kind' => 'faq',
             'title' => 'Частые вопросы',
@@ -917,6 +956,62 @@ final class PagesPublicTest extends TestCase
             preg_match_all('~<span class="text-ink/50"[^>]*>→</span>~', $page['body'], $m),
             'переход-стрелка между двумя шагами одна: пустой шаг её не создаёт'
         );
+    }
+
+    public function testPartnersПечатаетЛоготипНазваниеИСсылку(): void
+    {
+        $page = Kernel::get('/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Наши партнёры', $page['body'], 'заголовок блока напечатан');
+        self::assertStringContainsString('Школы и компании, с которыми мы работаем.', $page['body'], 'лид блока напечатан');
+        self::assertStringContainsString('src="/uploads/images/partner-lingua.svg"', $page['body'], 'логотип партнёра напечатан');
+        self::assertStringContainsString('alt="Lingua School"', $page['body'], 'название служит описанием логотипа');
+        self::assertMatchesRegularExpression(
+            '~<a class="[^"]*" href="https://lingua\.example" target="_blank" rel="noopener noreferrer">\s*<img[^>]*alt="Lingua School">\s*<span class="font-semibold">Lingua School</span>\s*</a>~',
+            $page['body'],
+            'внешняя ссылка партнёра открывается в новой вкладке с парным rel'
+        );
+        self::assertStringContainsString('языковая школа', $page['body'], 'подпись партнёра напечатана');
+        self::assertMatchesRegularExpression(
+            '~<a class="[^"]*" href="/o-nas">\s*<span class="[^"]*"[^>]*>B</span>\s*<span class="font-semibold">Bridge</span>\s*</a>~',
+            $page['body'],
+            'без логотипа печатается монограмма, внутренняя ссылка открывается в том же окне'
+        );
+        self::assertStringNotContainsString('без названия', $page['body'], 'партнёр без названия не печатается');
+        self::assertStringContainsString('Список обновляется каждый год', $page['body'], 'примечание блока — сноска под сеткой');
+    }
+
+    public function testShareПечатаетСсылкиНаСетиИПочтуБезСкрипта(): void
+    {
+        $page = Kernel::get('/vidy?from=test');
+        $shared = rawurlencode('http://localhost:8080/vidy');
+
+        self::assertSame(200, $page['status']);
+        self::assertStringContainsString('Поделиться страницей', $page['body'], 'заголовок блока напечатан');
+        self::assertStringContainsString('Ссылка откроется в выбранной сети.', $page['body'], 'лид блока напечатан');
+        self::assertStringContainsString('href="https://t.me/share/url?url=' . $shared . '"', $page['body'], 'Telegram получает адрес страницы');
+        self::assertStringContainsString('href="https://wa.me/?text=' . $shared . '"', $page['body'], 'WhatsApp получает адрес страницы');
+        self::assertStringContainsString('href="https://vk.com/share.php?url=' . $shared . '"', $page['body'], 'ВКонтакте получает адрес страницы');
+        self::assertStringContainsString('href="https://connect.ok.ru/offer?url=' . $shared . '"', $page['body'], 'Одноклассники получают адрес страницы');
+        self::assertStringContainsString(
+            'href="mailto:?subject=%D0%A1%D1%81%D1%8B%D0%BB%D0%BA%D0%B0&amp;body=' . $shared . '"',
+            $page['body'],
+            'почта получает готовое письмо со ссылкой'
+        );
+        self::assertStringNotContainsString('from%3Dtest', $page['body'], 'строка запроса в ссылку не попадает');
+        self::assertMatchesRegularExpression(
+            '~<a\b[^>]*href="https://t\.me/share/url[^"]*"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Telegram</a>~',
+            $page['body'],
+            'внешняя кнопка открывается в новой вкладке с парным rel'
+        );
+        self::assertMatchesRegularExpression(
+            '~<a\b[^>]*href="mailto:[^"]*"[^>]*>Почта</a>~',
+            $page['body'],
+            'кнопка почты печатается ссылкой на почтовый клиент'
+        );
+        self::assertStringNotContainsString('javascript:', $page['body'], 'ссылки не подменяются скриптом');
+        self::assertStringNotContainsString('onclick=', $page['body'], 'кнопки работают без встроенных обработчиков');
     }
 
     public function testCtaПечатаетПризывСКнопкой(): void

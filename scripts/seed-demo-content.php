@@ -530,7 +530,7 @@ function demoVitrinaSections(): array
             'kind' => 'hero',
             'badge' => 'Большой первый экран',
             'title' => 'Все виды блоков конструктора на одной странице',
-            'lead_text' => "Здесь собраны двадцать четыре вида ядра и два вклада приложений — по одному блоку каждого вида.\n\n"
+            'lead_text' => "Здесь собраны двадцать шесть видов ядра и два вклада приложений — по одному блоку каждого вида.\n\n"
                 . 'Страница тестовая: её можно удалить или переписать под свои задачи.',
             'note' => 'Порядок блоков меняется стрелками в админке.',
             'image' => '/assets/longread/hero-student.png',
@@ -931,6 +931,53 @@ function demoVitrinaSections(): array
                 ['text' => 'Заявка сохраняется в админке и приходит письмом.'],
             ],
             'note' => 'Примечание блока печатается под обещаниями.',
+        ]),
+
+        demoSection('partnery', [
+            'kind' => 'partners',
+            'badge' => 'Партнёры',
+            'title' => 'Компании, с которыми мы работаем',
+            'lead_text' => 'Логотип, название и ссылка: у партнёра без логотипа печатается монограмма из первой буквы названия.',
+            'items' => [
+                [
+                    'image' => '/assets/demo/partners/lingua.svg',
+                    'title' => 'Lingua School',
+                    'href' => 'https://lingua.example',
+                    'note' => 'языковая школа, Москва',
+                ],
+                [
+                    'image' => '/assets/demo/partners/bridge.svg',
+                    'title' => 'Bridge',
+                    'href' => 'https://bridge.example',
+                    'note' => 'подготовка к экзаменам',
+                ],
+                [
+                    'image' => '/assets/demo/partners/orbit.svg',
+                    'title' => 'Orbit',
+                    'href' => 'https://orbit.example',
+                    'note' => 'международные программы',
+                ],
+                [
+                    'image' => '',
+                    'title' => 'Compass',
+                    'href' => '',
+                    'note' => 'без логотипа и ссылки — монограмма',
+                ],
+                [
+                    'image' => '/assets/demo/partners/lingua.svg',
+                    'title' => '',
+                    'href' => '',
+                    'note' => 'строка без названия не печатается',
+                ],
+            ],
+            'note' => 'Примечание блока — сноска под сеткой партнёров.',
+        ]),
+
+        demoSection('podelitsya', [
+            'kind' => 'share',
+            'badge' => 'Поделиться',
+            'title' => 'Расскажите о школе',
+            'lead_text' => 'Кнопки ведут в Telegram, WhatsApp, ВКонтакте, Одноклассники и почту. Скриптов нет: ссылки работают сразу.',
         ]),
 
         demoSection('novosti-lenta', [
