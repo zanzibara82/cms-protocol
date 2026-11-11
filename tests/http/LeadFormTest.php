@@ -71,7 +71,10 @@ final class LeadFormTest extends TestCase
     {
         $page = $this->tokenPage();
 
-        return Kernel::post('/lead', array_merge(['_token' => Kernel::tokenFrom($page['body'])], $fields));
+        return Kernel::post('/lead', array_merge(
+            ['_token' => Kernel::tokenFrom($page['body']), 'consent' => '1'],
+            $fields
+        ));
     }
 
     public function testФормаСекцииПечатаетсяНаСтранице(): void
@@ -89,6 +92,7 @@ final class LeadFormTest extends TestCase
         self::assertStringContainsString('name="contact"', $page['body']);
         self::assertStringContainsString('name="message"', $page['body']);
         self::assertStringContainsString('Согласие на обработку персональных данных', $page['body']);
+        self::assertMatchesRegularExpression('/name="consent"[^>]*required/', $page['body'], 'браузер тоже требует отметку');
         self::assertStringContainsString('min-h-[44px]', $page['body'], 'поля и кнопки формы тапабельные');
     }
 
@@ -140,6 +144,25 @@ final class LeadFormTest extends TestCase
         self::assertSame(302, $response['status']);
         self::assertStringContainsString('notice=lead_failed', $response['headers']['location']);
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('lead')));
+    }
+
+    public function testБезСогласияЗаявкаНеПишется(): void
+    {
+        $response = $this->postLead([
+            'name' => 'Мария',
+            'contact' => '+7 900 000-00-00',
+            'source' => '/zayavka#forma',
+            'consent' => '',
+        ]);
+
+        self::assertSame(302, $response['status']);
+        self::assertStringContainsString('notice=lead_failed', $response['headers']['location']);
+        self::assertStringContainsString('#forma', $response['headers']['location'], 'человек остаётся у формы');
+
+        $page = Kernel::get('/zayavka?notice=lead_failed');
+        self::assertStringContainsString('Отметьте согласие на обработку персональных данных.', $page['body'], 'причина видна у формы');
+
+        self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('lead')), 'без согласия заявка не пишется');
     }
 
     public function testЛимитПропускаетПятьИОтсекаетШестую(): void

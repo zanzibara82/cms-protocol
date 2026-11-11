@@ -765,6 +765,7 @@ function coreLeadSubmit(array $params = []): void
         'message' => postString('message'),
         'source' => $source,
         'company' => postString('company'),
+        'consent' => postString('consent'),
     ];
 
     // Ловушка для ботов отвечает тем же «спасибо», что и настоящему человеку: по ответу нельзя

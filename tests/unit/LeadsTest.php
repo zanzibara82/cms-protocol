@@ -67,7 +67,9 @@ final class LeadsTest extends TestCase
         self::assertSame('Контакт длиннее 120 символов.', leadValidationError(['name' => 'Мария', 'contact' => str_repeat('1', 121)]));
         self::assertSame('Оставьте телефон или почту — по ним сможем ответить.', leadValidationError(['name' => 'Мария', 'contact' => 'мария']));
         self::assertSame('Слишком длинное сообщение.', leadValidationError(['name' => 'Мария', 'contact' => 'maria@example.ru', 'message' => str_repeat('а', 1001)]));
-        self::assertSame('', leadValidationError(['name' => 'Мария', 'contact' => 'maria@example.ru', 'message' => 'Вопрос']));
+        self::assertSame('Отметьте согласие на обработку персональных данных.', leadValidationError(['name' => 'Мария', 'contact' => 'maria@example.ru', 'message' => 'Вопрос']));
+        self::assertSame('', leadValidationError(['name' => 'Мария', 'contact' => 'maria@example.ru', 'message' => 'Вопрос', 'consent' => '1']));
+        self::assertSame('', leadValidationError(['name' => 'Мария', 'contact' => 'maria@example.ru', 'consent' => 'on']));
     }
 
     public function testЦельРедиректаОстаётсяВнутренней(): void
