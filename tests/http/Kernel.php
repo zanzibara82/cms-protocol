@@ -300,7 +300,7 @@ final class Kernel
 
         $body = (string) curl_exec($handle);
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-        curl_close($handle);
+        // curl_close() с PHP 8.0 ничего не освобождает, а с 8.5 объявлен устаревшим.
 
         return ['status' => $status, 'body' => $body, 'headers' => $headers, 'redirects' => []];
     }

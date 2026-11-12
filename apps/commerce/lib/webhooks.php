@@ -307,7 +307,7 @@ function commerceWebhookTransportDefault(array $receiver, string $event, string 
     $body = curl_exec($handle);
     $code = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
     $error = (string) (curl_error($handle) ?: '');
-    curl_close($handle);
+    // curl_close() с PHP 8.0 ничего не освобождает, а с 8.5 объявлен устаревшим.
 
     // Отказ сети — единственный случай, когда транспорт говорит за себя в журнале:
     // коды не-2xx commerceWebhookSend() уже замечает как «Не доставлено».

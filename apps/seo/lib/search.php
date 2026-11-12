@@ -342,7 +342,7 @@ function seoSearchHttp(string $method, string $url, array $options = []): array
     $response = curl_exec($handle);
     $error = curl_error($handle);
     $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-    curl_close($handle);
+    // curl_close() с PHP 8.0 ничего не освобождает, а с 8.5 объявлен устаревшим.
 
     if (!is_string($response)) {
         return ['status' => $status, 'body' => '', 'error' => $error !== '' ? $error : 'Ответ не получен.'];

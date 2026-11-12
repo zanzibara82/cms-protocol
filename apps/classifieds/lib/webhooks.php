@@ -347,7 +347,7 @@ function classifiedsWebhookTransportDefault(array $receiver, string $event, stri
     $body = curl_exec($handle);
     $code = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
     $error = (string) (curl_error($handle) ?: '');
-    curl_close($handle);
+    // curl_close() с PHP 8.0 ничего не освобождает, а с 8.5 объявлен устаревшим.
 
     if ($body === false) {
         logWarn('classifieds.webhook_transport', ['reason' => $error !== '' ? $error : 'сеть недоступна']);

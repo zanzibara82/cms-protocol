@@ -686,13 +686,11 @@ final class SmtpSocketTest extends TestCase
 
         // Сертификат подставного сервера задаётся опциями самого потока: четвёртый аргумент
         // stream_socket_enable_crypto — это ключ пира, а не контекст.
-        stream_context_set_option($client, [
-            'ssl' => [
-                'local_cert' => self::servedCertificate($script),
-                'local_pk' => self::servedKey($script),
-                'verify_peer' => false,
-            ],
-        ]);
+        // Форма с массивом объявлена устаревшей в PHP 8.4, а замена stream_context_set_options()
+        // появилась только там же. Отдельные вызовы по ключу работают и на 8.1, и на новых ветках.
+        stream_context_set_option($client, 'ssl', 'local_cert', self::servedCertificate($script));
+        stream_context_set_option($client, 'ssl', 'local_pk', self::servedKey($script));
+        stream_context_set_option($client, 'ssl', 'verify_peer', false);
         $method = ($script['tls-method'] ?? '') === 'tls1_0'
             ? STREAM_CRYPTO_METHOD_TLSv1_0_SERVER
             : STREAM_CRYPTO_METHOD_TLS_SERVER;

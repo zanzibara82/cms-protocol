@@ -36,6 +36,6 @@ imagefilledpolygon($image, [945, 265, 930, 195, 885, 255], $ink);
 imagefilledellipse($image, 700, 500, 200, 40, $ink);
 
 imagepng($image, $target);
-imagedestroy($image);
+// imagedestroy() с PHP 8.0 ничего не освобождает, а с 8.5 объявлен устаревшим.
 
 echo 'Готово: ' . $target . PHP_EOL;
