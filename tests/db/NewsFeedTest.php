@@ -38,6 +38,34 @@ final class NewsFeedTest extends NewsDbTestCase
         self::assertSame(['zakreplennyy', 'novyy', 'staryy'], $this->feedSlugs(findFeed()));
     }
 
+    // Равный срок публикации — обычное дело: два материала, выпущенных одной кнопкой подряд
+    // или загруженных пачкой, получают одну и ту же секунду. Порядок в этом случае обязан быть
+    // определён чем-то, кроме расположения строк в таблице: иначе одна и та же выборка отдаёт
+    // материалы в разном порядке между вызовами, а на стыке страниц материал показывается
+    // дважды или теряется вовсе (та же беда, от которой страницу спасает единый orderNews()).
+    public function testПриРавномСрокеПорядокЛентыОпределёнИУстойчив(): void
+    {
+        $stamp = utcStamp(nowUtc()->sub(new DateInterval('PT1H')));
+
+        $ids = [];
+        foreach (['a-pervyy', 'b-vtoroy', 'c-tretiy'] as $slug) {
+            $ids[$slug] = $this->published($slug, ['published_at' => $stamp]);
+        }
+
+        $expected = array_keys($ids);
+        usort($expected, static fn (string $left, string $right): int => strcmp((string) $ids[$right], (string) $ids[$left]));
+
+        // Первый вызов задаёт правило, второй обязан его повторить: проверка читает базу дважды,
+        // а не сравнивает одну выборку сама с собой.
+        self::assertSame($expected, $this->feedSlugs(findFeed()), 'порядок при равном сроке не определён');
+        self::assertSame($expected, $this->feedSlugs(findFeed()), 'порядок при равном сроке не устойчив');
+
+        // Предел в один материал и вторая страница читают ту же последовательность: материал,
+        // открывающий ленту, не повторяется началом следующей страницы при равных сроках.
+        self::assertSame($expected[0], (string) inCategory('zhizn-shkoly', nowUtc(), 1)[0]['slug']);
+        self::assertSame($expected[0], (string) relatedLinks('zhizn-shkoly', (string) $expected[2], nowUtc(), 1)[0]['slug']);
+    }
+
     public function testСоВторойСтраницыЗакреплениеНеПоднимается(): void
     {
         $total = NEWS_PER_PAGE + 3;

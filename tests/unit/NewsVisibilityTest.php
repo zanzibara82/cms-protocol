@@ -81,12 +81,15 @@ final class NewsVisibilityTest extends TestCase
         // Порядок не зависит от страницы: OFFSET считается по той же последовательности, по какой
         // читаются строки. Как только страница меняет порядок, на стыке страниц материал
         // теряется, а закреплённый печатается дважды.
-        self::assertSame('pinned DESC, published_at DESC', orderNews());
+        //
+        // Третий ключ обязателен: равный срок публикации — обычное дело, и без разрешения ничьей
+        // порядок задаёт СУБД, то есть расположение строк в таблице.
+        self::assertSame('pinned DESC, published_at DESC, i.id DESC', orderNews());
     }
 
     public function testФрагментыПорядкаСостоятИзИменКолонок(): void
     {
-        self::assertMatchesRegularExpression('/^pinned DESC, [a-z_]+ DESC$/', orderNews());
+        self::assertMatchesRegularExpression('/^pinned DESC, [a-z_]+ DESC, i\.[a-z_]+ DESC$/', orderNews());
     }
 
     public function testПредупреждениеОЗакреплённыхСрабатываетПослеПредела(): void
