@@ -31,7 +31,7 @@ const PAGES_HOME_ID = '';
  *
  * @var list<string>
  */
-const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress'];
+const PAGES_RESERVED_SLUGS = ['admin', 'login', 'logout', 'news', 'shop', 'commerce', 'classifieds', 'seo', 'learn', 'lesson', 'assets', 'uploads', 'onboarding', 'placement-test', 'dashboard', 'progress', 'forgot-password', 'reset-password', 'preview', 'sitemap'];
 
 // Виды секций: каркас и виды первого захода (решение 3 штурма), split и quote — вторая пачка,
 // pricing и toc — третья, gallery и related — четвёртая, table и tabs — пятая, banner и video —

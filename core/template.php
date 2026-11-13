@@ -111,6 +111,10 @@ function render(string $template, array $data = [], array $page = []): void
     // что прислал лимитер.
     if ($noindex && !headers_sent()) {
         header('Cache-Control: no-store');
+        // X-Robots-Tag — второй канал запрета индексирования для ответов, у которых нет <meta>:
+        // предпросмотр по ссылке и выгрузки. Заголовок дублирует метку и работает, даже если
+        // страницу заберут без разбора HTML.
+        header('X-Robots-Tag: noindex, nofollow');
     }
 
     require dirname(__DIR__) . '/theme/layout.php';

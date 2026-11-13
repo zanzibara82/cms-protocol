@@ -5,10 +5,15 @@ declare(strict_types=1);
 /** @var string $error */
 /** @var string $email */
 /** @var string $next */
+/** @var string $notice */
 ?>
 <section class="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-white p-6">
     <h1 class="text-2xl font-bold">Вход для редактора</h1>
     <p class="mt-2 text-sm text-ink/70">Раздел открыт администратору и редактору контента.</p>
+
+    <?php if ($notice !== ''): ?>
+        <p class="mt-4 rounded-lg border border-good/30 bg-good/10 px-4 py-3 text-sm text-good" role="status"><?= e($notice) ?></p>
+    <?php endif; ?>
 
     <?php if ($error !== ''): ?>
         <p class="mt-4 rounded-lg border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad" role="alert"><?= e($error) ?></p>
@@ -31,4 +36,6 @@ declare(strict_types=1);
         </label>
         <button class="min-h-[44px] w-full rounded-lg bg-ink px-4 py-2 font-medium text-cream hover:opacity-90" type="submit">Войти</button>
     </form>
+
+    <p class="mt-4 text-sm"><a class="inline-flex min-h-[44px] items-center text-ink/70 underline hover:text-ink" href="/forgot-password">Забыли пароль?</a></p>
 </section>

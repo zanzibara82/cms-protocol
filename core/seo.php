@@ -142,10 +142,20 @@ function sitemapXml(): string
     // Карта сайта считается заново на каждый вызов: рабочий процесс PHP (FPM, mod_php, php -S)
     // живёт между запросами, и статический кеш показал бы поисковику устаревший список
     // до перезапуска воркера.
+    return sitemapUrlsetXml(sitemapUrls());
+}
+
+// Сколько адресов в одной части индекса. Предел поисковиков — 50 000, но сайт школы редко
+// переваливает за тысячу, а часть по 500 удобно кэшировать и читать глазами.
+const SITEMAP_PART_SIZE = 500;
+
+/** @param list<array{loc: string, lastmod?: string, priority?: float}> $urls */
+function sitemapUrlsetXml(array $urls): string
+{
     $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
     $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 
-    foreach (sitemapUrls() as $url) {
+    foreach ($urls as $url) {
         $xml .= "  <url>\n";
         $xml .= '    <loc>' . e(absoluteUrl((string) $url['loc'])) . '</loc>' . "\n";
         if (isset($url['lastmod'])) {
@@ -158,6 +168,69 @@ function sitemapXml(): string
     }
 
     return $xml . '</urlset>' . "\n";
+}
+
+/** @return list<list<array{loc: string, lastmod?: string, priority?: float}>> */
+function sitemapParts(): array
+{
+    return sitemapPartsOf(sitemapUrls());
+}
+
+/**
+ * Нарезка готового списка адресов: отделена от выборки, чтобы правила частей проверялись
+ * unit-тестом без подмены базы, а сайт и тест резали карту одним кодом.
+ *
+ * @param list<array{loc: string, lastmod?: string, priority?: float}> $urls
+ * @return list<list<array{loc: string, lastmod?: string, priority?: float}>>
+ */
+function sitemapPartsOf(array $urls): array
+{
+    $parts = array_chunk($urls, SITEMAP_PART_SIZE);
+
+    return $parts === [] ? [[]] : $parts;
+}
+
+function sitemapIndexXml(): string
+{
+    return sitemapIndexOf(sitemapUrls());
+}
+
+/**
+ * Индекс из готового списка адресов: отделён от выборки по той же причине, что и нарезка частей.
+ *
+ * @param list<array{loc: string, lastmod?: string, priority?: float}> $urls
+ */
+function sitemapIndexOf(array $urls): string
+{
+    $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+    $xml .= '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+
+    foreach (array_keys(sitemapPartsOf($urls)) as $index) {
+        $xml .= "  <sitemap>\n";
+        $xml .= '    <loc>' . e(absoluteUrl('/sitemap/' . ($index + 1))) . '</loc>' . "\n";
+        $xml .= "  </sitemap>\n";
+    }
+
+    return $xml . '</sitemapindex>' . "\n";
+}
+
+function sitemapPartXml(int $part): string
+{
+    return sitemapPartOf(sitemapParts(), $part);
+}
+
+/**
+ * @param list<list<array{loc: string, lastmod?: string, priority?: float}>> $parts
+ */
+function sitemapPartOf(array $parts, int $part): string
+{
+    $index = $part - 1;
+
+    if ($index < 0 || !isset($parts[$index])) {
+        return '';
+    }
+
+    return sitemapUrlsetXml($parts[$index]);
 }
 
 /** @return list<string> */

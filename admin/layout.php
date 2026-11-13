@@ -8,9 +8,14 @@ declare(strict_types=1);
 const ADMIN_CORE_TABS = [
     ['href' => '/admin', 'label' => 'Сводка'],
     ['href' => '/admin/pages', 'label' => 'Страницы'],
+    ['href' => '/admin/media', 'label' => 'Медиатека'],
+    ['href' => '/admin/trash', 'label' => 'Корзина'],
+    ['href' => '/admin/search', 'label' => 'Поиск'],
     ['href' => '/admin/apps', 'label' => 'Приложения'],
     ['href' => '/admin/leads', 'label' => 'Заявки'],
     ['href' => '/admin/menu', 'label' => 'Меню'],
+    ['href' => '/admin/consents', 'label' => 'Согласия'],
+    ['href' => '/admin/audit', 'label' => 'Журнал'],
     ['href' => '/admin/settings', 'label' => 'Настройки'],
 ];
 

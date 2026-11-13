@@ -37,6 +37,28 @@ function registerCoreRoutes(): void
     addRoute('POST', '/admin/leads', 'coreAdminLeadsAction', ['private' => true, 'permission' => 'manage']);
     addRoute('GET', '/sitemap.xml', 'coreSitemap');
     addRoute('GET', '/robots.txt', 'coreRobots');
+    // RELEASE 2.1: карта сайта частями и индекс. Прежний /sitemap.xml не меняется — он остаётся
+    // одной картой urlset, а индекс живёт отдельным адресом.
+    addRoute('GET', '/sitemap-index.xml', 'coreSitemapIndex');
+    addRoute('GET', '/sitemap/{part}', 'coreSitemapPart');
+    // Ленты сайта: RSS 2.0 и Atom.
+    addRoute('GET', '/feed.xml', 'coreFeedRss');
+    addRoute('GET', '/feed.atom', 'coreFeedAtom');
+    // Предпросмотр черновика по одноразовой ссылке и сброс пароля редактора.
+    addRoute('GET', '/preview/{token}', 'corePreviewPage');
+    addRoute('GET', '/forgot-password', 'coreForgotPasswordPage');
+    addRoute('POST', '/forgot-password', 'coreForgotPasswordSubmit');
+    addRoute('GET', '/reset-password/{token}', 'coreResetPasswordPage');
+    addRoute('POST', '/reset-password/{token}', 'coreResetPasswordSubmit');
+    // Общие сервисы редакции: корзина, медиатека, журнал действий, журнал согласий, сквозной поиск.
+    addRoute('GET', '/admin/trash', 'coreAdminTrash', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/trash', 'coreAdminTrashAction', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/media', 'coreAdminMedia', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/media', 'coreAdminMediaAction', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/audit', 'coreAdminAudit', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/admin/consents', 'coreAdminConsents', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/admin/consents/export', 'coreAdminConsentsExport', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/admin/search', 'coreAdminSearch', ['private' => true, 'permission' => 'login']);
     // Страницы живут на /{slug} одним сегментом, поэтому маршрут идёт в конец реестра: точные
     // пути ядра и разделов выигрывают по построению сортировки (router.php ставит статические
     // раньше параметрических), а {slug} ограничен «[^/]+» и не отбирает у разделов их подразделы.
@@ -106,7 +128,12 @@ function coreLoginPage(array $params = []): void
     $queryNext = queryString('next', '');
     $next = is_string($queryNext) && isInternalNextPath($queryNext) ? $queryNext : '';
 
-    render('login', ['error' => '', 'email' => queryString('email', ''), 'next' => $next], ['title' => 'Вход', 'noindex' => true]);
+    render('login', [
+        'error' => '',
+        'email' => queryString('email', ''),
+        'next' => $next,
+        'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
+    ], ['title' => 'Вход', 'noindex' => true]);
 }
 
 /** @param array<string, string> $params */
@@ -125,10 +152,18 @@ function coreLoginSubmit(array $params = []): void
 
     if ($result['ok'] === false) {
         // Введённый адрес возвращается в форму, текст ошибки — общий: он не выдаёт, есть ли аккаунт.
-        render('login', ['error' => (string) $result['error'], 'email' => $email, 'next' => $next], ['title' => 'Вход', 'noindex' => true]);
+        render('login', [
+            'error' => (string) $result['error'],
+            'email' => $email,
+            'next' => $next,
+            'notice' => '',
+        ], ['title' => 'Вход', 'noindex' => true]);
 
         return;
     }
+
+    $user = $result['user'];
+    auditLog('auth.login', 'user', (string) $user['id'], ['email' => (string) $user['email']], 'Вход в админку');
 
     redirect($next !== '' ? $next : '/admin');
 }
@@ -137,6 +172,13 @@ function coreLoginSubmit(array $params = []): void
 function coreLogout(array $params = []): void
 {
     csrfCheck();
+
+    $user = currentUser();
+
+    if (is_array($user)) {
+        auditLog('auth.logout', 'user', (string) $user['id'], ['email' => (string) $user['email']], 'Выход из админки');
+    }
+
     logoutUser();
     redirectWithNotice('/', 'signed-out');
 }
@@ -158,6 +200,163 @@ function coreRobots(array $params = []): void
         'Content-Type' => 'text/plain; charset=utf-8',
         'Cache-Control' => 'public, max-age=3600',
     ]);
+}
+
+// ---------------------------------------------------------------------------
+// RELEASE 2.1: карта сайта частями, ленты, предпросмотр по ссылке, сброс пароля
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function coreSitemapIndex(array $params = []): void
+{
+    respond(200, sitemapIndexXml(), [
+        'Content-Type' => 'application/xml; charset=utf-8',
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+}
+
+/** @param array<string, string> $params */
+function coreSitemapPart(array $params = []): void
+{
+    $part = (int) ($params['part'] ?? 0);
+    $xml = sitemapPartXml($part);
+
+    if ($xml === '') {
+        notFound('Такой части карты сайта нет.');
+    }
+
+    respond(200, $xml, [
+        'Content-Type' => 'application/xml; charset=utf-8',
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+}
+
+/** @param array<string, string> $params */
+function coreFeedRss(array $params = []): void
+{
+    respond(200, rssFeedXml(), [
+        'Content-Type' => 'application/rss+xml; charset=utf-8',
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+}
+
+/** @param array<string, string> $params */
+function coreFeedAtom(array $params = []): void
+{
+    respond(200, atomFeedXml(), [
+        'Content-Type' => 'application/atom+xml; charset=utf-8',
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+}
+
+/**
+ * Предпросмотр черновика по ссылке: токен живёт в базе хешем, страница печатается без шапки
+ * админки и с запретом индексирования и хранения. Ссылка не даёт править — только смотреть.
+ *
+ * @param array<string, string> $params
+ */
+function corePreviewPage(array $params = []): void
+{
+    $row = previewTokenResolve((string) ($params['token'] ?? ''));
+
+    if ($row === null) {
+        notFound('Ссылка предпросмотра недействительна или устарела.');
+    }
+
+    $page = pageById((string) $row['page_id']);
+
+    if ($page === null) {
+        notFound('Страница предпросмотра больше не существует.');
+    }
+
+    render('page', [
+        'sections' => pageSections((string) $page['id'], true),
+        'page' => $page,
+        'preview' => true,
+    ], [
+        'title' => 'Предпросмотр — ' . (string) $page['title'],
+        'description' => (string) $page['description'],
+        'noindex' => true,
+    ]);
+}
+
+/** @param array<string, string> $params */
+function coreForgotPasswordPage(array $params = []): void
+{
+    if (currentUser() !== null) {
+        redirect('/admin');
+    }
+
+    render('forgot-password', [
+        'error' => '',
+        'email' => '',
+        'notice' => (string) (noticeOfRequest(CORE_NOTICE_TEXT) ?? ''),
+    ], ['title' => 'Сброс пароля', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function coreForgotPasswordSubmit(array $params = []): void
+{
+    csrfCheck();
+
+    $email = postString('email');
+    $result = passwordResetRequest($email);
+
+    if (($result['ok'] ?? false) !== true) {
+        render('forgot-password', [
+            'error' => (string) ($result['error'] ?? 'Не удалось отправить письмо.'),
+            'email' => $email,
+            'notice' => '',
+        ], ['title' => 'Сброс пароля', 'noindex' => true]);
+
+        return;
+    }
+
+    redirectWithNotice('/forgot-password', 'password-reset-sent');
+}
+
+/** @param array<string, string> $params */
+function coreResetPasswordPage(array $params = []): void
+{
+    $raw = (string) ($params['token'] ?? '');
+    $row = passwordResetTokenRow($raw);
+
+    if ($row === null) {
+        notFound('Ссылка сброса недействительна или устарела.');
+    }
+
+    render('reset-password', [
+        'token' => $raw,
+        'email' => (string) $row['email'],
+        'error' => '',
+    ], ['title' => 'Новый пароль', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function coreResetPasswordSubmit(array $params = []): void
+{
+    csrfCheck();
+
+    $raw = (string) ($params['token'] ?? '');
+    $row = passwordResetTokenRow($raw);
+
+    if ($row === null) {
+        notFound('Ссылка сброса недействительна или устарела.');
+    }
+
+    $result = passwordResetByToken($raw, postString('password'), postString('password_confirm'));
+
+    if (($result['ok'] ?? false) !== true) {
+        render('reset-password', [
+            'token' => $raw,
+            'email' => (string) $row['email'],
+            'error' => (string) ($result['error'] ?? 'Пароль не изменился.'),
+        ], ['title' => 'Новый пароль', 'noindex' => true]);
+
+        return;
+    }
+
+    redirectWithNotice('/login', 'password-reset-done');
 }
 
 /** @param array<string, string> $params */
@@ -246,6 +445,11 @@ function coreAdminAppsAction(array $params = []): void
     if ($op === 'update-core') {
         $plan = planApp('core');
         $result = $plan->isEmpty() ? ['ok' => true, 'error' => ''] : applyApp($plan);
+
+        if (($result['ok'] ?? false) === true && !$plan->isEmpty()) {
+            auditLog('core.update', 'core', '', [], 'Ядро обновлено');
+        }
+
         finishAppAction($result, '/admin/apps', $plan->isEmpty() ? '' : 'core-updated');
 
         return;
@@ -270,6 +474,12 @@ function coreAdminAppsAction(array $params = []): void
         'enable' => 'enabled',
         default => '',
     };
+
+    if (($result['ok'] ?? false) === true) {
+        $manifest = appManifest($app);
+        $title = $manifest === null ? $app : (string) $manifest['title'];
+        auditLog('app.' . $op, 'app', $app, [], $title . ' — действие «' . $op . '»');
+    }
 
     finishAppAction($result, '/admin/apps', $notice);
 }
@@ -415,10 +625,15 @@ function coreAdminPageScreen(string $pageId): void
         redirect('/admin/pages');
     }
 
+    $editor = currentUser();
     $data = [
         'kinds' => pagesKindOptions(),
         'sections' => pageSections($pageId),
         'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        // Буфер обмена общий для всех страниц: вставлять секцию можно на любой из них.
+        'clipboard' => clipboardGet(is_array($editor) ? (string) $editor['id'] : ''),
+        'previewLink' => '',
+        'previewTokens' => [],
     ];
 
     if ($page === null) {
@@ -439,6 +654,9 @@ function coreAdminPageScreen(string $pageId): void
     $data['page'] = $page;
     $data['alertTitle'] = adminFailureTitle($alertReason);
     $data['alertReason'] = $alertReason;
+    // Сырая ссылка предпросмотра показывается один раз и только здесь: в базе лежит её хеш.
+    $data['previewLink'] = previewFlashTake();
+    $data['previewTokens'] = previewTokensForPage($pageId);
 
     render('admin/pages-edit', $data, [
         'title' => 'Страницы — админка',
@@ -494,10 +712,49 @@ function coreAdminPagesAction(array $params = []): void
         $result = createPage(pagesPageValuesFromPost(), nowUtc());
         $created = ($result['ok'] ?? false) === true;
 
+        if ($created) {
+            auditLog('page.create', 'page', (string) $result['id'], ['slug' => (string) $result['slug']], 'Создана страница');
+        }
+
         finishAppAction($result, $created ? '/admin/pages/' . (string) $result['id'] : '/admin/pages', $created ? 'page_created' : '');
 
         return;
     }
+
+    // Массовые операции: одинаковый набор отмеченных страниц, разное намерение.
+    if ($op === 'bulk-publish' || $op === 'bulk-unpublish' || $op === 'bulk-trash') {
+        $ids = postList('ids');
+        $bulk = match ($op) {
+            'bulk-publish' => pagesBulkStatus($ids, PAGES_STATUS_PUBLISHED),
+            'bulk-unpublish' => pagesBulkStatus($ids, PAGES_STATUS_DRAFT),
+            default => pagesBulkTrash($ids),
+        };
+
+        // Ключ уведомления берётся из отдельной переменной: страж NoticeKeyTest читает литералы
+        // аргумента и иначе принял бы 'ok' из обращения к массиву за ключ уведомления.
+        $done = ($bulk['ok'] ?? false) === true;
+        finishAppAction($bulk, '/admin/pages', $done ? 'pages_bulk_done' : '');
+
+        return;
+    }
+
+    // Предпросмотр: сырая ссылка едет через сессию и показывается на экране один раз.
+    if ($op === 'preview-page') {
+        $editor = currentUser();
+        $created = previewTokenCreate($pageId, is_array($editor) ? (string) $editor['id'] : '');
+
+        if (($created['ok'] ?? false) === true) {
+            previewFlashSet((string) $created['url']);
+            redirectWithNotice($to, 'preview_created');
+        }
+
+        finishAppAction($created, $to, '');
+
+        return;
+    }
+
+    $editor = currentUser();
+    $editorId = is_array($editor) ? (string) $editor['id'] : '';
 
     $result = match ($op) {
         'save-page' => updatePage($pageId, pagesPageValuesFromPost(), nowUtc()),
@@ -505,8 +762,13 @@ function coreAdminPagesAction(array $params = []): void
         'save-section' => updateSection(postString('section'), $sectionValues ?? [], nowUtc()),
         'move-section' => sectionMove(postString('section'), postString('dir')),
         'toggle-section' => sectionToggle(postString('section'), postString('visible') !== '0'),
-        'delete-section' => sectionDelete(postString('section')),
-        'delete-page' => deletePage($pageId),
+        'delete-section' => trashSection(postString('section')),
+        'delete-page' => trashPage($pageId),
+        'duplicate-page' => duplicatePage($pageId),
+        'duplicate-section' => duplicateSection(postString('section')),
+        'copy-section' => clipboardCopy($editorId, postString('section')),
+        'paste-section' => clipboardPaste($editorId, $pageId),
+        'preview-revoke' => previewTokenRevoke(postString('token'), $pageId),
         default => ['ok' => false, 'error' => 'Неизвестное действие.'],
     };
 
@@ -516,10 +778,30 @@ function coreAdminPagesAction(array $params = []): void
         pageImageDelete($uploadedImage);
     }
 
-    // Успех у страницы уводит в список — страницы больше нет. Остальные действия остаются
-    // на своём экране.
+    // Успех у страницы уводит в список — страницы больше нет; копия открывается в своём
+    // редакторе. Остальные действия остаются на прежнем экране.
     if ($op === 'delete-page' && ($result['ok'] ?? false) === true) {
         $to = '/admin/pages';
+    }
+
+    if ($op === 'duplicate-page' && ($result['ok'] ?? false) === true) {
+        $to = '/admin/pages/' . (string) $result['id'];
+    }
+
+    if (($result['ok'] ?? false) === true) {
+        $audit = match ($op) {
+            'save-page' => ['page.update', 'page', $pageId, 'Страница сохранена'],
+            'create-section' => ['section.create', 'section', (string) ($result['id'] ?? ''), 'Секция создана'],
+            'save-section' => ['section.update', 'section', postString('section'), 'Секция сохранена'],
+            'move-section' => ['section.move', 'section', postString('section'), 'Порядок секций изменён'],
+            'toggle-section' => ['section.visibility', 'section', postString('section'), 'Видимость секции изменена'],
+            'preview-revoke' => ['preview.revoke', 'page', $pageId, 'Ссылка предпросмотра отозвана'],
+            default => null,
+        };
+
+        if (is_array($audit)) {
+            auditLog($audit[0], $audit[1], $audit[2], ['pageId' => $pageId], $audit[3]);
+        }
     }
 
     $notice = match ($op) {
@@ -529,6 +811,11 @@ function coreAdminPagesAction(array $params = []): void
         'move-section' => 'section_moved',
         'delete-section' => 'section_deleted',
         'delete-page' => 'page_deleted',
+        'duplicate-page' => 'page_duplicated',
+        'duplicate-section' => 'section_duplicated',
+        'copy-section' => 'section_copied',
+        'paste-section' => 'section_pasted',
+        'preview-revoke' => 'preview_revoked',
         default => '',
     };
 
@@ -659,6 +946,10 @@ function coreAdminMenuAction(array $params = []): void
 
     $to = menuAdminTab(postString('tab')) === 'footer' ? '/admin/menu?tab=footer' : '/admin/menu';
 
+    if (($result['ok'] ?? false) === true) {
+        auditLog('menu.' . $op, 'menu', $itemId, ['slot' => postString('slot'), 'tab' => postString('tab')], 'Действие с пунктом меню');
+    }
+
     finishAppAction($result, $to, $notice);
 }
 
@@ -737,6 +1028,7 @@ function coreAdminSettingsAction(array $params = []): void
     }
 
     logInfo('settings.saved', ['keys' => implode(',', array_keys(SITE_SETTINGS_FIELDS))]);
+    auditLog('settings.update', 'settings', '', ['keys' => implode(',', array_keys(SITE_SETTINGS_FIELDS))], 'Сохранены настройки шапки и подвала');
 
     finishAppAction(['ok' => true, 'error' => ''], '/admin/settings', 'settings_saved');
 }
@@ -787,6 +1079,10 @@ function coreLeadSubmit(array $params = []): void
     }
 
     leadConfirmSend((string) $created['id'], trim((string) $data['name']), trim((string) $data['contact']));
+
+    // Согласие — отдельное доказательство: строка журнала переживёт удаление заявки.
+    consentRecord(trim((string) $data['contact']), 'lead', $source);
+    auditLog('lead.create', 'lead', (string) $created['id'], ['source' => $source], 'Заявка с публичной формы');
 
     leadRedirect($source, 'lead_sent', '', trim((string) $data['contact']));
 }
@@ -915,6 +1211,10 @@ function coreAdminLeadsAction(array $params = []): void
         default => '',
     };
 
+    if (($result['ok'] ?? false) === true) {
+        auditLog('lead.' . $op, 'lead', $id, [], 'Действие с заявкой в админке');
+    }
+
     finishAppAction($result, '/admin/leads' . leadAdminQuery($status, $query), $notice);
 }
 
@@ -933,6 +1233,201 @@ function leadAdminQuery(string $status, string $query): string
     }
 
     return $parts === [] ? '' : '?' . implode('&', $parts);
+}
+
+// ---------------------------------------------------------------------------
+// RELEASE 2.1: корзина, медиатека, журнал действий, согласия и сквозной поиск
+// ---------------------------------------------------------------------------
+
+/** @param array<string, string> $params */
+function coreAdminTrash(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+
+    render('admin/trash', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => trashList(),
+    ], ['title' => 'Корзина — админка', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function coreAdminTrashAction(array $params = []): void
+{
+    csrfCheck();
+
+    $op = postString('op');
+    $id = postString('item');
+
+    $result = match ($op) {
+        'restore' => trashRestore($id),
+        'purge' => trashPurge($id),
+        'empty' => trashEmpty(),
+        default => ['ok' => false, 'error' => 'Неизвестное действие.'],
+    };
+
+    $notice = match ($op) {
+        'restore' => 'trash_restored',
+        'purge' => 'trash_purged',
+        'empty' => 'trash_emptied',
+        default => '',
+    };
+
+    finishAppAction($result, '/admin/trash', $notice);
+}
+
+/** @param array<string, string> $params */
+function coreAdminMedia(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $queryRaw = queryString('q', '');
+    $query = is_string($queryRaw) ? trim($queryRaw) : '';
+    $usageRaw = queryString('usage', '');
+    $usageId = is_string($usageRaw) ? $usageRaw : '';
+    $usage = [];
+    $usageTitle = '';
+
+    if ($usageId !== '') {
+        $media = mediaById($usageId);
+
+        if ($media !== null) {
+            $usageTitle = (string) ($media['title'] !== '' ? $media['title'] : basename((string) $media['path']));
+            $usage = mediaUsage((string) $media['path']);
+        }
+    }
+
+    render('admin/media', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => mediaRows($query),
+        'query' => $query,
+        'usageId' => $usageId,
+        'usageTitle' => $usageTitle,
+        'usage' => $usage,
+    ], ['title' => 'Медиатека — админка', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function coreAdminMediaAction(array $params = []): void
+{
+    csrfCheck();
+
+    $op = postString('op');
+
+    if ($op === 'upload') {
+        $file = uploadedFile('file');
+
+        if ($file === null) {
+            finishAppAction(['ok' => false, 'error' => 'Выберите файл для загрузки.'], '/admin/media', '');
+        }
+
+        $stored = mediaStore($file, postString('title'), postString('alt'));
+        $uploaded = ($stored['ok'] ?? false) === true;
+        finishAppAction($stored, '/admin/media', $uploaded ? 'media_uploaded' : '');
+
+        return;
+    }
+
+    $id = postString('media');
+    $result = match ($op) {
+        'save' => mediaUpdate($id, postString('title'), postString('alt')),
+        'delete' => mediaDelete($id),
+        'sync' => mediaSync(),
+        default => ['ok' => false, 'error' => 'Неизвестное действие.'],
+    };
+
+    $notice = match ($op) {
+        'save' => 'media_saved',
+        'delete' => 'media_deleted',
+        'sync' => 'media_sync_done',
+        default => '',
+    };
+
+    finishAppAction($result, '/admin/media', $notice);
+}
+
+/** @param array<string, string> $params */
+function coreAdminAudit(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $queryRaw = queryString('q', '');
+    $query = is_string($queryRaw) ? trim($queryRaw) : '';
+    $pageRaw = queryString('page', '1');
+    $page = max(1, is_string($pageRaw) ? (int) $pageRaw : 1);
+    $result = auditPage($page, $query);
+
+    render('admin/audit', [
+        // Плашки берутся тем же путём, что и на остальных экранах админки: adminShell() ждёт
+        // notice/alertTitle/alertReason у каждого шаблона, и без них экран падал на сборке оболочки.
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => $result['rows'],
+        'total' => $result['total'],
+        'pages' => $result['pages'],
+        'page' => min($page, $result['pages']),
+        'query' => $query,
+    ], ['title' => 'Журнал действий — админка', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function coreAdminConsents(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $queryRaw = queryString('q', '');
+    $query = is_string($queryRaw) ? trim($queryRaw) : '';
+    $pageRaw = queryString('page', '1');
+    $page = max(1, is_string($pageRaw) ? (int) $pageRaw : 1);
+    $result = consentPage($page, $query);
+
+    render('admin/consents', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'rows' => $result['rows'],
+        'total' => $result['total'],
+        'pages' => $result['pages'],
+        'page' => min($page, $result['pages']),
+        'query' => $query,
+    ], ['title' => 'Согласия — админка', 'noindex' => true]);
+}
+
+/** @param array<string, string> $params */
+function coreAdminConsentsExport(array $params = []): void
+{
+    $queryRaw = queryString('q', '');
+    $query = is_string($queryRaw) ? trim($queryRaw) : '';
+    $csv = "\xEF\xBB\xBF" . consentCsv($query);
+    $filename = 'consents-' . moscowDayKey(nowUtc()) . '.csv';
+
+    respond(200, $csv, [
+        'Content-Type' => 'text/csv; charset=utf-8',
+        'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        // Выгрузка содержит персональные данные: поисковику и кэшу здесь делать нечего.
+        'X-Robots-Tag' => 'noindex, nofollow',
+        'Cache-Control' => 'no-store',
+    ]);
+}
+
+/** @param array<string, string> $params */
+function coreAdminSearch(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $queryRaw = queryString('q', '');
+    $query = is_string($queryRaw) ? trim($queryRaw) : '';
+    $result = globalSearch($query);
+
+    render('admin/search', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'query' => $result['query'],
+        'groups' => $result['groups'],
+        'total' => $result['total'],
+        'minimum' => SEARCH_MIN,
+    ], ['title' => 'Поиск — админка', 'noindex' => true]);
 }
 
 /**

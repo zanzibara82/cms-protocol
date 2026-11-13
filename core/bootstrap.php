@@ -36,6 +36,18 @@ require_once __DIR__ . '/migrations.php';
 // маршрутов — правила слага и секции; оба зовут его функции в рантайме, поэтому файл подключается
 // раньше них.
 require_once __DIR__ . '/pages.php';
+// RELEASE 2.1: журнал действий и журнал согласий — общие сервисы, которые зовут обработчики
+// страниц, заявок и разделов. Корзина и дублирование работают поверх слоя страниц.
+require_once __DIR__ . '/audit.php';
+require_once __DIR__ . '/consent.php';
+require_once __DIR__ . '/trash.php';
+require_once __DIR__ . '/duplicate.php';
+require_once __DIR__ . '/bulk.php';
+require_once __DIR__ . '/media.php';
+require_once __DIR__ . '/preview.php';
+require_once __DIR__ . '/password-reset.php';
+require_once __DIR__ . '/search.php';
+require_once __DIR__ . '/feeds.php';
 // Правила переноса данных портала из PostgreSQL: чистые функции без базы, потребитель — оболочка
 // scripts/import-portal.php. Подключается в продукт, чтобы правила жили под стражами ядра.
 require_once __DIR__ . '/import.php';

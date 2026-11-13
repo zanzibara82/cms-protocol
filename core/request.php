@@ -54,6 +54,30 @@ function postAll(): array
     return $_POST;
 }
 
+/**
+ * Список строк из формы с индексами: подтверждённые флажки массовой операции приходят массивом.
+ * Вложенные массивы и пустые значения отбрасываются — обработчик получает только идентификаторы.
+ *
+ * @return list<string>
+ */
+function postList(string $key): array
+{
+    $value = $_POST[$key] ?? null;
+
+    if (!is_array($value)) {
+        return [];
+    }
+
+    $out = [];
+    foreach ($value as $item) {
+        if (is_string($item) && $item !== '') {
+            $out[] = $item;
+        }
+    }
+
+    return array_values(array_unique($out));
+}
+
 /** @return array<string, mixed>|null */
 function uploadedFile(string $key): ?array
 {

@@ -74,6 +74,12 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // уроки — шесть вариантов, все помечены. Экран настроек шапки и подвала добавляет ещё один
     // помеченный адрес /admin/settings: всего 140 вариантов, помеченных 116. Раздел заявок
     // добавляет помеченный экран /admin/leads: всего 141 вариант, помеченных 117.
+    // RELEASE 2.1 добавляет тринадцать строк таблицы: индекс и части карты сайта, две ленты,
+    // предпросмотр по ссылке, сброс пароля (запрос и новый пароль) и общие экраны редакции —
+    // корзину, медиатеку, журнал действий, журнал согласий с выгрузкой и сквозной поиск. Индекс,
+    // ленты и часть карты открыты; помечены предпросмотр и смена пароля (обе ветки: действительная
+    // и просроченная ссылка), корзина, медиатека, поиск и отказы 403 журналов под редактором.
+    // Запрос сброса под сеансом уводит в админку. Всего 157 вариантов, помеченных 128.
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а не молчит.
     //
@@ -85,13 +91,13 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 141;
-    private const MARKED_TOTAL = 117;
+    private const VARIANTS_TOTAL = 157;
+    private const MARKED_TOTAL = 128;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
-    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (140 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 140;
+    // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (157 − 1).
+    private const MARKED_ON_NOT_INSTALLED = 156;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -683,6 +689,58 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /robots.txt' => [
                 ['path' => '/robots.txt', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+
+            // RELEASE 2.1: индекс карты сайта и её части, ленты RSS и Atom открыты. Несуществующая
+            // часть карты отвечает помеченным 404 — так же, как остальные промахи маршрутизатора.
+            'GET /sitemap-index.xml' => [
+                ['path' => '/sitemap-index.xml', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+            'GET /sitemap/{part}' => [
+                ['path' => '/sitemap/1', 'outcome' => self::OPEN, 'status' => 200],
+                ['path' => '/sitemap/net-takoy-chasti', 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            'GET /feed.xml' => [
+                ['path' => '/feed.xml', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+            'GET /feed.atom' => [
+                ['path' => '/feed.atom', 'outcome' => self::OPEN, 'status' => 200],
+            ],
+            // Предпросмотр черновика по ссылке и сброс пароля: действительный токен открывает
+            // помеченный экран, недействительный — помеченный 404 того же обработчика. Фикстурные
+            // токены садятся в setUpBeforeClass, сырыми значениями они живут только в плане.
+            'GET /preview/{token}' => [
+                ['path' => '/preview/{preview}', 'outcome' => self::MARKED, 'status' => 200],
+                ['path' => '/preview/' . str_repeat('0', 64), 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            // Под сеансом редактора форма запроса сброса уводит в админку.
+            'GET /forgot-password' => [
+                ['path' => '/forgot-password', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/admin'],
+            ],
+            'GET /reset-password/{token}' => [
+                ['path' => '/reset-password/{reset}', 'outcome' => self::MARKED, 'status' => 200],
+                ['path' => '/reset-password/' . str_repeat('0', 64), 'outcome' => self::MARKED, 'status' => 404],
+            ],
+            // Общие экраны редакции. Корзина, медиатека и сквозной поиск доступны редактору
+            // (помечены); журнал действий, журнал согласий и выгрузка требуют права управления
+            // и под редактором отвечают помеченным 403 — той же парой запретов, что /admin/apps.
+            'GET /admin/trash' => [
+                ['path' => '/admin/trash', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /admin/media' => [
+                ['path' => '/admin/media', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /admin/audit' => [
+                ['path' => '/admin/audit', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /admin/consents' => [
+                ['path' => '/admin/consents', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /admin/consents/export' => [
+                ['path' => '/admin/consents/export', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /admin/search' => [
+                ['path' => '/admin/search', 'outcome' => self::MARKED, 'status' => 200],
             ],
 
             // Конструктор страниц: список, редакторы и правка — приватные экраны админки с меткой;
@@ -1345,6 +1403,24 @@ final class NoIndexNoStoreSweepTest extends TestCase
         $learnLesson = one('SELECT slug FROM ' . t('learn_lesson') . " WHERE slug = 'obhod-urok' LIMIT 1");
         self::assertIsArray($learnLesson, 'Фикстура: урока курса нет — экран урока недоступен обходу');
 
+        // RELEASE 2.1: действительные ссылки предпросмотра и сброса. Предпросмотр создаётся
+        // штатным путём (он же пишет журнал), сброс садится строкой с известным сырым токеном:
+        // письмо здесь не нужно, а форма нового пароля проверяет только хеш в базе.
+        $previewUser = one('SELECT id FROM ' . t('user') . ' WHERE email = ? LIMIT 1', [self::EDITOR_EMAIL]);
+        self::assertIsArray($previewUser, 'Фикстура: редактора нет — ссылку предпросмотра не создать');
+        $preview = previewTokenCreate((string) $pageDraft['id'], (string) $previewUser['id']);
+        self::assertTrue($preview['ok'], 'Фикстура: ссылка предпросмотра не создана: ' . $preview['error']);
+
+        $resetRaw = bin2hex(random_bytes(32));
+        insert('password_reset', [
+            'id' => newId(),
+            'user_id' => (string) $previewUser['id'],
+            'token_hash' => hash('sha256', $resetRaw),
+            'created_at' => utcStamp(nowUtc()),
+            'expires_at' => utcStamp(shiftSeconds(nowUtc(), PASSWORD_RESET_TTL_MINUTES * 60)),
+            'used_at' => null,
+        ]);
+
         return [
             'item' => $items['item']['slug'],
             'id' => $items['item']['id'],
@@ -1375,6 +1451,9 @@ final class NoIndexNoStoreSweepTest extends TestCase
             // Курсы: экран модуля и экран урока.
             'learnmodule' => (string) $learnModule['id'],
             'learnlesson' => (string) $learnLesson['slug'],
+            // RELEASE 2.1: действительные ссылки предпросмотра и сброса пароля.
+            'preview' => $preview['token'],
+            'reset' => $resetRaw,
         ] + self::buildDiscountTokens();
     }
 

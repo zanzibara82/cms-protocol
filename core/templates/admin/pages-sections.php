@@ -254,6 +254,8 @@ foreach ($sections as $section) {
             (int) $section['visible'] === 1 ? 'Скрыть' : 'Показать',
             'border border-ink/20 hover:bg-ink/5'
         )
+        . ' ' . $actionForm('duplicate-section', ['section' => (string) $section['id']], 'Дублировать', 'border border-ink/20 hover:bg-ink/5')
+        . ' ' . $actionForm('copy-section', ['section' => (string) $section['id']], 'Скопировать', 'border border-ink/20 hover:bg-ink/5')
         . ' ' . $actionForm('delete-section', ['section' => (string) $section['id']], 'Удалить', 'text-bad hover:bg-bad/10');
 
     $content .= '<details class="rounded-lg border border-ink/10 bg-white" data-section-id="' . e((string) $section['id']) . '" open>'

@@ -25,6 +25,10 @@ declare(strict_types=1);
     <?php endif; ?>
     <link rel="stylesheet" href="/assets/app.css">
     <link rel="icon" href="/assets/img/brand/favicon.png" type="image/png">
+    <?php if ($chrome): ?>
+        <link rel="alternate" type="application/rss+xml" title="RSS" href="/feed.xml">
+        <link rel="alternate" type="application/atom+xml" title="Atom" href="/feed.atom">
+    <?php endif; ?>
     <?= $head /* @safe html */ ?>
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
