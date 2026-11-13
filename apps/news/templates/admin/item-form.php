@@ -49,7 +49,7 @@ $row = static function (array $field, array $values, array $errors) use ($INPUT)
         : '<input class="min-h-[44px] ' . e($INPUT . $mono) . '" id="f-' . e($name) . '" name="' . e($name) . '"'
             . ' type="' . e((string) $field['type']) . '" value="' . e($value) . '"' . $max . $invalid . '>';
 
-    return '<div class="space-y-1"><label class="block text-sm" for="f-' . e($name) . '">'
+    return '<div class="space-y-1.5"><label class="block text-sm" for="f-' . e($name) . '">'
         . '<span class="font-medium">' . e((string) $field['label']) . '</span>' . $control . '</label>'
         . '<p class="' . e($error === '' ? 'text-sm text-ink/60' : 'text-sm text-bad') . '"' . $alert . '>'
         . e($hint) . '</p></div>';
@@ -91,8 +91,8 @@ $fields .= $two(
         'name' => 'slug', 'label' => 'Адрес', 'type' => 'text', 'max' => NEWS_SLUG_MAX, 'mono' => true,
         'hint' => 'Пустое поле — адрес сложится из заголовка. Занятые адреса раздела: ' . $reserved . '.',
     ], $values, $errors),
-    '<div class="space-y-1"><label class="block text-sm" for="f-categoryId">'
-        . '<span class="font-medium">Рубрика</span>'
+    '<div class="space-y-1.5"><label class="block text-sm" for="f-categoryId">'
+        . '<span class="block font-medium">Рубрика</span>'
         . '<select class="min-h-[44px] ' . e($INPUT) . '" id="f-categoryId" name="categoryId"'
         . (isset($errors['categoryId']) ? ' aria-invalid="true"' : '') . '>'
         . '<option value="">Выберите рубрику</option>'
@@ -122,7 +122,7 @@ $fields .= $two(
         'name' => 'tags', 'label' => 'Теги', 'type' => 'text', 'max' => NEWS_FORM_MAX['tags'],
         'hint' => 'Названия через запятую, до ' . fieldLimit(TAG_FIELDS, 'perItem') . ' штук. Новое название заведётся в справочнике само.',
     ], $values, $errors),
-    '<div class="space-y-1"><label class="block text-sm" for="f-cover">'
+    '<div class="space-y-1.5"><label class="block text-sm" for="f-cover">'
         . '<span class="font-medium">Обложка</span></label>'
         . adminImagePreview($values['cover'], 'Обложка материала')
         . '<div class="mt-1 flex items-start gap-2">'

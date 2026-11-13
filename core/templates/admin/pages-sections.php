@@ -54,7 +54,7 @@ $layoutSelect = static function (array $section) use ($input): string {
         $html .= '<option value="' . e($option['value']) . '"' . $selected . '>' . e($option['label']) . '</option>';
     }
 
-    return '<label class="block text-sm"><span class="font-medium">Вёрстка</span>'
+    return '<label class="block text-sm"><span class="block font-medium">Вёрстка</span>'
         . '<select class="min-h-[44px] ' . e($input) . '" name="layout">' . $html . '</select></label>';
 };
 
@@ -80,9 +80,9 @@ $buttonsRows = static function (array $rows) use ($input): string {
     $html = '';
     foreach (array_merge($rows, [['label' => '', 'href' => '', 'blank' => false]]) as $index => $row) {
         $html .= '<div class="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]">'
-            . '<label class="text-sm"><span class="font-medium">Подпись</span>'
+            . '<label class="text-sm"><span class="block font-medium">Подпись</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="buttons[' . e((string) $index) . '][' . e('label') . ']" value="' . e((string) ($row['label'] ?? '')) . '"></label>'
-            . '<label class="text-sm"><span class="font-medium">Адрес</span>'
+            . '<label class="text-sm"><span class="block font-medium">Адрес</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="buttons[' . e((string) $index) . '][' . e('href') . ']" value="' . e((string) ($row['href'] ?? '')) . '"></label>'
             . adminCheckbox('buttons[' . (string) $index . '][' . 'blank' . ']', 'Новая вкладка', '1', (bool) ($row['blank'] ?? false))
             . '</div>';
@@ -110,7 +110,7 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
         $rowsHtml .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-5" data-item-row="' . e((string) $index) . '">';
         foreach ($fields as $field) {
             $key = $field['key'];
-            $rowsHtml .= '<label class="text-sm"><span class="font-medium">' . e($field['label']) . '</span>'
+            $rowsHtml .= '<label class="text-sm"><span class="block font-medium">' . e($field['label']) . '</span>'
                 . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . e($key) . ']" value="' . e((string) ($row[$key] ?? '')) . '"></label>';
         }
         $rowsHtml .= '</div>';
@@ -159,7 +159,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             $key = (string) $setting['key'];
             $label = (string) $setting['label'];
             $hint = (string) $setting['hint'];
-            $settingsRows .= '<label class="block text-sm"><span class="font-medium">' . e($label) . '</span>'
+            $settingsRows .= '<label class="block text-sm"><span class="block font-medium">' . e($label) . '</span>'
                 . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="settings[' . e($key) . ']" value="' . e((string) ($settings[$key] ?? '')) . '">'
                 . ($hint !== '' ? '<span class="mt-1.5 block text-ink/60">' . e($hint) . '</span>' : '')
                 . '</label>';
@@ -180,7 +180,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             : '<div class="order-2 sm:col-start-2 sm:row-start-1">' . $imagePreview . '</div>';
 
         $sectionMedia = '<div class="flex flex-col gap-3 sm:grid sm:grid-cols-3">'
-            . '<label class="order-1 block text-sm sm:col-start-1 sm:row-start-2"><span class="font-medium">Примечание</span>'
+            . '<label class="order-1 block text-sm sm:col-start-1 sm:row-start-2"><span class="block font-medium">Примечание</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="note" value="' . e($values('note')) . '"></label>'
             . $imagePreviewBlock
             . '<div class="order-3 text-sm sm:col-start-2 sm:row-start-2"><label class="font-medium" for="' . e($imageFieldId) . '">Картинка</label>'
@@ -193,13 +193,13 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             . '</div>'
             . '<span class="mt-1.5 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ.</span>'
             . '</div>'
-            . '<label class="order-4 block text-sm sm:col-start-3 sm:row-start-2"><span class="font-medium">Описание картинки</span>'
+            . '<label class="order-4 block text-sm sm:col-start-3 sm:row-start-2"><span class="block font-medium">Описание картинки</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image_alt" value="' . e($values('image_alt')) . '"></label>'
             . '</div>';
     } elseif ($allows('note')) {
         // Примечание без картинки: у band, prose, pricing, gallery и table оно есть, а общей
         // картинки нет — поле печатается отдельной строкой.
-        $sectionMedia = '<label class="block text-sm"><span class="font-medium">Примечание</span>'
+        $sectionMedia = '<label class="block text-sm"><span class="block font-medium">Примечание</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="note" value="' . e($values('note')) . '"></label>';
     }
 
@@ -218,17 +218,17 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         . '<input type="hidden" name="op" value="' . e($op) . '">' . $id
         . '<div class="grid gap-3 sm:grid-cols-2">'
         . '<label class="block text-sm"><span class="font-medium">Вид</span>' . $kindSelect($exists ? (string) $section['kind'] : '') . '</label>'
-        . '<label class="block text-sm"><span class="font-medium">Якорь</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Якорь</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="anchor" value="' . e($values('anchor')) . '">'
         . '<span class="mt-1.5 block text-ink/60">Ссылка на место секции: /страница#якорь. Пусто — ключ соберётся из заголовка.</span></label>'
         . '</div>'
         . '<div class="grid gap-3 sm:grid-cols-2">'
-        . '<label class="block text-sm"><span class="font-medium">Заголовок</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Заголовок</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="title" value="' . e($values('title')) . '"></label>'
-        . '<label class="block text-sm"><span class="font-medium">Подзаголовок</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Подзаголовок</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="badge" value="' . e($values('badge')) . '"></label>'
         . '</div>'
-        . '<label class="block text-sm"><span class="font-medium">Текст</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Текст</span>'
         . '<textarea class="min-h-[44px] ' . e($input) . '" name="lead_text" rows="3">' . e($values('lead_text')) . '</textarea>'
         . '<span class="mt-1.5 block text-ink/60">Абзацы разделяются пустой строкой.</span></label>'
         . $layoutBlock

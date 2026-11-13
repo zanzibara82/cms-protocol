@@ -58,7 +58,7 @@ $createForm = '<form class="space-y-3 rounded-xl border border-ink/10 bg-white p
     . '<span class="text-sm text-ink/60">Подпись ключа</span>'
     . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" type="text"'
     . ' id="api_key_label" name="label" maxlength="190" required>'
-    . '<span class="mt-1 block text-sm text-ink/60">Например «Кабинет отчётов» — подпись видна только вам.</span>'
+    . '<span class="mt-1.5 block text-sm text-ink/60">Например «Кабинет отчётов» — подпись видна только вам.</span>'
     . '</label>'
     . '<div class="mt-1">'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-5 py-2 text-sm font-medium text-cream hover:bg-ink/90"'

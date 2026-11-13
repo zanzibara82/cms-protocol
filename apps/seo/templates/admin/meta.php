@@ -31,7 +31,7 @@ $isError = static function (string $field) use ($errors): string {
 $fieldError = static function (string $field) use ($errors): string {
     $message = (string) ($errors[$field] ?? '');
 
-    return $message === '' ? '' : '<span class="mt-1 block text-sm text-red-700">' . e($message) . '</span>';
+    return $message === '' ? '' : '<span class="mt-1.5 block text-sm text-red-700">' . e($message) . '</span>';
 };
 
 /** Подсказка о длине: короткий текст укладывается в сниппет, длинный — обрежется. */
@@ -43,10 +43,10 @@ $lengthHint = static function (string $value, int $recommended): string {
     }
 
     if ($length <= $recommended) {
-        return '<span class="mt-1 block text-sm text-ink/60">Сейчас ' . $length . ' знаков — укладывается в сниппет.</span>';
+        return '<span class="mt-1.5 block text-sm text-ink/60">Сейчас ' . $length . ' знаков — укладывается в сниппет.</span>';
     }
 
-    return '<span class="mt-1 block text-sm text-amber-700">Сейчас ' . $length . ' знаков: поисковик обрежет до '
+    return '<span class="mt-1.5 block text-sm text-amber-700">Сейчас ' . $length . ' знаков: поисковик обрежет до '
         . $recommended . '. Правку принять можно — обрезается выдача, а не текст.</span>';
 };
 
@@ -79,7 +79,7 @@ $snippet = '<div class="rounded-lg border border-ink/10 bg-white p-4">'
     . '</div>';
 
 $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6" method="post" action="'
-    . e($action) . '">'
+    . e($action) . '" enctype="multipart/form-data">'
     . csrfField()
     . '<input type="hidden" name="op" value="' . e($op) . '">'
     . '<label class="block" for="meta_path">'
@@ -134,14 +134,17 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . e((string) $form['og_description']) . '</textarea>'
     . $fieldError('og_description')
     . '</label>'
-    . '<label class="block" for="meta_og_image">'
-    . '<span class="text-sm text-ink/60">Картинка карточки соцсети (og:image) — путь от корня</span>'
-    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('og_image') . ' px-3 py-2"'
-    . ' id="meta_og_image" name="og_image" maxlength="' . e((string) SEO_META_PATH_MAX) . '"'
-    . ' placeholder="/assets/img/brand/og-default.png"'
-    . ' value="' . e((string) $form['og_image']) . '">'
+    . partial('partials/file-picker', [
+        'name' => 'og_image',
+        'fileKey' => 'og_image_file',
+        'value' => (string) $form['og_image'],
+        'label' => 'Картинка карточки',
+        'hint' => 'Путь нашего сайта: /assets/img/brand/og-default.png. Или выберите файл: jpg, png или webp до 5 МБ.',
+        'buttonTitle' => 'Выбрать картинку карточки с компьютера',
+        'preview' => adminImagePreview((string) $form['og_image'], 'Картинка карточки соцсети'),
+        'maxLength' => SEO_META_PATH_MAX,
+    ])
     . $fieldError('og_image')
-    . '</label>'
     . partial('partials/checkbox', [
         'name' => 'noindex',
         'label' => 'Закрыть адрес от индексации: страница получит метку noindex, nofollow и перестанет отдаваться из кэша.',

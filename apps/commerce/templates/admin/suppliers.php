@@ -46,7 +46,7 @@ $isError = static function (string $field) use ($errors): string {
 $fieldError = static function (string $field) use ($errors): string {
     $message = (string) ($errors[$field] ?? '');
 
-    return $message === '' ? '' : '<span class="mt-1 block text-sm text-red-700">' . e($message) . '</span>';
+    return $message === '' ? '' : '<span class="mt-1.5 block text-sm text-red-700">' . e($message) . '</span>';
 };
 
 $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6" method="post" action="'

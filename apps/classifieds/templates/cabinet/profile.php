@@ -39,7 +39,7 @@ declare(strict_types=1);
             <input class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="name"
                    name="name" value="<?= e($form['name']) ?>" maxlength="<?= e((string) CLASSIFIEDS_NAME_MAX) ?>" required>
             <?php if (isset($errors['name'])): ?>
-                <span class="mt-1 block text-sm text-red-700"><?= e($errors['name']) ?></span>
+                <span class="mt-1.5 block text-sm text-red-700"><?= e($errors['name']) ?></span>
             <?php endif; ?>
         </label>
 
@@ -48,7 +48,7 @@ declare(strict_types=1);
             <input class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="phone"
                    name="phone" value="<?= e($form['phone']) ?>" maxlength="<?= e((string) CLASSIFIEDS_PHONE_MAX) ?>">
             <?php if (isset($errors['phone'])): ?>
-                <span class="mt-1 block text-sm text-red-700"><?= e($errors['phone']) ?></span>
+                <span class="mt-1.5 block text-sm text-red-700"><?= e($errors['phone']) ?></span>
             <?php endif; ?>
         </label>
 
@@ -62,7 +62,7 @@ declare(strict_types=1);
             <input class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="city"
                    name="city" value="<?= e($form['city']) ?>" maxlength="<?= e((string) CLASSIFIEDS_CITY_MAX) ?>">
             <?php if (isset($errors['city'])): ?>
-                <span class="mt-1 block text-sm text-red-700"><?= e($errors['city']) ?></span>
+                <span class="mt-1.5 block text-sm text-red-700"><?= e($errors['city']) ?></span>
             <?php endif; ?>
         </label>
 
@@ -71,7 +71,7 @@ declare(strict_types=1);
             <textarea class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="about"
                       name="about" rows="6"><?= e($form['about']) ?></textarea>
             <?php if (isset($errors['about'])): ?>
-                <span class="mt-1 block text-sm text-red-700"><?= e($errors['about']) ?></span>
+                <span class="mt-1.5 block text-sm text-red-700"><?= e($errors['about']) ?></span>
             <?php endif; ?>
         </label>
 

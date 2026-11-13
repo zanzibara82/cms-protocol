@@ -72,9 +72,9 @@ $itemCard = static function (array $row) use ($input, $field, $actionForm, $tab)
         . '<form class="mt-3 space-y-3" method="post" action="/admin/menu">' . csrfField()
         . '<input type="hidden" name="op" value="save-item">' . $field('item', $id) . $field('tab', $tab)
         . '<div class="grid gap-3 sm:grid-cols-2">'
-        . '<label class="block text-sm"><span class="font-medium">Подпись</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Подпись</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="label" value="' . e((string) $row['label']) . '"></label>'
-        . '<label class="block text-sm"><span class="font-medium">Адрес</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Адрес</span>'
         . '<input class="min-h-[44px] ' . e($input) . ' font-mono" type="text" name="href" value="' . e((string) $row['href']) . '">'
         . '<span class="mt-1.5 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
         . '</div>'
@@ -91,7 +91,7 @@ $itemCard = static function (array $row) use ($input, $field, $actionForm, $tab)
 $addForm = static function (string $slot) use ($input, $field, $tab): string {
     $slotName = MENU_SLOT_NAMES[$slot] ?? $slot;
     $sectionField = $slot === 'FOOTER'
-        ? '<label class="block text-sm"><span class="font-medium">Колонка</span>'
+        ? '<label class="block text-sm"><span class="block font-medium">Колонка</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="section" value="">'
             . '<span class="mt-1.5 block text-ink/60">Подпись колонки подвала; пусто — запасная «Ссылки».</span></label>'
         : '';
@@ -99,9 +99,9 @@ $addForm = static function (string $slot) use ($input, $field, $tab): string {
     return '<form class="mt-3 space-y-3 border-t border-ink/10 pt-3" method="post" action="/admin/menu">' . csrfField()
         . '<input type="hidden" name="op" value="create-item">' . $field('slot', $slot) . $field('tab', $tab)
         . '<div class="grid gap-3 sm:grid-cols-3">'
-        . '<label class="block text-sm"><span class="font-medium">Подпись</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Подпись</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="label" required></label>'
-        . '<label class="block text-sm"><span class="font-medium">Адрес</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Адрес</span>'
         . '<input class="min-h-[44px] ' . e($input) . ' font-mono" type="text" name="href" required>'
         . '<span class="mt-1.5 block text-ink/60">Якорь (#место), раздел сайта (/news), внешняя ссылка, почта или телефон.</span></label>'
         . $sectionField

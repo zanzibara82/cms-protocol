@@ -42,10 +42,10 @@ $anchor = (string) $section['anchor'];
                         <?php if ($contact['href'] !== ''): ?>
                             <a class="mt-1 inline-flex min-h-[44px] items-center break-words font-medium text-accent underline-offset-4 hover:underline" href="<?= e($contact['href']) ?>"><?= e($contact['text'] !== '' ? $contact['text'] : $contact['href']) ?></a>
                         <?php else: ?>
-                            <span class="mt-1 block break-words font-medium"><?= e($contact['text']) ?></span>
+                            <span class="mt-1.5 block break-words font-medium"><?= e($contact['text']) ?></span>
                         <?php endif; ?>
                         <?php if ($contact['note'] !== ''): ?>
-                            <span class="mt-1 block text-sm text-ink/50"><?= e($contact['note']) ?></span>
+                            <span class="mt-1.5 block text-sm text-ink/50"><?= e($contact['note']) ?></span>
                         <?php endif; ?>
                     </li>
                 <?php endforeach; ?>

@@ -30,7 +30,7 @@ $isError = static function (string $field) use ($errors): string {
 $fieldError = static function (string $field) use ($errors): string {
     $message = (string) ($errors[$field] ?? '');
 
-    return $message === '' ? '' : '<span class="mt-1 block text-sm text-red-700">' . e($message) . '</span>';
+    return $message === '' ? '' : '<span class="mt-1.5 block text-sm text-red-700">' . e($message) . '</span>';
 };
 
 $checked = (int) $form['active'] === 1;

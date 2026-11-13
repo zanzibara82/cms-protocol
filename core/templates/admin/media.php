@@ -23,18 +23,27 @@ $uploadForm = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<form class="mt-3 space-y-3" method="post" action="/admin/media" enctype="multipart/form-data">' . csrfField()
     . '<input type="hidden" name="op" value="upload">'
     . '<div class="grid gap-3 sm:grid-cols-2">'
-    . '<label class="block text-sm"><span class="font-medium">Файл</span>'
-    . '<input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="file" name="file" accept="image/jpeg,image/png,image/webp" required></label>'
-    . '<label class="block text-sm"><span class="font-medium">Название</span>'
-    . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="title" maxlength="190"></label>'
+    . partial('partials/file-picker', [
+        'name' => '',
+        'fileKey' => 'file',
+        'label' => 'Файл',
+        'hint' => '',
+        'buttonTitle' => 'Выбрать файл на компьютере',
+        'preview' => '',
+        'required' => true,
+    ])
+    . '<label class="block text-sm"><span class="block font-medium">Название</span>'
+    . '<input class="mt-1.5 min-h-[44px] ' . e($input) . '" type="text" name="title" maxlength="190"></label>'
     . '</div>'
-    . '<label class="block text-sm"><span class="font-medium">ALT — описание для незрячих и поиска</span>'
-    . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="alt" maxlength="300"></label>'
+    . '<label class="block text-sm"><span class="block font-medium">Название</span>'
+    . '<input class="mt-1.5 min-h-[44px] ' . e($input) . '" type="text" name="title" maxlength="190"></label>'
+    . '<label class="block text-sm"><span class="block font-medium">ALT — описание для незрячих и поиска</span>'
+    . '<input class="mt-1.5 min-h-[44px] ' . e($input) . '" type="text" name="alt" maxlength="300"></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Загрузить</button>'
     . '</form></section>';
 
 $search = '<form class="flex flex-wrap items-end gap-2" method="get" action="/admin/media">'
-    . '<label class="block text-sm"><span class="font-medium">Поиск по файлам</span>'
+    . '<label class="block text-sm"><span class="block font-medium">Поиск по файлам</span>'
     . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2" type="search" name="q"'
     . ' value="' . e($query) . '" placeholder="Название, ALT или путь"></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Найти</button>'
@@ -93,9 +102,9 @@ foreach ($rows as $row) {
         . '<form class="mt-auto space-y-2" method="post" action="/admin/media">' . csrfField()
         . '<input type="hidden" name="op" value="save">'
         . '<input type="hidden" name="media" value="' . e($id) . '">'
-        . '<label class="block text-sm"><span class="font-medium">Название</span>'
+        . '<label class="block text-sm"><span class="block font-medium">Название</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="title" value="' . e($title) . '" maxlength="190"></label>'
-        . '<label class="block text-sm"><span class="font-medium">ALT</span>'
+        . '<label class="block text-sm"><span class="block font-medium">ALT</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="alt" value="' . e($alt) . '" maxlength="300"></label>'
         . '<div class="flex flex-wrap items-center gap-2">'
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Сохранить подписи</button>'

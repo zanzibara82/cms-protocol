@@ -21,7 +21,7 @@ $pageHref = static function (int $target) use ($query): string {
 };
 
 $search = '<form class="flex flex-wrap items-end gap-2" method="get" action="/admin/audit">'
-    . '<label class="block text-sm"><span class="font-medium">Поиск по журналу</span>'
+    . '<label class="block text-sm"><span class="block font-medium">Поиск по журналу</span>'
     . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2" type="search" name="q"'
     . ' value="' . e($query) . '" placeholder="Действие, запись, почта"></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Найти</button>'

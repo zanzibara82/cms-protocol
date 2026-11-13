@@ -19,7 +19,7 @@ $logoField = static function (string $key, string $fileKey, string $label) use (
     $preview = adminImagePreview($value, $label);
 
     return '<div class="space-y-2">' . $preview
-        . '<label class="block text-sm"><span class="font-medium">' . e($label) . '</span>'
+        . '<label class="block text-sm"><span class="block font-medium">' . e($label) . '</span>'
         . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="' . e($key) . '" value="' . e($value) . '">'
         . '<span class="mt-1.5 block text-ink/60">Путь на сайте или файл: jpg, png, webp до 5 МБ. Пусто — логотипа нет.</span></label>'
         . '<div class="flex items-start gap-2">'

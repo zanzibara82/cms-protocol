@@ -46,7 +46,7 @@ $fields = [
                        maxlength="<?= e((string) $field['max']) ?>"
                        <?php if ($field['auto'] !== ''): ?>autocomplete="<?= e($field['auto']) ?>"<?php endif; ?>>
                 <?php if (isset($errors[(string) $name])): ?>
-                    <span class="mt-1 block text-bad"><?= e($errors[(string) $name]) ?></span>
+                    <span class="mt-1.5 block text-bad"><?= e($errors[(string) $name]) ?></span>
                 <?php endif; ?>
             </label>
         <?php endforeach; ?>
@@ -56,7 +56,7 @@ $fields = [
             <input class="mt-1.5 min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" type="password"
                    name="db_pass" value="" autocomplete="new-password">
             <?php if (isset($errors['db_pass'])): ?>
-                <span class="mt-1 block text-bad"><?= e($errors['db_pass']) ?></span>
+                <span class="mt-1.5 block text-bad"><?= e($errors['db_pass']) ?></span>
             <?php endif; ?>
         </label>
 

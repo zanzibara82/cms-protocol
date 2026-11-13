@@ -49,6 +49,41 @@ function seoSchemaPage(array $params = []): void
 }
 
 /**
+ * Приём картинки разметки из формы: файл перетирает путь.
+ *
+ * Проверку и перенос делает ядро (pageImageStore): формат решается по содержимому, имя
+ * генерирует сервер, каталог закрыт от исполнения. Своя копия разошлась бы с общей на первой
+ * правке — поэтому приёмник один на ядро и приложения.
+ *
+ * @param array{errors: array<string, string>, values: array<string, mixed>} $check проверка формы; значения правятся на месте
+ *
+ * @return array{error: string}
+ */
+function seoSchemaTakeImageUpload(array &$check): array
+{
+    $file = uploadedFile('schema_image_file');
+
+    if ($file === null) {
+        return ['error' => ''];
+    }
+
+    // Пустой выбор файла браузер присылает всегда: это не отказ, человек не менял картинку.
+    if ((int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return ['error' => ''];
+    }
+
+    $stored = pageImageStore($file);
+
+    if ($stored['ok'] !== true) {
+        return ['error' => $stored['error']];
+    }
+
+    $check['values']['image'] = $stored['href'];
+
+    return ['error' => ''];
+}
+
+/**
  * Действия экрана: завести набор, изменить, удалить. Правка и удаление смотрят в саму строку
  * по идентификатору из адреса — подменить чужой адрес в запросе нельзя.
  *
@@ -64,6 +99,11 @@ function seoSchemaAction(array $params = []): void
 
     if ($op === 'create') {
         $check = seoSchemaValidate($_POST);
+        $upload = seoSchemaTakeImageUpload($check);
+
+        if ($upload['error'] !== '') {
+            $check['errors']['image'] = $upload['error'];
+        }
 
         if ($check['errors'] === []) {
             $result = seoSchemaSave($check['values']);
@@ -81,6 +121,11 @@ function seoSchemaAction(array $params = []): void
             $result = seoSchemaDelete($id);
         } else {
             $check = seoSchemaValidate($_POST);
+            $upload = seoSchemaTakeImageUpload($check);
+
+            if ($upload['error'] !== '') {
+                $check['errors']['image'] = $upload['error'];
+            }
 
             if ($check['errors'] === []) {
                 $result = seoSchemaSave($check['values']);

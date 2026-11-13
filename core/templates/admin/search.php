@@ -10,7 +10,7 @@ declare(strict_types=1);
 // Сквозной поиск редакции: одна строка ищет по страницам, новостям, товарам, объявлениям,
 // урокам, медиафайлам и заявкам. Заявки видит только администратор — сервер решает это сам.
 $search = '<form class="flex flex-wrap items-end gap-2" method="get" action="/admin/search">'
-    . '<label class="block text-sm"><span class="font-medium">Что найти</span>'
+    . '<label class="block text-sm"><span class="block font-medium">Что найти</span>'
     . '<input class="mt-1.5 min-h-[44px] min-w-[16rem] rounded-lg border border-ink/20 bg-white px-3 py-2" type="search" name="q"'
     . ' value="' . e($query) . '" placeholder="Заголовок, адрес, артикул, контакт" autofocus></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Найти</button>'

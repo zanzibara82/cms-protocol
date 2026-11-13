@@ -20,7 +20,7 @@ $field = static function (string $name, string $label, string $type, string $val
         . ' value="' . e($value) . '" autocomplete="' . e($autocomplete) . '" required' . $invalid . $describe . '>';
 
     if ($error !== '') {
-        $html .= '<span class="mt-1 block text-sm text-red-700" id="' . e($name) . '-error">' . e($error) . '</span>';
+        $html .= '<span class="mt-1.5 block text-sm text-red-700" id="' . e($name) . '-error">' . e($error) . '</span>';
     }
 
     return $html . '</label>';

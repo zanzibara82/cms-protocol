@@ -31,11 +31,11 @@ $create = '<form class="rounded-xl border border-ink/10 bg-white p-4" method="po
     . csrfField()
     . '<input type="hidden" name="op" value="create">'
     . '<div class="flex flex-wrap items-end gap-3">'
-    . '<label class="block" for="title-new"><span class="text-sm text-ink/60">Название</span>'
+    . '<label class="block" for="title-new"><span class="block text-sm text-ink/60">Название</span>'
     . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="title-new" name="title" maxlength="120" value="" placeholder="Авто"></label>'
-    . '<label class="block" for="slug-new"><span class="text-sm text-ink/60">Адрес (пусто — из названия)</span>'
+    . '<label class="block" for="slug-new"><span class="block text-sm text-ink/60">Адрес (пусто — из названия)</span>'
     . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="slug-new" name="slug" maxlength="60" value=""></label>'
-    . '<label class="block" for="parent-new"><span class="text-sm text-ink/60">Родитель</span>'
+    . '<label class="block" for="parent-new"><span class="block text-sm text-ink/60">Родитель</span>'
     . '<select class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 bg-white px-3 py-2" id="parent-new" name="parent">'
     . $parentOptions('')
     . '</select></label>'

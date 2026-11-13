@@ -77,7 +77,7 @@ $fieldClass = static function (string $field) use ($errors): string {
 $fieldError = static function (string $field) use ($errors): string {
     $message = (string) ($errors[$field] ?? '');
 
-    return $message === '' ? '' : '<span class="mt-1 block text-sm text-red-700">' . e($message) . '</span>';
+    return $message === '' ? '' : '<span class="mt-1.5 block text-sm text-red-700">' . e($message) . '</span>';
 };
 
 /** Абзацы тела: из базы при открытии, из отказа при правке. */
@@ -113,7 +113,7 @@ $textField = static function (string $id, string $label, string $name, string $m
         . ' px-3 py-2" id="' . e($id) . '" name="' . e($name) . '"'
         . ($max !== '' ? ' maxlength="' . e($max) . '"' : '')
         . ' value="' . e($value($id)) . '">'
-        . ($message === '' ? '' : '<span class="mt-1 block text-sm text-red-700">' . e($message) . '</span>')
+        . ($message === '' ? '' : '<span class="mt-1.5 block text-sm text-red-700">' . e($message) . '</span>')
         . '</label>';
 };
 

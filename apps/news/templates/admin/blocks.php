@@ -23,8 +23,9 @@ declare(strict_types=1);
  */
 
 // Классы контролов выписаны литералами, которые уже лежат в артефакте стилей: экран не
-// добавляет правил в src-css/app.css, и шаг 10 это сверяет.
-$field = 'w-full rounded-lg border border-ink/20 px-3 py-2 text-sm';
+// добавляет правил в src-css/app.css, и шаг 10 это сверяет. Отступ mt-1.5 несёт сам контрол:
+// подпись на этом экране — текст прямо в label, без своего margin-bottom.
+$field = 'mt-1.5 w-full rounded-lg border border-ink/20 px-3 py-2 text-sm';
 $button = 'rounded-lg border border-ink/20 px-3 py-1.5 text-sm hover:bg-ink/5';
 $primary = 'rounded-lg bg-ink px-3 py-2 text-sm font-medium text-cream hover:opacity-90';
 $danger = 'rounded-lg border border-bad/30 px-3 py-1.5 text-sm text-bad hover:bg-bad/10';

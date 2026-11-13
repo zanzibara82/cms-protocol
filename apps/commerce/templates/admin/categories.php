@@ -15,9 +15,9 @@ $create = '<form class="rounded-xl border border-ink/10 bg-white p-4" method="po
     . csrfField()
     . '<input type="hidden" name="op" value="create">'
     . '<div class="flex flex-wrap items-end gap-3">'
-    . '<label class="block" for="title-new"><span class="text-sm text-ink/60">Название</span>'
+    . '<label class="block" for="title-new"><span class="block text-sm text-ink/60">Название</span>'
     . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="title-new" name="title" maxlength="120" value="" placeholder="Техника"></label>'
-    . '<label class="block" for="slug-new"><span class="text-sm text-ink/60">Адрес (пусто — из названия)</span>'
+    . '<label class="block" for="slug-new"><span class="block text-sm text-ink/60">Адрес (пусто — из названия)</span>'
     . '<input class="mt-1.5 min-h-[44px] rounded-lg border border-ink/20 px-3 py-2" id="slug-new" name="slug" maxlength="60" value=""></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:bg-ink/90" type="submit">Добавить</button>'
     . '</div></form>';

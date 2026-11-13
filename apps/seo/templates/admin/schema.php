@@ -44,18 +44,18 @@ $isError = static function (string $field) use ($errors): string {
 $fieldError = static function (string $field) use ($errors): string {
     $message = (string) ($errors[$field] ?? '');
 
-    return $message === '' ? '' : '<span class="mt-1 block text-sm text-red-700">' . e($message) . '</span>';
+    return $message === '' ? '' : '<span class="mt-1.5 block text-sm text-red-700">' . e($message) . '</span>';
 };
 
 /** Подсказка о поле: у каждого типа свой набор. */
 $fieldHint = static function (string $field) use ($typeFields, $type): string {
     return in_array($field, $typeFields, true)
         ? ''
-        : '<span class="mt-1 block text-sm text-ink/60">У типа «' . e((string) $type) . '» это поле не печатается.</span>';
+        : '<span class="mt-1.5 block text-sm text-ink/60">У типа «' . e((string) $type) . '» это поле не печатается.</span>';
 };
 
 $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6" method="post" action="'
-    . e($action) . '">'
+    . e($action) . '" enctype="multipart/form-data">'
     . csrfField()
     . '<input type="hidden" name="op" value="' . e($op) . '">'
     . '<label class="block" for="schema_path">'
@@ -84,14 +84,18 @@ $formHtml = '<form class="space-y-4 rounded-xl border border-ink/10 bg-white p-6
     . e((string) $form['description']) . '</textarea>'
     . $fieldError('description')
     . '</label>'
-    . '<label class="block" for="schema_image">'
-    . '<span class="text-sm text-ink/60">Картинка — путь от корня нашего сайта</span>'
-    . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('image') . ' px-3 py-2"'
-    . ' id="schema_image" name="image" maxlength="255" placeholder="/assets/img/brand/og-default.png"'
-    . ' value="' . e((string) $form['image']) . '">'
+    . partial('partials/file-picker', [
+        'name' => 'image',
+        'fileKey' => 'schema_image_file',
+        'value' => (string) $form['image'],
+        'label' => 'Картинка',
+        'hint' => 'Путь нашего сайта. Или выберите файл: jpg, png или webp до 5 МБ.',
+        'buttonTitle' => 'Выбрать картинку разметки с компьютера',
+        'preview' => adminImagePreview((string) $form['image'], 'Картинка разметки'),
+        'maxLength' => 255,
+    ])
     . $fieldHint('image')
     . $fieldError('image')
-    . '</label>'
     . '<label class="block" for="schema_author">'
     . '<span class="text-sm text-ink/60">Автор</span>'
     . '<input class="mt-1.5 w-full min-h-[44px] rounded-lg border' . $isError('author') . ' px-3 py-2"'

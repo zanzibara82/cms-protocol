@@ -30,7 +30,7 @@ $radios = static function (string $name, array $options, string $value) use ($fi
             . '</label>';
     }
     if ($error !== '') {
-        $html .= '<span class="mt-1 block text-sm text-red-700" id="' . e($name) . '-error">' . e($error) . '</span>';
+        $html .= '<span class="mt-1.5 block text-sm text-red-700" id="' . e($name) . '-error">' . e($error) . '</span>';
     }
     return $html;
 };

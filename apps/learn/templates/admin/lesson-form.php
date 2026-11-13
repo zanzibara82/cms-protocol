@@ -24,8 +24,8 @@ $row = static function (array $field, array $values, array $errors): string {
     $alert = $error === '' ? '' : ' role="alert"';
     $max = isset($field['max']) ? ' maxlength="' . e((string) $field['max']) . '"' : '';
 
-    return '<div class="space-y-1"><label class="block text-sm" for="f-' . e($name) . '">'
-        . '<span class="font-medium">' . e((string) $field['label']) . '</span>'
+    return '<div class="space-y-1.5"><label class="block text-sm" for="f-' . e($name) . '">'
+        . '<span class="block font-medium">' . e((string) $field['label']) . '</span>'
         . '<input class="min-h-[44px] ' . LEARN_FORM_INPUT_CLASS . '" id="f-' . e($name) . '" name="' . e($name) . '"'
         . ' type="' . e((string) $field['type']) . '" value="' . e($value) . '"' . $max . $invalid . ' required>'
         . '</label>'
@@ -41,8 +41,8 @@ $textarea = static function (array $field, array $values, array $errors): string
     $invalid = $error === '' ? '' : ' aria-invalid="true"';
     $alert = $error === '' ? '' : ' role="alert"';
 
-    return '<div class="space-y-1"><label class="block text-sm" for="f-' . e($name) . '">'
-        . '<span class="font-medium">' . e((string) $field['label']) . '</span>'
+    return '<div class="space-y-1.5"><label class="block text-sm" for="f-' . e($name) . '">'
+        . '<span class="block font-medium">' . e((string) $field['label']) . '</span>'
         . '<textarea class="min-h-[44px] ' . LEARN_FORM_INPUT_CLASS . '" id="f-' . e($name) . '" name="' . e($name) . '"'
         . ' rows="' . e((string) ($field['rows'] ?? 4)) . '"' . $invalid . ' required>'
         . e($value) . '</textarea></label>'
@@ -58,8 +58,8 @@ $select = static function (array $field, array $values, array $errors, string $o
     $invalid = $error === '' ? '' : ' aria-invalid="true"';
     $alert = $error === '' ? '' : ' role="alert"';
 
-    return '<div class="space-y-1"><label class="block text-sm" for="f-' . e($name) . '">'
-        . '<span class="font-medium">' . e((string) $field['label']) . '</span>'
+    return '<div class="space-y-1.5"><label class="block text-sm" for="f-' . e($name) . '">'
+        . '<span class="block font-medium">' . e((string) $field['label']) . '</span>'
         . '<select class="min-h-[44px] ' . LEARN_FORM_INPUT_CLASS . '" id="f-' . e($name) . '" name="' . e($name) . '"'
         . $invalid . ' required>'
         . $optionsHtml . '</select></label>'

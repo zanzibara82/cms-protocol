@@ -118,6 +118,41 @@ function seoMetaId26(array $params): string
 }
 
 /**
+ * Приём картинки карточки соцсети из формы метаданных: файл перетирает путь.
+ *
+ * Проверку и перенос делает ядро (pageImageInspect/pageImageStore) — тот же приёмник, что у
+ * конструктора страниц и настроек: формат решается по содержимому, имя генерирует сервер, а
+ * каталог закрыт от исполнения. Своя копия проверки здесь разошлась бы с общей на первой правке.
+ *
+ * @param array{errors: array<string, string>, values: array<string, mixed>} $check проверка формы; значения правятся на месте
+ *
+ * @return array{error: string}
+ */
+function seoMetaTakeImageUpload(array &$check): array
+{
+    $file = uploadedFile('og_image_file');
+
+    if ($file === null) {
+        return ['error' => ''];
+    }
+
+    // Пустой выбор файла браузер присылает всегда, и это не отказ: человек просто не менял картинку.
+    if ((int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return ['error' => ''];
+    }
+
+    $stored = pageImageStore($file);
+
+    if ($stored['ok'] !== true) {
+        return ['error' => $stored['error']];
+    }
+
+    $check['values']['og_image'] = $stored['href'];
+
+    return ['error' => ''];
+}
+
+/**
  * Экран метаданных: справочник адресов и форма. По адресу /{id} открывается правка
  * выбранной записи — список и форма на одном экране.
  *
@@ -173,6 +208,11 @@ function seoAdminAction(array $params = []): void
 
     if ($op === 'create') {
         $check = seoMetaValidate($_POST);
+        $upload = seoMetaTakeImageUpload($check);
+
+        if ($upload['error'] !== '') {
+            $check['errors']['og_image'] = $upload['error'];
+        }
 
         if ($check['errors'] === []) {
             $result = seoMetaSave($check['values']);
@@ -190,6 +230,11 @@ function seoAdminAction(array $params = []): void
             $result = seoMetaDelete($id);
         } else {
             $check = seoMetaValidate($_POST);
+            $upload = seoMetaTakeImageUpload($check);
+
+            if ($upload['error'] !== '') {
+                $check['errors']['og_image'] = $upload['error'];
+            }
 
             if ($check['errors'] === []) {
                 $result = seoMetaSave($check['values'], $id);
