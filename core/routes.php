@@ -59,6 +59,12 @@ function registerCoreRoutes(): void
     addRoute('GET', '/admin/consents', 'coreAdminConsents', ['private' => true, 'permission' => 'manage']);
     addRoute('GET', '/admin/consents/export', 'coreAdminConsentsExport', ['private' => true, 'permission' => 'manage']);
     addRoute('GET', '/admin/search', 'coreAdminSearch', ['private' => true, 'permission' => 'login']);
+    // RELEASE 2.2: история версий, сравнение, согласование, комментарии, задачи, расписание
+    // и уведомления. Экран доступен вошедшему редактору; точные права проверяет обработчик.
+    addRoute('GET', '/admin/editorial', 'coreAdminEditorial', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/editorial', 'coreAdminEditorialAction', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/notifications', 'coreAdminNotifications', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/notifications', 'coreAdminNotificationsAction', ['private' => true, 'permission' => 'login']);
     // Страницы живут на /{slug} одним сегментом, поэтому маршрут идёт в конец реестра: точные
     // пути ядра и разделов выигрывают по построению сортировки (router.php ставит статические
     // раньше параметрических), а {slug} ограничен «[^/]+» и не отбирает у разделов их подразделы.
@@ -626,6 +632,8 @@ function coreAdminPageScreen(string $pageId): void
     }
 
     $editor = currentUser();
+    contentRevisionEnsureBaseline('page', $pageId);
+    $editorialVersion = contentRevisionVersion('page', $pageId);
     $data = [
         'kinds' => pagesKindOptions(),
         'sections' => pageSections($pageId),
@@ -634,6 +642,8 @@ function coreAdminPageScreen(string $pageId): void
         'clipboard' => clipboardGet(is_array($editor) ? (string) $editor['id'] : ''),
         'previewLink' => '',
         'previewTokens' => [],
+        'editorialVersion' => $editorialVersion,
+        'editorialCanEdit' => editorialCan('edit', is_array($editor) ? $editor : null),
     ];
 
     if ($page === null) {
@@ -755,17 +765,23 @@ function coreAdminPagesAction(array $params = []): void
 
     $editor = currentUser();
     $editorId = is_array($editor) ? (string) $editor['id'] : '';
+    // Версия и ключ идемпотентности приходят из формы редактора. Старые формы без них
+    // продолжают работать: guard получает null и не блокирует сохранение.
+    $revisionMeta = [
+        'expected_version' => postInt('expected_version'),
+        'idempotency_key' => postString('idempotency_key'),
+    ];
 
     $result = match ($op) {
-        'save-page' => updatePage($pageId, pagesPageValuesFromPost(), nowUtc()),
-        'create-section' => createSection($pageId, $sectionValues ?? [], nowUtc()),
-        'save-section' => updateSection(postString('section'), $sectionValues ?? [], nowUtc()),
-        'move-section' => sectionMove(postString('section'), postString('dir')),
-        'toggle-section' => sectionToggle(postString('section'), postString('visible') !== '0'),
-        'delete-section' => trashSection(postString('section')),
-        'delete-page' => trashPage($pageId),
-        'duplicate-page' => duplicatePage($pageId),
-        'duplicate-section' => duplicateSection(postString('section')),
+        'save-page' => updatePage($pageId, pagesPageValuesFromPost(), nowUtc(), $revisionMeta),
+        'create-section' => createSection($pageId, $sectionValues ?? [], nowUtc(), $revisionMeta),
+        'save-section' => updateSection(postString('section'), $sectionValues ?? [], nowUtc(), $revisionMeta),
+        'move-section' => sectionMove(postString('section'), postString('dir'), $revisionMeta),
+        'toggle-section' => sectionToggle(postString('section'), postString('visible') !== '0', $revisionMeta),
+        'delete-section' => trashSection(postString('section'), $revisionMeta),
+        'delete-page' => trashPage($pageId, $revisionMeta),
+        'duplicate-page' => duplicatePage($pageId, $revisionMeta),
+        'duplicate-section' => duplicateSection(postString('section'), $revisionMeta),
         'copy-section' => clipboardCopy($editorId, postString('section')),
         'paste-section' => clipboardPaste($editorId, $pageId),
         'preview-revoke' => previewTokenRevoke(postString('token'), $pageId),
@@ -822,7 +838,7 @@ function coreAdminPagesAction(array $params = []): void
     // Формы секций плавающая кнопка отправляет через fetch: ей нужен ответ, а не PRG-редирект.
     // Остальные действия (страница, меню, приложения) остаются на прежнем канале.
     if ($op === 'create-section' || $op === 'save-section') {
-        finishSectionAction($result, $to, $notice);
+        finishSectionAction($result, $to, $notice, contentRevisionVersion('page', $pageId));
 
         return;
     }
@@ -868,7 +884,7 @@ function sectionSaveIsJson(): bool
 /**
  * @param array{ok: bool, error?: string} $result
  */
-function finishSectionAction(array $result, string $to, string $notice): void
+function finishSectionAction(array $result, string $to, string $notice, ?int $version = null): void
 {
     if (!sectionSaveIsJson()) {
         finishAppAction($result, $to, $notice);
@@ -881,6 +897,7 @@ function finishSectionAction(array $result, string $to, string $notice): void
         'ok' => $ok,
         'error' => $ok ? '' : (string) ($result['error'] ?? 'Действие не удалось.'),
         'notice' => $ok ? $notice : '',
+        'version' => $ok ? $version : null,
     ];
 
     respond(200, (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), [

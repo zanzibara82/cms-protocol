@@ -391,9 +391,10 @@ function commerceProductList(array $filter): array
  * целиком, либо никак.
  *
  * @param array{fields: array<string, string>, prices: array<string, ?float>, stock: int, body: list<array{title: string, text: string}>, slug: string, categories: list<string>} $values
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, id: string, slug: string, notice: string}
  */
-function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null): array
+function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     $moment = $now ?? nowUtc();
     $fields = $values['fields'];
@@ -405,12 +406,14 @@ function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null): a
 
     $id = newId();
     $prices = $values['prices'];
+    $revisionMeta = contentRevisionMeta($meta);
+    $revisionMeta['operation'] = 'initial';
 
     // Слаг и артикул держатся уникальными ключами: параллельное создание того же товара
     // гонит наш INSERT в отказ базы. Кто именно занят — читается перечитыванием, потому что
     // текст исключения не обещает имя ключа: у человека формулировка своя для каждой из причин.
     try {
-        tx(static function () use ($id, $slug, $values, $fields, $prices, $moment): void {
+        tx(static function () use ($id, $slug, $values, $fields, $prices, $moment, $revisionMeta): void {
             insert('commerce_product', [
                 'id' => $id,
                 'slug' => $slug,
@@ -441,6 +444,8 @@ function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null): a
                     'category_id' => $categoryId,
                 ]);
             }
+
+            contentRevisionCommit('product', $id, $revisionMeta, $moment);
         });
     } catch (Throwable $insertError) {
         // Причина разыменовывается пробами: артикул приоритетнее адреса. Слаг занят либо
@@ -467,13 +472,14 @@ function commerceCreateProduct(array $values, ?DateTimeImmutable $now = null): a
 }
 
 /**
- * Правка товара. Мониторинг снимков не ведётся: история правок — шаг M-этапа, не базового
- * набора; базовый контракт — информация «когда последний раз правлен» в updated_at.
+ * Правка товара. Полный снимок фиксируется в истории ревизий RELEASE 2.2; конфликт версий
+ * возвращается вызывающему, чтобы форма показала сравнение, а не затёрла чужие изменения.
  *
  * @param array{fields: array<string, string>, prices: array<string, ?float>, stock: int, body: list<array{title: string, text: string}>, slug: string, categories: list<string>} $values
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, slug: string, notice: string}
  */
-function commerceUpdateProduct(string $id, array $values, string $previousSlug, ?DateTimeImmutable $now = null): array
+function commerceUpdateProduct(string $id, array $values, string $previousSlug, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     $row = commerceProductById($id);
 
@@ -490,11 +496,15 @@ function commerceUpdateProduct(string $id, array $values, string $previousSlug, 
         return ['ok' => false, 'error' => 'Адрес не собрался из названия.', 'slug' => '', 'notice' => ''];
     }
 
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('product', $id, $moment);
+
     // Правка и чужое сохранение могут претендовать на один слаг или артикул: проигравший
     // UPDATE получает отказ уникального ключа. Причина разыменовывается перечитыванием —
     // человеку видна формулировка о том поле, которое действительно занято.
     try {
-        tx(static function () use ($id, $slug, $values, $fields, $prices, $moment): void {
+        tx(static function () use ($id, $slug, $values, $fields, $prices, $moment, $revisionMeta): void {
+            contentRevisionGuard('product', $id, $revisionMeta, $moment);
             run(
                 'UPDATE ' . t('commerce_product') . ' SET slug = ?, sku = ?, title = ?, lead_text = ?, body = ?,'
                 . ' brand = ?, barcode = ?, price_retail = ?, price_promo = ?, price_cost = ?, currency = ?,'
@@ -530,7 +540,21 @@ function commerceUpdateProduct(string $id, array $values, string $previousSlug, 
                     'category_id' => $categoryId,
                 ]);
             }
+
+            contentRevisionCommit('product', $id, $revisionMeta, $moment);
         });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'slug' => $slug,
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
     } catch (Throwable $updateError) {
         // Причина разыменовывается пробами: артикул приоритетнее адреса, свой товар из
         // пробы исключён (id <> ?) — правка не называет занятым собственный артикул.
@@ -584,18 +608,43 @@ function commerceDeleteProduct(string $id): array
  * Адрес товара к статусу: снятие из продажи или возврат на витрину. Список строк
  * заказа при этом не трогается: снимки FK RESTRICT остаются на месте.
  *
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string}
  */
-function commerceSetProductStatus(string $id, string $status): array
+function commerceSetProductStatus(string $id, string $status, array $meta = [], ?DateTimeImmutable $now = null): array
 {
     if (!in_array($status, COMMERCE_PRODUCT_STATUSES, true)) {
         return ['ok' => false, 'error' => 'Неизвестный статус товара.', 'notice' => ''];
     }
 
-    $done = run(
-        'UPDATE ' . t('commerce_product') . ' SET status = ?, updated_at = ? WHERE id = ?',
-        [$status, utcStamp(nowUtc()), $id]
-    ) === 1;
+    $moment = $now ?? nowUtc();
+    $revisionMeta = contentRevisionMeta($meta);
+    $revisionMeta['operation'] = $status === 'PUBLISHED' ? 'publish' : 'manual';
+    contentRevisionEnsureBaseline('product', $id, $moment);
+
+    try {
+        $done = tx(static function () use ($id, $status, $moment, $revisionMeta): bool {
+            contentRevisionGuard('product', $id, $revisionMeta, $moment);
+            $changed = run(
+                'UPDATE ' . t('commerce_product') . ' SET status = ?, updated_at = ? WHERE id = ?',
+                [$status, utcStamp($moment), $id]
+            ) === 1;
+            contentRevisionCommit('product', $id, $revisionMeta, $moment);
+
+            return $changed;
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
+    }
 
     if (!$done) {
         return ['ok' => false, 'error' => 'Товар не изменился — обновите список.', 'notice' => ''];

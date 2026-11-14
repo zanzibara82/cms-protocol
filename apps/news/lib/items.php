@@ -708,13 +708,16 @@ function publishedAtOf(mixed $raw): ?DateTimeImmutable
  *
  * @param array<string, mixed> $input значение ключа `data` из parseNewsForm()
  * @param array{id: string, email: string} $editor
+ * @param array<string, mixed> $meta
  *
  * @return array{ok: bool, notice: string, error: string, id: string, slug: string}
  */
-function createItem(array $input, array $editor, ?DateTimeImmutable $now = null): array
+function createItem(array $input, array $editor, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     $moment = $now ?? nowUtc();
     $status = (string) ($input['status'] ?? NEWS_STATUS['DRAFT']);
+    $revisionMeta = contentRevisionMeta($meta, $editor);
+    $revisionMeta['operation'] = 'initial';
 
     // На печать публикация идёт кнопкой формы и кнопкой списка — правило рубрики одно:
     // печатается материал только в видимой рубрике.
@@ -755,12 +758,13 @@ function createItem(array $input, array $editor, ?DateTimeImmutable $now = null)
     // один и тот же адрес: проигравшая вставка получает отказ уникального ключа. Человеку
     // возвращается причина с предложением, а не HTTP 500 сырого исключения.
     try {
-        tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $publishedNow, $moment, $tagIds): void {
+        tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $publishedNow, $moment, $tagIds, $revisionMeta): void {
             insert('news_item', array_merge(
                 dataOf($input, $publishedAt, $editor, $publishedNow, $moment),
                 ['id' => $id, 'slug' => $slug, 'created_at' => utcStamp($moment)]
             ));
             linkItemTags($id, $tagIds);
+            contentRevisionCommit('news', $id, $revisionMeta, $moment);
         });
     } catch (Throwable $error) {
         return itemFailure(duplicateReason($error, 'Такой адрес уже занят другим материалом — предложите свой.'));
@@ -776,10 +780,11 @@ function createItem(array $input, array $editor, ?DateTimeImmutable $now = null)
  *
  * @param array<string, mixed> $input значение ключа `data` из parseNewsForm()
  * @param array{id: string, email: string} $editor
+ * @param array<string, mixed> $meta
  *
  * @return array{ok: bool, notice: string, error: string, id: string, slug: string}
  */
-function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable $now = null): array
+function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     $moment = $now ?? nowUtc();
     $row = itemRow($id);
@@ -787,6 +792,9 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
     if ($row === null) {
         return itemFailure('Материала уже нет — обновите страницу.');
     }
+
+    $revisionMeta = contentRevisionMeta($meta, $editor);
+    contentRevisionEnsureBaseline('news', $id, $moment);
 
     $status = (string) ($input['status'] ?? NEWS_STATUS['DRAFT']);
     // Правило то же, что у создания и у кнопки списка: публикация только в видимой рубрике.
@@ -831,7 +839,8 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
     // Адрес свободен в момент плана, но правка и чужая публикация могут претендовать на
     // один и тот же slug — проигравший UPDATE получает отказ уникального ключа.
     try {
-        tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $becamePublished, $moment, $tagIds, $oldSlugs, $slugChanged): void {
+        tx(static function () use ($id, $slug, $input, $publishedAt, $editor, $becamePublished, $moment, $tagIds, $oldSlugs, $slugChanged, $revisionMeta): void {
+            contentRevisionGuard('news', $id, $revisionMeta, $moment);
             $data = array_merge(dataOf($input, $publishedAt, $editor, $becamePublished, $moment), ['slug' => $slug]);
 
             run(
@@ -843,7 +852,22 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
             if ($slugChanged) {
                 saveOldSlugs($id, $oldSlugs);
             }
+
+            contentRevisionCommit('news', $id, $revisionMeta, $moment);
         });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'notice' => '',
+            'error' => $conflict->getMessage(),
+            'id' => $id,
+            'slug' => (string) $row['slug'],
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
     } catch (Throwable $error) {
         return itemFailure(duplicateReason($error, 'Такой адрес уже занят другим материалом — предложите свой.'));
     }
@@ -869,9 +893,10 @@ function updateItem(string $id, array $input, array $editor, ?DateTimeImmutable 
  * Кнопки состояния в списке: «На печать» и «Снять с сайта». Право на переход проверяет сервер,
  * а не наличие кнопки на экране.
  *
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, notice: string, error: string, id: string, slug: string}
  */
-function setItemStatus(string $id, string $to, ?DateTimeImmutable $now = null): array
+function setItemStatus(string $id, string $to, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     if (!in_array($to, NEWS_STATUS, true)) {
         return itemFailure('Незнакомое состояние материала.');
@@ -914,11 +939,33 @@ function setItemStatus(string $id, string $to, ?DateTimeImmutable $now = null): 
     // Снятый с сайта материал срок не теряет: статус возвращается в черновик, а дата остаётся —
     // редактор выпустит его той же кнопкой, не выбирая момент заново.
     $publishedAt = publishDateOf($to, fromDb(is_string($row['published_at'] ?? null) ? (string) $row['published_at'] : null), $moment);
+    $revisionMeta = contentRevisionMeta($meta);
+    $revisionMeta['operation'] = $to === NEWS_STATUS['PUBLISHED'] ? 'publish' : 'manual';
+    contentRevisionEnsureBaseline('news', $id, $moment);
 
-    run(
-        sprintf('UPDATE %s SET status = ?, published_at = ?, updated_at = ? WHERE id = ?', t('news_item')),
-        [$to, $publishedAt === null ? null : utcStamp($publishedAt), utcStamp($moment), (string) $row['id']]
-    );
+    try {
+        tx(static function () use ($row, $to, $publishedAt, $moment, $revisionMeta, $id): void {
+            contentRevisionGuard('news', $id, $revisionMeta, $moment);
+            run(
+                sprintf('UPDATE %s SET status = ?, published_at = ?, updated_at = ? WHERE id = ?', t('news_item')),
+                [$to, $publishedAt === null ? null : utcStamp($publishedAt), utcStamp($moment), (string) $row['id']]
+            );
+            contentRevisionCommit('news', $id, $revisionMeta, $moment);
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'notice' => '',
+            'error' => $conflict->getMessage(),
+            'id' => $id,
+            'slug' => (string) $row['slug'],
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
+    }
 
     logInfo('news.item_status', ['itemId' => (string) $row['id'], 'from' => (string) $row['status'], 'to' => $to]);
 
@@ -929,9 +976,10 @@ function setItemStatus(string $id, string $to, ?DateTimeImmutable $now = null): 
  * Закрепление: первая страница ленты, страницы рубрики и «похожие» идут по orderNews(), где
  * закреплённые впереди. Черновику закрепление бессмысленно — его в ленте нет.
  *
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, notice: string, error: string, id: string, slug: string}
  */
-function setItemPinned(string $id, bool $pinned, ?DateTimeImmutable $now = null): array
+function setItemPinned(string $id, bool $pinned, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     $moment = $now ?? nowUtc();
     $row = itemRow($id);
@@ -948,10 +996,32 @@ function setItemPinned(string $id, bool $pinned, ?DateTimeImmutable $now = null)
         return itemFailure('Закреплять можно материал, который уже на сайте: в ленте он идёт первым, а черновика там нет.');
     }
 
-    run(
-        sprintf('UPDATE %s SET pinned = ?, updated_at = ? WHERE id = ?', t('news_item')),
-        [$pinned ? 1 : 0, utcStamp($moment), (string) $row['id']]
-    );
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('news', $id, $moment);
+
+    try {
+        tx(static function () use ($row, $pinned, $moment, $revisionMeta, $id): void {
+            contentRevisionGuard('news', $id, $revisionMeta, $moment);
+            run(
+                sprintf('UPDATE %s SET pinned = ?, updated_at = ? WHERE id = ?', t('news_item')),
+                [$pinned ? 1 : 0, utcStamp($moment), (string) $row['id']]
+            );
+            contentRevisionCommit('news', $id, $revisionMeta, $moment);
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'notice' => '',
+            'error' => $conflict->getMessage(),
+            'id' => $id,
+            'slug' => (string) $row['slug'],
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
+    }
 
     logInfo('news.item_pinned', ['itemId' => (string) $row['id'], 'pinned' => $pinned]);
 

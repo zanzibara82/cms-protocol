@@ -899,16 +899,20 @@ function createPage(array $values, ?DateTimeImmutable $now = null): array
     $moment = utcStamp($now ?? nowUtc());
 
     try {
-        insert('page', [
-            'id' => $id,
-            'slug' => $slug,
-            'title' => trim((string) ($values['title'] ?? '')),
-            'description' => trim((string) ($values['description'] ?? '')),
-            'status' => (string) ($values['status'] ?? PAGES_STATUS_DRAFT),
-            'noindex' => (string) ($values['noindex'] ?? '0') === '1' ? 1 : 0,
-            'created_at' => $moment,
-            'updated_at' => $moment,
-        ]);
+        tx(static function () use ($id, $slug, $values, $moment, $now): void {
+            insert('page', [
+                'id' => $id,
+                'slug' => $slug,
+                'title' => trim((string) ($values['title'] ?? '')),
+                'description' => trim((string) ($values['description'] ?? '')),
+                'status' => (string) ($values['status'] ?? PAGES_STATUS_DRAFT),
+                'noindex' => (string) ($values['noindex'] ?? '0') === '1' ? 1 : 0,
+                'created_at' => $moment,
+                'updated_at' => $moment,
+            ]);
+
+            contentRevisionCommit('page', $id, ['operation' => 'initial', 'source' => 'editor'], $now);
+        });
     } catch (Throwable $error) {
         return [
             'ok' => false,
@@ -934,9 +938,10 @@ function createPage(array $values, ?DateTimeImmutable $now = null): array
  * адрес один, и его история живёт у текущего владельца.
  *
  * @param array<string, mixed> $values поля формы: title, slug, description, status, noindex
- * @return array{ok: bool, error: string, slug: string, notice: string}
+ * @param array<string, mixed> $meta operation, source, comment, expected_version, idempotency_key
+ * @return array{ok: bool, error: string, slug: string, notice: string, conflict?: array{expected: int, actual: int, revision_id: string}, replayed?: bool, version?: int}
  */
-function updatePage(string $id, array $values, ?DateTimeImmutable $now = null): array
+function updatePage(string $id, array $values, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     $previous = pageById($id);
 
@@ -953,9 +958,12 @@ function updatePage(string $id, array $values, ?DateTimeImmutable $now = null): 
     $previousSlug = (string) $previous['slug'];
     $slugChanged = $slug !== $previousSlug;
     $moment = utcStamp($now ?? nowUtc());
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('page', $id, $now);
 
     try {
-        tx(static function () use ($id, $values, $slug, $moment, $slugChanged, $previousSlug): void {
+        tx(static function () use ($id, $values, $slug, $moment, $slugChanged, $previousSlug, $revisionMeta, $now): void {
+            contentRevisionGuard('page', $id, $revisionMeta, $now);
             run(
                 'UPDATE ' . t('page') . ' SET slug = ?, title = ?, description = ?, status = ?, noindex = ?, updated_at = ? WHERE id = ?',
                 [
@@ -973,7 +981,35 @@ function updatePage(string $id, array $values, ?DateTimeImmutable $now = null): 
                 run('DELETE FROM ' . t('page_old_slug') . ' WHERE slug = ?', [$previousSlug]);
                 insert('page_old_slug', ['slug' => $previousSlug, 'page_id' => $id, 'created_at' => $moment]);
             }
+
+            contentRevisionCommit('page', $id, $revisionMeta, $now);
         });
+    } catch (ContentVersionConflict $conflict) {
+        logWarn('pages.save_conflict', ['id' => $id, 'expected' => $conflict->expectedVersion, 'actual' => $conflict->actualVersion]);
+
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'slug' => $previousSlug,
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+            'version' => $conflict->actualVersion,
+        ];
+    } catch (ContentVersionReplay $replay) {
+        $row = contentRevisionFetch($replay->revisionId);
+
+        return [
+            'ok' => true,
+            'error' => '',
+            'slug' => $previousSlug,
+            'notice' => 'page_saved',
+            'replayed' => true,
+            'version' => (int) ($row['version'] ?? 0),
+        ];
     } catch (Throwable $error) {
         return [
             'ok' => false,
@@ -1032,9 +1068,10 @@ function pagesVisibleOf(mixed $raw): int
  *
  * @param array<string, mixed> $values поля секции: kind, anchor, badge, title, lead_text, note,
  *        image, image_alt, buttons, items, settings, visible
+ * @param array<string, mixed> $meta операция ревизии
  * @return array{ok: bool, error: string, id: string, notice: string}
  */
-function createSection(string $pageId, array $values, ?DateTimeImmutable $now = null): array
+function createSection(string $pageId, array $values, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     // Главная живёт без строки tbl_page, поэтому проверка существования — только у адресных.
     if ($pageId !== PAGES_HOME_ID && pageById($pageId) === null) {
@@ -1051,9 +1088,12 @@ function createSection(string $pageId, array $values, ?DateTimeImmutable $now = 
 
     $id = newId();
     $moment = utcStamp($now ?? nowUtc());
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('page', $pageId, $now);
 
     try {
-        tx(static function () use ($pageId, $values, $id, $secKey, $anchor, $title, $moment): void {
+        tx(static function () use ($pageId, $values, $id, $secKey, $anchor, $title, $moment, $revisionMeta, $now): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta, $now);
             $count = (int) value('SELECT COUNT(*) FROM ' . t('page_section') . ' WHERE page_id = ?', [$pageId]);
 
             if ($count >= PAGES_SECTIONS_LIMIT) {
@@ -1082,12 +1122,24 @@ function createSection(string $pageId, array $values, ?DateTimeImmutable $now = 
                 'visible' => pagesVisibleOf($values['visible'] ?? 1),
                 'updated_at' => $moment,
             ]);
-        });
-    } catch (Throwable $error) {
-        if ($error instanceof PagesLimitReached) {
-            return ['ok' => false, 'error' => $error->getMessage(), 'id' => '', 'notice' => ''];
-        }
 
+            contentRevisionCommit('page', $pageId, $revisionMeta, $now);
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'id' => '',
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
+    } catch (PagesLimitReached $error) {
+        return ['ok' => false, 'error' => $error->getMessage(), 'id' => '', 'notice' => ''];
+    } catch (Throwable $error) {
         return [
             'ok' => false,
             'error' => duplicateReason(
@@ -1112,9 +1164,10 @@ function createSection(string $pageId, array $values, ?DateTimeImmutable $now = 
  * а человек правит поля и якорь.
  *
  * @param array<string, mixed> $values поля секции — те же, что у createSection
+ * @param array<string, mixed> $meta операция ревизии
  * @return array{ok: bool, error: string, notice: string}
  */
-function updateSection(string $sectionId, array $values, ?DateTimeImmutable $now = null): array
+function updateSection(string $sectionId, array $values, ?DateTimeImmutable $now = null, array $meta = []): array
 {
     $previous = sectionById($sectionId);
 
@@ -1122,29 +1175,50 @@ function updateSection(string $sectionId, array $values, ?DateTimeImmutable $now
         return ['ok' => false, 'error' => 'Секция исчезла — обновите список.', 'notice' => ''];
     }
 
+    $pageId = (string) $previous['page_id'];
     $moment = utcStamp($now ?? nowUtc());
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('page', $pageId, $now);
 
-    run(
-        'UPDATE ' . t('page_section') . ' SET kind = ?, layout = ?, anchor = ?, badge = ?, title = ?, lead_text = ?,'
-        . ' note = ?, image = ?, image_alt = ?, buttons = ?, items = ?, settings = ?, visible = ?, updated_at = ? WHERE id = ?',
-        [
-            (string) ($values['kind'] ?? ''),
-            (string) ($values['layout'] ?? ''),
-            slugify((string) ($values['anchor'] ?? ''), 40),
-            trim((string) ($values['badge'] ?? '')),
-            trim((string) ($values['title'] ?? '')),
-            (string) ($values['lead_text'] ?? ''),
-            trim((string) ($values['note'] ?? '')),
-            (string) ($values['image'] ?? ''),
-            (string) ($values['image_alt'] ?? ''),
-            pagesJson(is_array($values['buttons'] ?? null) ? $values['buttons'] : [], '[]'),
-            pagesJson(is_array($values['items'] ?? null) ? $values['items'] : [], '[]'),
-            pagesJson(is_array($values['settings'] ?? null) ? $values['settings'] : [], '{}'),
-            pagesVisibleOf($values['visible'] ?? 1),
-            $moment,
-            $sectionId,
-        ]
-    );
+    try {
+        tx(static function () use ($sectionId, $values, $moment, $pageId, $revisionMeta, $now): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta, $now);
+            run(
+                'UPDATE ' . t('page_section') . ' SET kind = ?, layout = ?, anchor = ?, badge = ?, title = ?, lead_text = ?,'
+                . ' note = ?, image = ?, image_alt = ?, buttons = ?, items = ?, settings = ?, visible = ?, updated_at = ? WHERE id = ?',
+                [
+                    (string) ($values['kind'] ?? ''),
+                    (string) ($values['layout'] ?? ''),
+                    slugify((string) ($values['anchor'] ?? ''), 40),
+                    trim((string) ($values['badge'] ?? '')),
+                    trim((string) ($values['title'] ?? '')),
+                    (string) ($values['lead_text'] ?? ''),
+                    trim((string) ($values['note'] ?? '')),
+                    (string) ($values['image'] ?? ''),
+                    (string) ($values['image_alt'] ?? ''),
+                    pagesJson(is_array($values['buttons'] ?? null) ? $values['buttons'] : [], '[]'),
+                    pagesJson(is_array($values['items'] ?? null) ? $values['items'] : [], '[]'),
+                    pagesJson(is_array($values['settings'] ?? null) ? $values['settings'] : [], '{}'),
+                    pagesVisibleOf($values['visible'] ?? 1),
+                    $moment,
+                    $sectionId,
+                ]
+            );
+
+            contentRevisionCommit('page', $pageId, $revisionMeta, $now);
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
+    }
 
     logInfo('pages.section_updated', ['id' => $sectionId]);
 
@@ -1154,9 +1228,10 @@ function updateSection(string $sectionId, array $values, ?DateTimeImmutable $now
 /**
  * Перестановка секции: обмен sort с ближайшим соседом в транзакции.
  *
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string}
  */
-function sectionMove(string $sectionId, string $direction): array
+function sectionMove(string $sectionId, string $direction, array $meta = []): array
 {
     if (!in_array($direction, ['up', 'down'], true)) {
         return ['ok' => false, 'error' => 'Направление перестановки — «вверх» или «вниз».', 'notice' => ''];
@@ -1182,11 +1257,29 @@ function sectionMove(string $sectionId, string $direction): array
     $neighborId = (string) $neighbor['id'];
     $sort = (int) $row['sort'];
     $neighborSort = (int) $neighbor['sort'];
+    $pageId = (string) $row['page_id'];
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('page', $pageId);
 
-    tx(static function () use ($sectionId, $neighborId, $sort, $neighborSort): void {
-        run('UPDATE ' . t('page_section') . ' SET sort = ? WHERE id = ?', [$neighborSort, $sectionId]);
-        run('UPDATE ' . t('page_section') . ' SET sort = ? WHERE id = ?', [$sort, $neighborId]);
-    });
+    try {
+        tx(static function () use ($sectionId, $neighborId, $sort, $neighborSort, $pageId, $revisionMeta): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta);
+            run('UPDATE ' . t('page_section') . ' SET sort = ? WHERE id = ?', [$neighborSort, $sectionId]);
+            run('UPDATE ' . t('page_section') . ' SET sort = ? WHERE id = ?', [$sort, $neighborId]);
+            contentRevisionCommit('page', $pageId, $revisionMeta);
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
+    }
 
     logInfo('pages.section_moved', ['id' => $sectionId, 'direction' => $direction]);
 
@@ -1196,17 +1289,41 @@ function sectionMove(string $sectionId, string $direction): array
 /**
  * Видимость секции: скрытая остаётся в базе и видна конструктору.
  *
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string}
  */
-function sectionToggle(string $sectionId, bool $visible): array
+function sectionToggle(string $sectionId, bool $visible, array $meta = []): array
 {
-    $changed = run(
-        'UPDATE ' . t('page_section') . ' SET visible = ?, updated_at = ? WHERE id = ?',
-        [$visible ? 1 : 0, utcStamp(nowUtc()), $sectionId]
-    );
+    $section = sectionById($sectionId);
 
-    if ($changed === 0) {
+    if ($section === null) {
         return ['ok' => false, 'error' => 'Секция исчезла — обновите список.', 'notice' => ''];
+    }
+
+    $pageId = (string) $section['page_id'];
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('page', $pageId);
+
+    try {
+        tx(static function () use ($sectionId, $visible, $pageId, $revisionMeta): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta);
+            run(
+                'UPDATE ' . t('page_section') . ' SET visible = ?, updated_at = ? WHERE id = ?',
+                [$visible ? 1 : 0, utcStamp(nowUtc()), $sectionId]
+            );
+            contentRevisionCommit('page', $pageId, $revisionMeta);
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
     }
 
     logInfo('pages.section_toggled', ['id' => $sectionId, 'visible' => $visible ? 1 : 0]);
@@ -1215,14 +1332,38 @@ function sectionToggle(string $sectionId, bool $visible): array
 }
 
 /** Удаление секции: строка уходит целиком, порядок остальных не трогается.
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string}
  */
-function sectionDelete(string $sectionId): array
+function sectionDelete(string $sectionId, array $meta = []): array
 {
-    $deleted = run('DELETE FROM ' . t('page_section') . ' WHERE id = ?', [$sectionId]);
+    $section = sectionById($sectionId);
 
-    if ($deleted === 0) {
+    if ($section === null) {
         return ['ok' => false, 'error' => 'Секция исчезла — обновите список.', 'notice' => ''];
+    }
+
+    $pageId = (string) $section['page_id'];
+    $revisionMeta = contentRevisionMeta($meta);
+    contentRevisionEnsureBaseline('page', $pageId);
+
+    try {
+        tx(static function () use ($sectionId, $pageId, $revisionMeta): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta);
+            run('DELETE FROM ' . t('page_section') . ' WHERE id = ?', [$sectionId]);
+            contentRevisionCommit('page', $pageId, $revisionMeta);
+        });
+    } catch (ContentVersionConflict $conflict) {
+        return [
+            'ok' => false,
+            'error' => $conflict->getMessage(),
+            'notice' => '',
+            'conflict' => [
+                'expected' => $conflict->expectedVersion,
+                'actual' => $conflict->actualVersion,
+                'revision_id' => $conflict->currentRevisionId,
+            ],
+        ];
     }
 
     logInfo('pages.section_deleted', ['id' => $sectionId]);

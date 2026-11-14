@@ -313,6 +313,21 @@
                     lastNotice = String(data.notice);
                 }
 
+                // Первая сохранённая секция уже подняла версию материала. Следующие формы
+                // уходят с новой ожидаемой версией, иначе гонка «форма 2 против формы 1»
+                // выглядела бы как чужое изменение.
+                if (data.version) {
+                    var nextVersion = String(data.version);
+                    Array.prototype.forEach.call(document.querySelectorAll('input[name="expected_version"]'), function (input) {
+                        input.value = nextVersion;
+                        var known = input.form ? initial.get(input.form) : null;
+
+                        if (known && known.has(input)) {
+                            known.set(input, nextVersion);
+                        }
+                    });
+                }
+
                 next();
             }).catch(function () {
                 fail('Связь с сервером потерялась — изменения не сохранены.');

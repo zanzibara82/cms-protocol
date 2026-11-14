@@ -11,6 +11,8 @@ declare(strict_types=1);
 /** @var array{label: string, updated_at: string, section: array<string, mixed>}|null $clipboard */
 /** @var string $previewLink */
 /** @var list<array{id: string, created_at: string, expires_at: string, revoked_at: string}> $previewTokens */
+/** @var int $editorialVersion */
+/** @var bool $editorialCanEdit */
 
 // Редактор страницы: поля страницы (адрес, статус, noindex) и секции под ними. Удаление —
 // отдельная форма: формы не вкладываются друг в друга.
@@ -24,10 +26,35 @@ foreach (PAGES_STATUSES as $status) {
     $statusOptions .= '<option value="' . e($status) . '"' . $selected . '>' . e($label) . '</option>';
 }
 
+// RELEASE 2.2: панель редакции над формой полей. Скрипт admin-editorial.js читает версию,
+// держит блокировку и присылает автосохранение; без скрипта форма работает обычным POST.
+$editorialPanel = '<section class="rounded-lg border border-ink/10 bg-white p-4" data-editorial-panel'
+    . ' data-content-type="page" data-content-id="' . e((string) $page['id']) . '"'
+    . ' data-content-version="' . e((string) $editorialVersion) . '"'
+    . ' data-autosave-url="/admin/editorial" data-autosave-delay="5000" data-can-edit="' . ($editorialCanEdit ? '1' : '0') . '">'
+    . '<div class="flex flex-wrap items-center justify-between gap-2">'
+    . '<div><h2 class="font-semibold">Редакция</h2>'
+    . '<p class="mt-1 text-sm text-ink/60">Версия ' . e((string) $editorialVersion) . ' · <span data-editorial-lock>проверяем блокировку…</span></p></div>'
+    . '<div class="flex flex-wrap items-center gap-2">'
+    . '<span class="text-sm text-ink/60" data-editorial-status role="status">Изменений нет</span>'
+    . '<a class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-1.5 text-sm hover:bg-ink/5" href="/admin/editorial?' . e(http_build_query(['type' => 'page', 'id' => (string) $page['id']])) . '">История и комментарии</a>'
+    . '</div></div>'
+    . '<div class="mt-3 hidden rounded-lg border border-accent/30 bg-accent/10 p-3 text-sm" data-editorial-draft>'
+    . '<p class="font-medium">Найден локальный черновик</p>'
+    . '<p class="mt-1 text-ink/70" data-editorial-draft-text></p>'
+    . '<div class="mt-2 flex flex-wrap gap-2">'
+    . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="button" data-editorial-draft-restore>Восстановить</button>'
+    . '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-1.5 text-sm hover:bg-ink/5" type="button" data-editorial-draft-discard>Отбросить</button>'
+    . '</div></div>'
+    . '<p class="mt-2 hidden text-sm text-bad" data-editorial-conflict></p>'
+    . '</section>';
+
 $pageForm = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<h2 class="font-semibold">Поля страницы</h2>'
-    . '<form class="mt-3 space-y-3" method="post" action="' . e($target) . '">' . csrfField()
+    . '<form class="mt-3 space-y-3" method="post" action="' . e($target) . '" data-editorial-form>' . csrfField()
     . '<input type="hidden" name="op" value="save-page">'
+    . '<input type="hidden" name="expected_version" value="' . e((string) $editorialVersion) . '">'
+    . '<input type="hidden" name="idempotency_key" value="">'
     . '<div class="grid gap-3 sm:grid-cols-2">'
     . '<label class="block text-sm"><span class="block font-medium">Заголовок</span>'
     . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="title" value="' . e((string) $page['title']) . '" required></label>'
@@ -121,8 +148,8 @@ $sectionsCard = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<h2 class="font-semibold">Блоки страницы</h2>'
     . '<p class="mt-1.5 text-sm text-ink/70">Порядок на странице — как в этом списке, сверху вниз.</p>'
     . '</section>'
-    . partial('admin/pages-sections', ['sections' => $sections, 'target' => $target, 'kinds' => $kinds]);
+    . partial('admin/pages-sections', ['sections' => $sections, 'target' => $target, 'kinds' => $kinds, 'version' => $editorialVersion]);
 
 $alert = partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason]);
 
-/* @safe html */ echo adminShell('Страница «' . (string) $page['title'] . '»', $alert . $pageForm . $previewSection . $clipboardSection . $sectionsCard . $deleteForm, $notice);
+/* @safe html */ echo adminShell('Страница «' . (string) $page['title'] . '»', $alert . $editorialPanel . $pageForm . $previewSection . $clipboardSection . $sectionsCard . $deleteForm, $notice);

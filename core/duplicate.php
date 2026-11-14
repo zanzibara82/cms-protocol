@@ -7,9 +7,10 @@ declare(strict_types=1);
 // историю адресов и не публикуется сама.
 
 /**
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string, id: string, slug: string}
  */
-function duplicatePage(string $id): array
+function duplicatePage(string $id, array $meta = []): array
 {
     $page = pageById($id);
 
@@ -20,11 +21,17 @@ function duplicatePage(string $id): array
     $base = mb_substr((string) $page['slug'] . '-copy', 0, 70);
     $slug = ensureUniqueSlug($base, static fn (string $candidate): bool => pageSlugTaken($candidate), 'copy');
     $newPageId = newId();
-    $moment = utcStamp(nowUtc());
+    $now = nowUtc();
+    $moment = utcStamp($now);
     $title = mb_substr('Копия — ' . (string) $page['title'], 0, 120);
+    $revisionMeta = array_merge(contentRevisionMeta($meta), [
+        'operation' => 'initial',
+        'source' => 'system',
+        'comment' => 'Копия страницы',
+    ]);
 
     try {
-        tx(static function () use ($page, $newPageId, $slug, $moment, $title): void {
+        tx(static function () use ($page, $newPageId, $slug, $moment, $title, $revisionMeta, $now): void {
             insert('page', [
                 'id' => $newPageId,
                 'slug' => $slug,
@@ -49,6 +56,8 @@ function duplicatePage(string $id): array
                 $section['updated_at'] = $moment;
                 insert('page_section', trashSectionRow($section));
             }
+
+            contentRevisionCommit('page', $newPageId, $revisionMeta, $now);
         });
     } catch (Throwable $error) {
         logError('pages.duplicate_failed', ['id' => $id, 'message' => $error->getMessage()]);
@@ -63,9 +72,10 @@ function duplicatePage(string $id): array
 }
 
 /**
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string, id: string}
  */
-function duplicateSection(string $id): array
+function duplicateSection(string $id, array $meta = []): array
 {
     $section = sectionById($id);
 
@@ -88,9 +98,15 @@ function duplicateSection(string $id): array
     $copy['title'] = mb_substr((string) $section['title'] . ' (копия)', 0, 160);
     $copy['sort'] = (int) value('SELECT COALESCE(MAX(sort), -1) + 1 FROM ' . t('page_section') . ' WHERE page_id = ?', [$pageId]);
     $copy['updated_at'] = $moment;
+    $now = nowUtc();
+    $revisionMeta = contentRevisionMeta($meta);
 
     try {
-        insert('page_section', trashSectionRow($copy));
+        tx(static function () use ($copy, $pageId, $revisionMeta, $now): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta, $now);
+            insert('page_section', trashSectionRow($copy));
+            contentRevisionCommit('page', $pageId, $revisionMeta, $now);
+        });
     } catch (Throwable $error) {
         logError('pages.section_duplicate_failed', ['id' => $id, 'message' => $error->getMessage()]);
 

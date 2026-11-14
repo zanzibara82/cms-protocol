@@ -165,13 +165,23 @@ function utcStampFromTimestamp(int $timestamp): string
 // ровно то, о чём договорён контент-менеджер, назначая публикацию «на девять утра».
 function parseFormDateTime(string $raw): ?DateTimeImmutable
 {
+    return parseFormDateTimeInZone($raw, 'Europe/Moscow');
+}
+
+// Планировщик принимает время в выбранном поясе. Список поясов ограничен известными IANA:
+// произвольная строка не должна попадать в DateTimeZone.
+function parseFormDateTimeInZone(string $raw, string $timezone = 'Europe/Moscow'): ?DateTimeImmutable
+{
     $value = trim($raw);
     if ($value === '') {
         return null;
     }
 
-    $parsed = DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $value, moscowZone())
-        ?: DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $value, moscowZone());
+    $zone = in_array($timezone, DateTimeZone::listIdentifiers(), true)
+        ? new DateTimeZone($timezone)
+        : moscowZone();
+    $parsed = DateTimeImmutable::createFromFormat('Y-m-d\TH:i', $value, $zone)
+        ?: DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s', $value, $zone);
 
     if (!$parsed instanceof DateTimeImmutable) {
         return null;
@@ -183,6 +193,20 @@ function parseFormDateTime(string $raw): ?DateTimeImmutable
     }
 
     return $parsed;
+}
+
+// Значение для input type="datetime-local" в выбранном поясе. Формат один на все экраны.
+function formatDateTimeLocal(?DateTimeImmutable $date, string $timezone = 'Europe/Moscow'): string
+{
+    if ($date === null) {
+        return '';
+    }
+
+    $zone = in_array($timezone, DateTimeZone::listIdentifiers(), true)
+        ? new DateTimeZone($timezone)
+        : moscowZone();
+
+    return $date->setTimezone($zone)->format('Y-m-d\TH:i');
 }
 
 // Дни акций «ГГГГ-ММ-ДД» из форм магазина: край 'start' — начало дня по Москве

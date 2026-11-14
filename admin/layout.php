@@ -8,6 +8,8 @@ declare(strict_types=1);
 const ADMIN_CORE_TABS = [
     ['href' => '/admin', 'label' => 'Сводка'],
     ['href' => '/admin/pages', 'label' => 'Страницы'],
+    ['href' => '/admin/editorial', 'label' => 'Редакция'],
+    ['href' => '/admin/notifications', 'label' => 'Уведомления'],
     ['href' => '/admin/media', 'label' => 'Медиатека'],
     ['href' => '/admin/trash', 'label' => 'Корзина'],
     ['href' => '/admin/search', 'label' => 'Поиск'],
@@ -22,6 +24,8 @@ const ADMIN_CORE_TABS = [
 // Конструктор страниц подключает один внешний скрипт: CSP запрещает инлайновый код, а кнопка
 // сохранения должна работать без перезагрузки на каждое изменение.
 const ADMIN_SECTIONS_HEAD = '<script src="/assets/js/admin-sections.js" defer></script>';
+// Редакция: автосохранение полей страницы, локальный черновик, heartbeat блокировки и присутствия.
+const ADMIN_EDITORIAL_HEAD = '<script src="/assets/js/admin-editorial.js" defer></script>';
 
 /** @return list<array{href: string, label: string}> */
 function adminTabs(): array

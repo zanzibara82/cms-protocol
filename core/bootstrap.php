@@ -43,6 +43,14 @@ require_once __DIR__ . '/consent.php';
 require_once __DIR__ . '/trash.php';
 require_once __DIR__ . '/duplicate.php';
 require_once __DIR__ . '/bulk.php';
+// RELEASE 2.2: история версий, сравнение, редакционный процесс и планировщик. Файлы подключаются
+// после слоя страниц: снимки читают его функции, а старые вызовы продолжают работать без них.
+require_once __DIR__ . '/revisions.php';
+require_once __DIR__ . '/diff.php';
+require_once __DIR__ . '/editorial.php';
+require_once __DIR__ . '/scheduler.php';
+// Экраны и JSON-обработчики редакции: функции слоя уже подключены, маршруты регистрирует routes.php.
+require_once __DIR__ . '/editorial-routes.php';
 require_once __DIR__ . '/media.php';
 require_once __DIR__ . '/preview.php';
 require_once __DIR__ . '/password-reset.php';

@@ -21,17 +21,27 @@ function pagesBulkStatus(array $ids, string $status): array
     }
 
     $done = 0;
-    $moment = utcStamp(nowUtc());
+    $now = nowUtc();
+    $moment = utcStamp($now);
 
     foreach ($ids as $id) {
         if (pageById($id) === null) {
             continue;
         }
 
-        $changed = run(
-            'UPDATE ' . t('page') . ' SET status = ?, updated_at = ? WHERE id = ?',
-            [$status, $moment, $id]
-        );
+        contentRevisionEnsureBaseline('page', $id, $now);
+
+        $changed = tx(static function () use ($id, $status, $moment, $now): int {
+            $meta = contentRevisionMeta(['operation' => 'bulk', 'source' => 'editor'], currentUser());
+            contentRevisionGuard('page', $id, $meta, $now);
+            $count = run(
+                'UPDATE ' . t('page') . ' SET status = ?, updated_at = ? WHERE id = ?',
+                [$status, $moment, $id]
+            );
+            contentRevisionCommit('page', $id, $meta, $now);
+
+            return $count;
+        });
 
         if ($changed === 0) {
             continue;

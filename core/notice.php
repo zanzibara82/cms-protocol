@@ -76,6 +76,22 @@ const CORE_NOTICE_TEXT = [
     'lead_reply_sent' => 'Письмо отправлено, заявка отмечена обработанной.',
     'lead_status_saved' => 'Статус заявки обновлён.',
     'lead_deleted' => 'Заявка удалена.',
+    // RELEASE 2.2: редакция. Один ключ на действие; подробности — в журнале и на экране.
+    'editorial_saved' => 'Автосохранение выполнено.',
+    'editorial_restored' => 'Версия восстановлена — создана новая ревизия.',
+    'editorial_revision_deleted' => 'Ревизия удалена.',
+    'editorial_submit' => 'Материал отправлен на проверку.',
+    'editorial_return' => 'Материал возвращён на доработку.',
+    'editorial_approve' => 'Материал одобрен.',
+    'editorial_publish' => 'Материал опубликован.',
+    'editorial_unpublish' => 'Материал снят с публикации.',
+    'editorial_draft' => 'Материал возвращён в черновик.',
+    'editorial_schedule_saved' => 'Публикация запланирована.',
+    'editorial_schedule_cancelled' => 'Расписание отменено.',
+    'editorial_comment_saved' => 'Комментарий сохранён.',
+    'editorial_task_saved' => 'Задача сохранена.',
+    'editorial_notifications_read' => 'Уведомления отмечены прочитанными.',
+    'editorial_settings_saved' => 'Настройки хранения истории сохранены.',
 ];
 
 /** @param array<string, string> $dictionary */

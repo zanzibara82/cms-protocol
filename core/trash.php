@@ -8,9 +8,10 @@ declare(strict_types=1);
 // действительно не нужна; экран конструктора пользуется функциями этого файла.
 
 /**
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string}
  */
-function trashPage(string $id): array
+function trashPage(string $id, array $meta = []): array
 {
     $page = pageById($id);
 
@@ -37,9 +38,13 @@ function trashPage(string $id): array
 
     $trashId = newId();
     $user = currentUser();
+    $moment = nowUtc();
+    $revisionMeta = contentRevisionMeta($meta + ['operation' => 'system', 'comment' => 'Страница убрана в корзину']);
+    contentRevisionEnsureBaseline('page', $id, $moment);
 
     try {
-        tx(static function () use ($trashId, $id, $page, $payload, $user): void {
+        tx(static function () use ($trashId, $id, $page, $payload, $user, $moment, $revisionMeta): void {
+            contentRevisionGuard('page', $id, $revisionMeta, $moment);
             insert('trash', [
                 'id' => $trashId,
                 'kind' => 'page',
@@ -48,8 +53,10 @@ function trashPage(string $id): array
                 'title' => (string) $page['title'],
                 'payload' => $payload,
                 'deleted_by' => is_array($user) ? (string) $user['id'] : null,
-                'deleted_at' => utcStamp(nowUtc()),
+                'deleted_at' => utcStamp($moment),
             ]);
+            // Снимок фиксируется до удаления: ревизия хранит полное состояние материала.
+            contentRevisionCommit('page', $id, $revisionMeta, $moment);
             run('DELETE FROM ' . t('page_section') . ' WHERE page_id = ?', [$id]);
             run('DELETE FROM ' . t('page_old_slug') . ' WHERE page_id = ?', [$id]);
             run('DELETE FROM ' . t('page') . ' WHERE id = ?', [$id]);
@@ -67,9 +74,10 @@ function trashPage(string $id): array
 }
 
 /**
+ * @param array<string, mixed> $meta
  * @return array{ok: bool, error: string, notice: string}
  */
-function trashSection(string $id): array
+function trashSection(string $id, array $meta = []): array
 {
     $section = sectionById($id);
 
@@ -85,19 +93,25 @@ function trashSection(string $id): array
 
     $trashId = newId();
     $user = currentUser();
+    $moment = nowUtc();
+    $pageId = (string) $section['page_id'];
+    $revisionMeta = contentRevisionMeta($meta + ['operation' => 'system', 'comment' => 'Секция убрана в корзину']);
+    contentRevisionEnsureBaseline('page', $pageId, $moment);
 
     try {
-        tx(static function () use ($trashId, $id, $section, $payload, $user): void {
+        tx(static function () use ($trashId, $id, $pageId, $section, $payload, $user, $moment, $revisionMeta): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta, $moment);
             insert('trash', [
                 'id' => $trashId,
                 'kind' => 'section',
                 'entity_id' => $id,
-                'parent_id' => (string) $section['page_id'],
+                'parent_id' => $pageId,
                 'title' => (string) $section['title'],
                 'payload' => $payload,
                 'deleted_by' => is_array($user) ? (string) $user['id'] : null,
-                'deleted_at' => utcStamp(nowUtc()),
+                'deleted_at' => utcStamp($moment),
             ]);
+            contentRevisionCommit('page', $pageId, $revisionMeta, $moment);
             run('DELETE FROM ' . t('page_section') . ' WHERE id = ?', [$id]);
         });
     } catch (Throwable $error) {
@@ -205,9 +219,12 @@ function trashRestorePage(array $trash): array
 
     $sections = is_array($data['sections'] ?? null) ? $data['sections'] : [];
     $oldSlugs = is_array($data['old_slugs'] ?? null) ? $data['old_slugs'] : [];
+    $moment = nowUtc();
+    $revisionMeta = contentRevisionMeta(['operation' => 'restore', 'source' => 'system', 'comment' => 'Страница восстановлена из корзины']);
 
     try {
-        tx(static function () use ($page, $sections, $oldSlugs): void {
+        tx(static function () use ($page, $sections, $oldSlugs, $id, $moment, $revisionMeta): void {
+            contentRevisionGuard('page', $id, $revisionMeta, $moment);
             insert('page', [
                 'id' => (string) $page['id'],
                 'slug' => (string) $page['slug'],
@@ -241,6 +258,8 @@ function trashRestorePage(array $trash): array
                     'created_at' => (string) $old['created_at'],
                 ]);
             }
+
+            contentRevisionCommit('page', $id, $revisionMeta, $moment);
         });
     } catch (Throwable $error) {
         logError('trash.restore_page_failed', ['id' => (string) $page['id'], 'message' => $error->getMessage()]);
@@ -284,9 +303,16 @@ function trashRestoreSection(array $trash): array
     }
 
     $section['sort'] = (int) value('SELECT COALESCE(MAX(sort), -1) + 1 FROM ' . t('page_section') . ' WHERE page_id = ?', [$pageId]);
+    $moment = nowUtc();
+    $revisionMeta = contentRevisionMeta(['operation' => 'restore', 'source' => 'system', 'comment' => 'Секция восстановлена из корзины']);
+    contentRevisionEnsureBaseline('page', $pageId, $moment);
 
     try {
-        insert('page_section', trashSectionRow($section));
+        tx(static function () use ($section, $pageId, $moment, $revisionMeta): void {
+            contentRevisionGuard('page', $pageId, $revisionMeta, $moment);
+            insert('page_section', trashSectionRow($section));
+            contentRevisionCommit('page', $pageId, $revisionMeta, $moment);
+        });
     } catch (Throwable $error) {
         logError('trash.restore_section_failed', ['id' => $id, 'message' => $error->getMessage()]);
 

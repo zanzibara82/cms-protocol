@@ -8,9 +8,10 @@ declare(strict_types=1);
 /** @var list<array{kind: string, name: string}> $kinds */
 /** @var list<array<string, mixed>> $sections */
 /** @var array{label: string, updated_at: string, section: array<string, mixed>}|null $clipboard */
+/** @var int $editorialVersion */
 
 // Блоки главной: секции живут с page_id = '' и рисуются на «/» без строки страницы.
-$sectionsCard = partial('admin/pages-sections', ['sections' => $sections, 'target' => '/admin/pages/home', 'kinds' => $kinds]);
+$sectionsCard = partial('admin/pages-sections', ['sections' => $sections, 'target' => '/admin/pages/home', 'kinds' => $kinds, 'version' => $editorialVersion]);
 
 $clipboardCard = '';
 
