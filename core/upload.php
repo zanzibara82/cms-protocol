@@ -126,3 +126,47 @@ function pageImageDelete(string $href): void
         unlink($path);
     }
 }
+
+/**
+ * Файлы повторяющихся строк формы (`items[0][image_file]`, `items[1][image_file]`) в карту
+ * «индекс строки → запись $_FILES». PHP для такого имени строит вложенный массив, где
+ * `$_FILES['items']['name'][0]['image_file']` — имя файла нулевой строки, поэтому обходить его
+ * приходится вручную. Строки без файла (ошибка NO_FILE) отбрасываются здесь же: пустое поле
+ * формы PHP присылает отдельной записью.
+ *
+ * @return array<int|string, array<string, mixed>>
+ */
+function pageImageUploadsByRow(string $group, string $field): array
+{
+    $files = $_FILES[$group] ?? null;
+
+    if (!is_array($files) || !isset($files['name']) || !is_array($files['name'])) {
+        return [];
+    }
+
+    $out = [];
+
+    foreach (array_keys($files['name']) as $index) {
+        $names = $files['name'][$index] ?? null;
+
+        if (!is_array($names)) {
+            continue;
+        }
+
+        $error = $files['error'][$index][$field] ?? UPLOAD_ERR_NO_FILE;
+
+        if ((int) $error === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+
+        $out[$index] = [
+            'name' => (string) ($names[$field] ?? ''),
+            'type' => (string) ($files['type'][$index][$field] ?? ''),
+            'tmp_name' => (string) ($files['tmp_name'][$index][$field] ?? ''),
+            'error' => $error,
+            'size' => (int) ($files['size'][$index][$field] ?? 0),
+        ];
+    }
+
+    return $out;
+}

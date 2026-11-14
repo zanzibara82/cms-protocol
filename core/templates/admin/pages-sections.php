@@ -97,6 +97,15 @@ $buttonsRows = static function (array $rows) use ($input): string {
  * «Описание», у карточек картинка, ссылка и подпись. Пустая последняя строка — место для новой;
  * плюс справа под строками добавляет ещё одну пустую строку без перезагрузки (admin-sections.js).
  *
+ * Сетка в две линии по три поля: пять колонок в ряд обрезали значения («До шести челов…»,
+ * «гибкое расписа…»), и человек не видел, что вписал. Две строки читаются целиком, а на узком
+ * экране сетка складывается в одну колонку.
+ *
+ * Поле картинки строки получает тот же выбор файла, что и общая картинка блока
+ * (partials/file-picker): без него путь вписывали руками. Имена файлов повторяются с индексом
+ * строки (`items[0][image_file]`), поэтому PHP собирает их вложенным массивом, а сервер читает
+ * pageImageUploadsByRow().
+ *
  * @param list<array<string, mixed>> $rows
  * @param list<array{key: string, label: string}> $fields
  */
@@ -108,17 +117,34 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
 
     $rowsHtml = '';
     foreach (array_merge($rows, [$empty]) as $index => $row) {
-        $rowsHtml .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-5" data-item-row="' . e((string) $index) . '">';
+        $rowsHtml .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-3" data-item-row="' . e((string) $index) . '">';
         foreach ($fields as $field) {
             $key = $field['key'];
-            $rowsHtml .= '<label class="text-sm"><span class="block font-medium">' . e($field['label']) . '</span>'
-                . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . e($key) . ']" value="' . e((string) ($row[$key] ?? '')) . '"></label>';
+            $value = (string) ($row[$key] ?? '');
+            $label = e($field['label']);
+
+            if ($key === 'image') {
+                $rowsHtml .= partial('partials/file-picker', [
+                    'name' => 'items[' . (string) $index . '][image]',
+                    'fileKey' => 'items[' . (string) $index . '][image_file]',
+                    'value' => $value,
+                    'label' => $label,
+                    'hint' => 'Путь на сайте или файл: jpg, png, webp до 5 МБ.',
+                    'inputClass' => $input,
+                    'buttonTitle' => 'Выбрать картинку с компьютера',
+                ]);
+
+                continue;
+            }
+
+            $rowsHtml .= '<label class="text-sm"><span class="block font-medium">' . $label . '</span>'
+                . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="items[' . e((string) $index) . '][' . e($key) . ']" value="' . e($value) . '"></label>';
         }
         $rowsHtml .= '</div>';
     }
 
-    return '<div class="space-y-2" data-items-editor>'
-        . '<div class="space-y-2" data-items-rows>' . $rowsHtml . '</div>'
+    return '<div class="space-y-3" data-items-editor>'
+        . '<div class="space-y-3" data-items-rows>' . $rowsHtml . '</div>'
         . '<div class="flex justify-end">'
         . '<button class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-ink/20 bg-white text-ink hover:bg-ink/5" type="button"'
         . ' data-items-add aria-label="Добавить строку" title="Добавить строку" hidden>'

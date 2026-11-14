@@ -797,6 +797,117 @@ final class PagesAdminTest extends TestCase
         self::assertStringNotContainsString('>Надзаголовок<', $page['body'], 'прежняя надпись убрана');
     }
 
+    public function testКартинкаВСтрокеКарточекВыбираетсяСКомпьютера(): void
+    {
+        $page = createPage([
+            'title' => 'Карточки с файлом',
+            'slug' => 'kartochki-s-faylom',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        $section = createSection((string) $page['id'], [
+            'kind' => 'cards',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Карточки',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'buttons' => [],
+            'items' => [['image' => '/assets/longread/icon-co.png', 'title' => 'Мини-группа', 'text' => 'До шести', 'href' => '#tarify', 'note' => 'от 2 занятий']],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $screen = Kernel::get('/admin/pages/' . (string) $page['id']);
+        $body = $screen['body'];
+
+        self::assertSame(200, $screen['status']);
+        // Картинка строки — та же кнопка выбора файла, что и у общей картинки блока: без неё
+        // человек вписывал путь руками, хотя рядом у остальных полей кнопка есть.
+        self::assertStringContainsString('type="file" name="items[0][image_file]"', $body, 'в строке есть выбор файла');
+        self::assertStringContainsString(
+            'for="file-items[0][image]-items[0][image_file]"',
+            $body,
+            'подпись-кнопка открывает файл своей строки'
+        );
+        self::assertStringContainsString('value="/assets/longread/icon-co.png"', $body, 'путь строки напечатан в поле');
+
+        $source = dirname(__DIR__, 2) . '/public/assets/img/brand/og-default.png';
+        self::assertFileExists($source);
+
+        $token = $this->token('/admin/pages/' . (string) $page['id']);
+
+        $saved = Kernel::post('/admin/pages/' . (string) $page['id'], [
+            '_token' => $token,
+            'op' => 'save-section',
+            'section' => (string) $section['id'],
+            'kind' => 'cards',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Карточки',
+            'lead_text' => '',
+            'visible' => '1',
+            'items[0][image]' => '',
+            'items[0][title]' => 'Мини-группа',
+            'items[0][text]' => 'До шести',
+            'items[0][href]' => '#tarify',
+            'items[0][note]' => 'от 2 занятий',
+            'items[0][image_file]' => new \CURLFile($source, 'image/png', 'gruppa.png'),
+        ]);
+
+        self::assertSame(302, $saved['status']);
+
+        $stored = sectionById((string) $section['id']) ?? [];
+        $items = pagesItemsOf($stored['items'] ?? null);
+        $image = (string) ($items[0]['image'] ?? '');
+
+        self::assertMatchesRegularExpression('#^/uploads/images/[0-9a-hjkmnp-tv-z]{26}\.png$#', $image, 'файл строки принял сервер');
+        self::assertFileExists(dirname(__DIR__, 2) . '/public' . $image);
+        self::assertSame('Мини-группа', (string) ($items[0]['title'] ?? ''), 'остальные поля строки не потерялись');
+
+        pageImageDelete($image);
+        sectionDelete((string) $section['id']);
+    }
+
+    public function testСтрокиБлокаРазбитыНаДвеСтрокиЧитаемости(): void
+    {
+        $page = createPage([
+            'title' => 'Строки в две линии',
+            'slug' => 'stroki-v-dve-linii',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        createSection((string) $page['id'], [
+            'kind' => 'cards',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Карточки',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $body = Kernel::get('/admin/pages/' . (string) $page['id'])['body'];
+
+        // Пять полей в один ряд обрезали значения: «До шести челов…», «гибкое расписа…». Две
+        // строки по три поля читаются целиком, а на узком экране сетка складывается в одну колонку.
+        self::assertStringContainsString('lg:grid-cols-3', $body, 'поля строки идут в две линии');
+        self::assertStringNotContainsString('lg:grid-cols-5', $body, 'прежний ряд из пяти колонок убран');
+    }
+
     public function testКартинкаБлокаПоказываетсяПревьюНадПолем(): void
     {
         $page = createPage([

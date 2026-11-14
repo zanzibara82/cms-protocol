@@ -701,17 +701,23 @@ function pagesHeadFragment(string $html): void
  * разметки (buttons[0][label]), PHP собирает их в массив. Пустые строки отбрасываются целиком —
  * «стереть кнопку» значит «очистить её поля», а пустые списки едут в JSON маркерами вида.
  *
+ * $extra — значения, которых в POST нет, но которые принадлежат строке: адрес принятого файла
+ * картинки. Без него строка, где человек выбрал только файл, считалась бы пустой и пропадала
+ * вместе с загруженным снимком. Ключ карты — индекс строки в форме, поэтому нумерация после
+ * отбрасывания пустых строк остаётся верной.
+ *
  * @param list<string> $keys имена полей строки, которые едут в список
+ * @param array<int|string, array<string, string>> $extra поля по индексу строки
  * @return list<array<string, string>>
  */
-function pagesFormRows(mixed $raw, array $keys): array
+function pagesFormRows(mixed $raw, array $keys, array $extra = []): array
 {
     if (!is_array($raw)) {
         return [];
     }
 
     $rows = [];
-    foreach ($raw as $row) {
+    foreach ($raw as $index => $row) {
         if (!is_array($row)) {
             continue;
         }
@@ -724,6 +730,12 @@ function pagesFormRows(mixed $raw, array $keys): array
                 $filled = true;
             }
             $clean[$key] = $value;
+        }
+
+        // Принятый файл важнее одноимённого текстового поля: имя и формат решил сервер.
+        foreach ($extra[$index] ?? [] as $key => $value) {
+            $clean[$key] = $value;
+            $filled = true;
         }
 
         if ($filled) {

@@ -692,6 +692,8 @@ function coreAdminPagesAction(array $params = []): void
 
     $sectionValues = null;
     $uploadedImage = '';
+    // Принятые файлы строк: адреса складываются по индексу строки и уходят в её поля.
+    $uploadedRowImages = [];
 
     if ($op === 'create-section' || $op === 'save-section') {
         // У «Карточек» нет полей примечания и картинки: сохранение обязано оставить их прежними,
@@ -713,6 +715,46 @@ function coreAdminPagesAction(array $params = []): void
             // мог вписать старый. Если сохранение строки сорвётся, файл удалится ниже.
             $uploadedImage = (string) $stored['href'];
             $sectionValues['image'] = $uploadedImage;
+        }
+
+        // Картинки строк (карточки, галерея, карусель, отзывы, партнёры) — тот же выбор файла,
+        // что и у общей картинки блока. Без него человек вписывал путь руками. Адрес кладётся в
+        // поле строки, поэтому дальше он живёт обычным значением items.
+        foreach (pageImageUploadsByRow('items', 'image_file') as $rowIndex => $rowFile) {
+            $stored = pageImageStore($rowFile);
+
+            if (($stored['ok'] ?? false) !== true) {
+                // Уже принятые файлы строк удаляются: форма не оставляет сирот в загрузках.
+                foreach ($uploadedRowImages as $href) {
+                    pageImageDelete($href);
+                }
+
+                if ($uploadedImage !== '') {
+                    pageImageDelete($uploadedImage);
+                }
+
+                finishSectionAction(['ok' => false, 'error' => (string) ($stored['error'] ?? '')], $to, '');
+
+                return;
+            }
+
+            $uploadedRowImages[$rowIndex] = (string) $stored['href'];
+        }
+
+        if ($uploadedRowImages !== [] && is_array($sectionValues['items'] ?? null)) {
+            // Карта «индекс строки → поля файла»: pagesFormRows ждёт значения по ключам строки,
+            // а не готовый адрес — иначе адрес считался бы строкой полей.
+            $rowImagesByKey = [];
+            foreach ($uploadedRowImages as $rowIndex => $href) {
+                $rowImagesByKey[$rowIndex] = ['image' => $href];
+            }
+
+            $itemKeys = [];
+            foreach (pagesKindItemFieldsOf(postString('kind')) as $itemField) {
+                $itemKeys[] = $itemField['key'];
+            }
+
+            $sectionValues['items'] = pagesFormRows(postAll()['items'] ?? [], $itemKeys, $rowImagesByKey);
         }
     }
 
