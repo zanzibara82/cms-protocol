@@ -26,6 +26,8 @@ const ADMIN_CORE_TABS = [
 const ADMIN_SECTIONS_HEAD = '<script src="/assets/js/admin-sections.js" defer></script>';
 // Редакция: автосохранение полей страницы, локальный черновик, heartbeat блокировки и присутствия.
 const ADMIN_EDITORIAL_HEAD = '<script src="/assets/js/admin-editorial.js" defer></script>';
+// Поля файла: имя выбранного файла в строке-плейсхолдере рядом с кнопкой-иконкой (медиатека).
+const FILE_FIELD_HEAD = '<script src="/assets/js/file-field.js" defer></script>';
 
 /** @return list<array{href: string, label: string}> */
 function adminTabs(): array

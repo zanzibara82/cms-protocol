@@ -46,8 +46,14 @@ $max = $maxLength > 0 ? ' maxlength="' . e((string) $maxLength) . '"' : '';
 $fieldId = 'file-' . ($name !== '' ? $name : $fileKey) . '-' . $fileKey;
 
 // Строка пути нужна только там, где человек задаёт адрес картинки текстом. В медиатеке путь
-// решает сервер, поэтому остаётся одна кнопка — и имя поля названия не перетирается.
-$textInput = $name === '' ? '' : '<input class="min-h-[44px] min-w-0 flex-1 ' . e($inputClass) . '" id="' . e($fieldId . '-text') . '"'
+// решает сервер, поэтому строки пути нет — но пустое место рядом с кнопкой оставлять нельзя:
+// поле выглядело иначе, чем соседнее «Название», и было ниже его вдвое. Вместо строки ввода
+// печатается строка-плейсхолдер той же высоты и ширины; имя выбранного файла подставляет
+// /assets/js/file-field.js (CSP запрещает инлайновый код, поэтому поведение живёт в файле).
+$placeholder = '<span class="inline-flex min-h-[44px] min-w-0 flex-1 items-center rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm text-ink/60"'
+    . ' data-file-placeholder>' . ($multiple ? 'Файлы не выбраны' : 'Файл не выбран') . '</span>';
+
+$textInput = $name === '' ? $placeholder : '<input class="min-h-[44px] min-w-0 flex-1 ' . e($inputClass) . '" id="' . e($fieldId . '-text') . '"'
     . ' type="text" name="' . e($name) . '" value="' . e($value) . '"' . $max . '>';
 
 // for подписи указывает на существующий контрол: со строкой пути это текстовая строка, без неё

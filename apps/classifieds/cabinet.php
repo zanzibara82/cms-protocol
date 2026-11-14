@@ -417,7 +417,7 @@ function classifiedsListingNewPage(array $params = []): void
         'attributes' => $attributes,
         'gallery' => [],
         'action' => '/classifieds/cabinet/new',
-    ], ['title' => 'Новое объявление — доска', 'noindex' => true]);
+    ], ['head' => FILE_FIELD_HEAD, 'title' => 'Новое объявление — доска', 'noindex' => true]);
 }
 
 /** @param array<string, string> $params */
@@ -450,7 +450,7 @@ function classifiedsListingEditPage(array $params = []): void
         'attributes' => $attributes,
         'gallery' => classifiedsListingImages($id),
         'action' => '/classifieds/cabinet/' . rawurlencode($id),
-    ], ['title' => 'Правка объявления — доска', 'noindex' => true]);
+    ], ['head' => FILE_FIELD_HEAD, 'title' => 'Правка объявления — доска', 'noindex' => true]);
 }
 
 /**
@@ -553,7 +553,7 @@ function classifiedsListingSaveAction(array $params = []): void
             'attributes' => $attributes,
             'gallery' => $galleryExisting,
             'action' => $action,
-        ], ['title' => 'Форма объявления — доска', 'noindex' => true]);
+        ], ['head' => FILE_FIELD_HEAD, 'title' => 'Форма объявления — доска', 'noindex' => true]);
 
         return;
     }

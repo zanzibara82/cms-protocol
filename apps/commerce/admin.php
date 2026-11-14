@@ -1188,7 +1188,7 @@ function commerceAdminPricebook(array $params = []): void
         'importError' => '',
         'supplier' => '',
         'rows' => commercePricebookRows(null),
-    ], commerceAdminAlert()), ['title' => 'Прайс-лист — магазин', 'noindex' => true]);
+    ], commerceAdminAlert()), ['head' => FILE_FIELD_HEAD, 'title' => 'Прайс-лист — магазин', 'noindex' => true]);
 }
 
 /**
@@ -1270,7 +1270,7 @@ function commercePricebookRenderImport(string $importError, ?array $report, stri
         'importError' => $importError,
         'supplier' => $supplier,
         'rows' => commercePricebookRows(null),
-    ], commerceAdminAlert()), ['title' => 'Прайс-лист — магазин', 'noindex' => true]);
+    ], commerceAdminAlert()), ['head' => FILE_FIELD_HEAD, 'title' => 'Прайс-лист — магазин', 'noindex' => true]);
 }
 
 

@@ -178,6 +178,22 @@ final class Release21HttpTest extends TestCase
         self::assertStringContainsString('min-h-[44px]', $screen['body'], 'Контролы экрана тапабельные');
     }
 
+    // Поле файла в медиатеке печаталось одной кнопкой с иконкой: без строки-плейсхолдера оно
+    // выглядело иначе, чем соседнее «Название», и человек не видел, куда смотреть. Теперь рядом
+    // с кнопкой стоит строка «Файл не выбран» той же высоты, а имя выбранного файла подставляет
+    // внешний скрипт (CSP запрещает инлайновый код).
+    public function testПолеФайлаВМедиатекеПечатаетСтрокуПлейсхолдера(): void
+    {
+        $this->enter();
+
+        $screen = Kernel::get('/admin/media');
+
+        self::assertSame(200, $screen['status']);
+        self::assertStringContainsString('data-file-placeholder', $screen['body'], 'У поля файла есть строка-плейсхолдер');
+        self::assertStringContainsString('Файл не выбран', $screen['body'], 'Плейсхолдер объясняет, что файл не выбран');
+        self::assertStringContainsString('src="/assets/js/file-field.js"', $screen['body'], 'Имя выбранного файла подставляет внешний скрипт');
+    }
+
     // --- Журнал действий ---------------------------------------------------------------------
 
     public function testЖурналПеречисляетДействияРедакции(): void

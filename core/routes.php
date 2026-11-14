@@ -1325,7 +1325,7 @@ function coreAdminMedia(array $params = []): void
         'usageId' => $usageId,
         'usageTitle' => $usageTitle,
         'usage' => $usage,
-    ], ['title' => 'Медиатека — админка', 'noindex' => true]);
+    ], ['head' => FILE_FIELD_HEAD, 'title' => 'Медиатека — админка', 'noindex' => true]);
 }
 
 /** @param array<string, string> $params */
