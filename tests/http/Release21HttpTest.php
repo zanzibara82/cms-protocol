@@ -192,6 +192,21 @@ final class Release21HttpTest extends TestCase
         self::assertStringContainsString('data-file-placeholder', $screen['body'], 'У поля файла есть строка-плейсхолдер');
         self::assertStringContainsString('Файл не выбран', $screen['body'], 'Плейсхолдер объясняет, что файл не выбран');
         self::assertStringContainsString('src="/assets/js/file-field.js"', $screen['body'], 'Имя выбранного файла подставляет внешний скрипт');
+
+        // Рамку несёт вся строка, а иконка стоит внутри неё. Пока кнопка была снаружи, рамка
+        // поля была уже соседнего ровно на её ширину: замер дал 413 px против 465 у «Названия»
+        // (кнопка 44 плюс зазор 8). Проверка держит именно это — раздельные обёртки вернули бы
+        // узкую рамку, и глазами это видно только рядом с соседним полем.
+        self::assertMatchesRegularExpression(
+            '~<label class="[^"]*\bw-full\b[^"]*"[^>]*for="file-file-file"[^>]*>\s*<span[^>]*data-file-placeholder~u',
+            $screen['body'],
+            'Строка-плейсхолдер накрывает всю ширину поля, а не только текст'
+        );
+        self::assertMatchesRegularExpression(
+            '~data-file-placeholder[^<]*</span>\s*<span[^>]*>\s*<svg~u',
+            $screen['body'],
+            'Иконка папки стоит внутри той же строки, что плейсхолдер'
+        );
     }
 
     // --- Журнал действий ---------------------------------------------------------------------

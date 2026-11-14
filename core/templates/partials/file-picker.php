@@ -47,14 +47,46 @@ $fieldId = 'file-' . ($name !== '' ? $name : $fileKey) . '-' . $fileKey;
 
 // Строка пути нужна только там, где человек задаёт адрес картинки текстом. В медиатеке путь
 // решает сервер, поэтому строки пути нет — но пустое место рядом с кнопкой оставлять нельзя:
-// поле выглядело иначе, чем соседнее «Название», и было ниже его вдвое. Вместо строки ввода
-// печатается строка-плейсхолдер той же высоты и ширины; имя выбранного файла подставляет
-// /assets/js/file-field.js (CSP запрещает инлайновый код, поэтому поведение живёт в файле).
-$placeholder = '<span class="inline-flex min-h-[44px] min-w-0 flex-1 items-center rounded-lg border border-ink/20 bg-white px-3 py-2 text-sm text-ink/60"'
-    . ' data-file-placeholder>' . ($multiple ? 'Файлы не выбраны' : 'Файл не выбран') . '</span>';
+// поле выглядело иначе, чем соседнее «Название», и было ниже его вдвое.
+//
+// Рамку несёт ВСЯ строка, а кнопка стоит внутри неё. Пока кнопка была снаружи, рамка поля была
+// уже соседнего: 413 px против 465 — ровно кнопка (44) и зазор (8). Подпись накрывает строку
+// целиком, поэтому зона нажатия — 44 px по высоте и вся ширина по горизонтали: промахнуться по
+// иконке нельзя, а без скрипта кнопка работает (label открывает выбор файла сам).
+// Имя выбранного файла подставляет /assets/js/file-field.js: CSP запрещает инлайновый код.
+//
+// Иконка нарисована прямо в подписи, а не подставлена переменной: страж FilePickerIconTest
+// проверяет исходник шаблона и за переменной svg не видит — «кнопка без иконки» ложно сработала
+// бы на исправной разметке.
 
-$textInput = $name === '' ? $placeholder : '<input class="min-h-[44px] min-w-0 flex-1 ' . e($inputClass) . '" id="' . e($fieldId . '-text') . '"'
-    . ' type="text" name="' . e($name) . '" value="' . e($value) . '"' . $max . '>';
+// Рамка общая на всю строку, поэтому обе формы занимают ту же ширину, что соседние поля.
+$rowClass = 'mt-1.5 flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-lg border border-ink/20 bg-white pl-3 pr-1 text-sm';
+
+// Форма без строки пути: подпись накрывает всю строку и открывает выбор файла — промахнуться по
+// иконке нельзя. Внутри подписи нет других контролов, поэтому разметка допустимая. Иконка
+// нарисована здесь, а не переменной: страж проверяет исходник и за переменной svg не видит.
+$placeholderRow = '<label class="' . $rowClass . ' cursor-pointer" for="' . e($fieldId) . '">'
+    . '<span class="min-w-0 flex-1 truncate text-ink/60" data-file-placeholder>'
+    . ($multiple ? 'Файлы не выбраны' : 'Файл не выбран') . '</span>'
+    . '<span class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center text-ink/70" aria-hidden="true">'
+    . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">'
+    . '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
+    . '</svg></span>'
+    . '</label>';
+
+// Форма со строкой пути: рамку несёт обёртка, а поле ввода внутри без своей рамки — иначе рамка
+// поля была бы уже соседних полей ровно на ширину кнопки.
+$textRow = '<div class="' . $rowClass . '">'
+    . '<input class="min-h-[44px] w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-sm focus:outline-none"'
+    . ' id="' . e($fieldId . '-text') . '" type="text" name="' . e($name) . '" value="' . e($value) . '"' . $max . '>'
+    . '<label class="inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-ink/70 hover:bg-ink/5"'
+    . ' for="' . e($fieldId) . '" title="' . e($buttonTitle) . '">'
+    . '<span class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center" aria-hidden="true">'
+    . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">'
+    . '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
+    . '</svg></span>'
+    . '<span class="sr-only">' . e($buttonTitle) . '</span></label>'
+    . '</div>';
 
 // for подписи указывает на существующий контрол: со строкой пути это текстовая строка, без неё
 // подпись не нужна вовсе — доступное имя даёт label-кнопка, и второй label с тем же for создал бы
@@ -63,21 +95,13 @@ $caption = $name === ''
     ? '<span class="block text-sm"><span class="block font-medium">' . $label . '</span></span>'
     : '<label class="block text-sm" for="' . e($fieldId . '-text') . '"><span class="block font-medium">' . $label . '</span></label>';
 
-// Вложенных <label> быть не может: внешний label-обёртка и label-кнопка внутри него дают
-// недопустимую разметку и путают браузер. Поэтому подпись и строка с полем лежат рядом.
+// Вложенных <label> быть не может: подпись-кнопка внутри другой подписи даёт недопустимую
+// разметку и путает браузер. Поэтому подпись и строка с полем лежат рядом.
 $content = '<div class="space-y-2">' . $preview
     . $caption
-    . '<div class="flex items-start gap-2">'
-    . $textInput
     . '<input class="sr-only" id="' . e($fieldId) . '" type="file" name="' . e($fileKey) . '"'
     . ' accept="' . e($accept) . '"' . ($multiple ? ' multiple' : '') . ($required ? ' required' : '') . '>'
-    . '<label class="inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5"'
-    . ' for="' . e($fieldId) . '" title="' . e($buttonTitle) . '">'
-    . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">'
-    . '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
-    . '</svg>'
-    . '<span class="sr-only">' . e($buttonTitle) . '</span></label>'
-    . '</div>'
+    . ($name === '' ? $placeholderRow : $textRow)
     . ($hint !== '' ? '<span class="block text-ink/60">' . $hint . '</span>' : '')
     . '</div>';
 ?>
