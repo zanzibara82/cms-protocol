@@ -130,7 +130,8 @@ if ($previewTokens !== []) {
 $previewSection .= '</section>';
 
 // Буфер обмена: скопированная секция лежит в базе за пользователем и переживает перезапуск.
-// Вставить её можно на любую страницу — форма ведёт на текущий редактор.
+// Вставить её можно на любую страницу — форма ведёт на текущий редактор. Отмена копии —
+// отдельная форма: две кнопки в одной форме отправили бы одно и то же действие.
 $clipboardSection = '';
 
 if ($clipboard !== null) {
@@ -138,10 +139,16 @@ if ($clipboard !== null) {
         . '<h2 class="font-semibold">Буфер обмена</h2>'
         . '<p class="mt-1.5 text-sm text-ink/70">Скопирована секция «' . e((string) $clipboard['label']) . '» ('
         . e(formatRuDateTime(fromDb((string) $clipboard['updated_at']))) . ').</p>'
-        . '<form class="mt-3" method="post" action="' . e($target) . '">' . csrfField()
+        . '<div class="mt-3 flex flex-wrap items-center gap-2">'
+        . '<form method="post" action="' . e($target) . '">' . csrfField()
         . '<input type="hidden" name="op" value="paste-section">'
         . '<button class="inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-3 py-1.5 text-sm hover:bg-ink/5" type="submit">Вставить секцию на эту страницу</button>'
-        . '</form></section>';
+        . '</form>'
+        . '<form method="post" action="' . e($target) . '">' . csrfField()
+        . '<input type="hidden" name="op" value="clear-clipboard">'
+        . '<button class="inline-flex min-h-[44px] items-center rounded-lg px-3 py-1.5 text-sm text-bad hover:bg-bad/10" type="submit">Отменить копию</button>'
+        . '</form>'
+        . '</div></section>';
 }
 
 $sectionsCard = '<section class="rounded-lg border border-ink/10 bg-white p-4">'

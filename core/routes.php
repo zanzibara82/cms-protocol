@@ -784,6 +784,7 @@ function coreAdminPagesAction(array $params = []): void
         'duplicate-section' => duplicateSection(postString('section'), $revisionMeta),
         'copy-section' => clipboardCopy($editorId, postString('section')),
         'paste-section' => clipboardPaste($editorId, $pageId),
+        'clear-clipboard' => clipboardClear($editorId),
         'preview-revoke' => previewTokenRevoke(postString('token'), $pageId),
         default => ['ok' => false, 'error' => 'Неизвестное действие.'],
     };
@@ -831,6 +832,7 @@ function coreAdminPagesAction(array $params = []): void
         'duplicate-section' => 'section_duplicated',
         'copy-section' => 'section_copied',
         'paste-section' => 'section_pasted',
+        'clear-clipboard' => 'clipboard_cleared',
         'preview-revoke' => 'preview_revoked',
         default => '',
     };

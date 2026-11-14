@@ -222,6 +222,48 @@ final class Release21Test extends TestCase
         self::assertSame(0, (int) value('SELECT COUNT(*) FROM ' . t('page_section') . ' WHERE page_id = ?', [(string) $page['id']]));
     }
 
+    // Отмена копии освобождает слот: без неё единственный способ убрать буфер — скопировать
+    // другую секцию, то есть затереть его, а не отменить.
+    public function testОтменаКопииОчищаетБуфер(): void
+    {
+        $page = createPage(['slug' => 'otmena-kopii', 'title' => 'Отмена', 'status' => PAGES_STATUS_DRAFT]);
+        $section = createSection((string) $page['id'], ['sec_key' => 'otmenit', 'kind' => 'text', 'title' => 'Отменить']);
+        clipboardCopy('user-1', (string) $section['id']);
+        self::assertNotNull(clipboardGet('user-1'), 'Перед отменой буфер заполнен');
+
+        $cleared = clipboardClear('user-1');
+
+        self::assertTrue($cleared['ok'], 'Буфер обязан очиститься: ' . $cleared['error']);
+        self::assertNull(clipboardGet('user-1'), 'После отмены слот пуст');
+
+        $paste = clipboardPaste('user-1', (string) $page['id']);
+        self::assertFalse($paste['ok'], 'После отмены вставлять нечего');
+        self::assertStringContainsString('Буфер пуст', $paste['error']);
+    }
+
+    // Повторное нажатие — обычное дело (двойной клик, перезагрузка формы). Отказ на пустом
+    // буфере выглядел бы поломкой: очищать уже нечего, и это не ошибка.
+    public function testОтменаПустогоБуфераНеОтказывает(): void
+    {
+        $result = clipboardClear('user-pustoy');
+
+        self::assertTrue($result['ok'], 'Очистка пустого буфера — не ошибка: ' . $result['error']);
+    }
+
+    // Буфер персональный: отмена одного редактора не должна стирать копию другого.
+    public function testОтменаКопииНеТрогаетЧужойБуфер(): void
+    {
+        $page = createPage(['slug' => 'chuzhoy-bufer', 'title' => 'Чужой', 'status' => PAGES_STATUS_DRAFT]);
+        $section = createSection((string) $page['id'], ['sec_key' => 'chuzhaya', 'kind' => 'text', 'title' => 'Чужая']);
+        clipboardCopy('user-1', (string) $section['id']);
+        clipboardCopy('user-2', (string) $section['id']);
+
+        clipboardClear('user-1');
+
+        self::assertNull(clipboardGet('user-1'));
+        self::assertNotNull(clipboardGet('user-2'), 'Отмена чистит только свой слот');
+    }
+
     // --- Массовые операции -------------------------------------------------------------------
 
     public function testМассоваяСменаСтатусаМеняетТолькоОтмеченные(): void

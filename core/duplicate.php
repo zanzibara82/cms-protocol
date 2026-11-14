@@ -183,6 +183,28 @@ function clipboardGet(string $userId): ?array
 }
 
 /**
+ * Отмена копии: слот буфера освобождается. Пустой слот — не ошибка (двойное нажатие, повтор
+ * формы после перезагрузки): очищать нечего, а отказ выглядел бы поломкой.
+ *
+ * @return array{ok: bool, error: string, notice: string}
+ */
+function clipboardClear(string $userId): array
+{
+    try {
+        run('DELETE FROM ' . t('clipboard') . ' WHERE user_id = ?', [$userId]);
+    } catch (Throwable $error) {
+        logError('clipboard.clear_failed', ['message' => $error->getMessage()]);
+
+        return ['ok' => false, 'error' => 'Буфер не очистился — повторите попытку.', 'notice' => ''];
+    }
+
+    auditLog('section.uncopy', 'section', '', [], 'Буфер обмена секций очищен');
+    logInfo('pages.clipboard_cleared', ['userId' => $userId]);
+
+    return ['ok' => true, 'error' => '', 'notice' => 'clipboard_cleared'];
+}
+
+/**
  * @return array{ok: bool, error: string, notice: string, id: string}
  */
 function clipboardPaste(string $userId, string $pageId): array

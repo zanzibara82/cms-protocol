@@ -368,4 +368,55 @@ final class Release21HttpTest extends TestCase
         self::assertCount(1, $copies, 'Копия создана');
         self::assertSame(PAGES_STATUS_DRAFT, (string) $copies[0]['status'], 'Копия не публикуется сама');
     }
+
+    // --- Буфер обмена: кнопка отмены ----------------------------------------------------------
+
+    // У буфера есть только «вставить»: убрать скопированное можно было лишь копированием другой
+    // секции. Отмена — отдельная кнопка рядом со вставкой.
+    public function testЭкранСтраницыПечатаетКнопкуОтменыБуфера(): void
+    {
+        $page = createPage(['slug' => 'bufer-knopka', 'title' => 'Буфер', 'status' => PAGES_STATUS_DRAFT]);
+        $section = createSection((string) $page['id'], ['sec_key' => 'kopiya', 'kind' => 'text', 'title' => 'Копия']);
+
+        // Учётка из входа: слот буфера принадлежит ей, иначе блок на экране не появится.
+        $user = one('SELECT id FROM ' . t('user') . ' WHERE email = ?', ['admin@school.dev']);
+        self::assertNotNull($user);
+        clipboardCopy((string) $user['id'], (string) $section['id']);
+
+        $this->enter();
+        $screen = Kernel::get('/admin/pages/' . (string) $page['id']);
+
+        self::assertSame(200, $screen['status']);
+        self::assertStringContainsString('Буфер обмена', $screen['body'], 'Блок буфера виден при заполненном слоте');
+        self::assertStringContainsString('name="op" value="clear-clipboard"', $screen['body'], 'У буфера есть кнопка отмены');
+        self::assertStringContainsString('Отменить копию', $screen['body'], 'Кнопка названа человеческим языком');
+    }
+
+    public function testОтменаКопииЧерезФормуОчищаетБуфер(): void
+    {
+        $page = createPage(['slug' => 'bufer-otmena', 'title' => 'Отмена', 'status' => PAGES_STATUS_DRAFT]);
+        $section = createSection((string) $page['id'], ['sec_key' => 'ubrat', 'kind' => 'text', 'title' => 'Убрать']);
+        $user = one('SELECT id FROM ' . t('user') . ' WHERE email = ?', ['admin@school.dev']);
+        self::assertNotNull($user);
+        clipboardCopy((string) $user['id'], (string) $section['id']);
+
+        $this->enter();
+        $response = $this->press('/admin/pages/' . (string) $page['id'], ['op' => 'clear-clipboard']);
+
+        self::assertSame(302, $response['status']);
+        self::assertStringContainsString('clipboard_cleared', (string) ($response['headers']['location'] ?? ''), 'Успех уходит ключом уведомления');
+        self::assertNull(clipboardGet((string) $user['id']), 'Буфер очищен');
+    }
+
+    // Кнопка есть только когда есть что отменять: пустой буфер не показывает ни вставку, ни отмену.
+    public function testПустойБуферНеПечатаетБлокОтмены(): void
+    {
+        $page = createPage(['slug' => 'bufer-pust', 'title' => 'Пусто', 'status' => PAGES_STATUS_DRAFT]);
+        $this->enter();
+
+        $screen = Kernel::get('/admin/pages/' . (string) $page['id']);
+
+        self::assertSame(200, $screen['status']);
+        self::assertStringNotContainsString('clear-clipboard', $screen['body'], 'Пустой буфер не предлагает отмену');
+    }
 }
