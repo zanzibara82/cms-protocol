@@ -28,6 +28,7 @@ declare(strict_types=1);
  * @var int $maxLength предел длины пути, 0 — без ограничения
  * @var string $accept какие файлы принимать (по умолчанию картинки)
  * @var bool $required нативная проверка браузера: без файла форма не уходит
+ * @var bool $multiple выбирать несколько файлов сразу (галерея объявления)
  */
 $name = (string) ($name ?? 'image');
 $fileKey = (string) ($fileKey ?? 'image_file');
@@ -40,6 +41,7 @@ $preview = (string) ($preview ?? '');
 $maxLength = (int) ($maxLength ?? 0);
 $accept = (string) ($accept ?? 'image/jpeg,image/png,image/webp');
 $required = (bool) ($required ?? false);
+$multiple = (bool) ($multiple ?? false);
 $max = $maxLength > 0 ? ' maxlength="' . e((string) $maxLength) . '"' : '';
 $fieldId = 'file-' . ($name !== '' ? $name : $fileKey) . '-' . $fileKey;
 
@@ -62,7 +64,7 @@ $content = '<div class="space-y-2">' . $preview
     . '<div class="flex items-start gap-2">'
     . $textInput
     . '<input class="sr-only" id="' . e($fieldId) . '" type="file" name="' . e($fileKey) . '"'
-    . ' accept="' . e($accept) . '"' . ($required ? ' required' : '') . '>'
+    . ' accept="' . e($accept) . '"' . ($multiple ? ' multiple' : '') . ($required ? ' required' : '') . '>'
     . '<label class="inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-lg border border-ink/20 bg-white hover:bg-ink/5"'
     . ' for="' . e($fieldId) . '" title="' . e($buttonTitle) . '">'
     . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">'

@@ -231,22 +231,31 @@ if ((string) $form['image'] !== '') {
 }
 
 $content .= $currentImage
-    . '<label class="block" for="image">'
-    . '<span class="mb-1 block text-sm text-ink/70">Главное изображение (jpg, png или webp до 5 МБ)</span>'
-    . '<input class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="image" name="image" type="file"'
-    . ' accept="image/jpeg,image/png,image/webp"' . $invalid('image') . '>'
+    . '<div class="space-y-2">'
+    . partial('partials/file-picker', [
+        'name' => '',
+        'fileKey' => 'image',
+        'label' => 'Главное изображение (jpg, png или webp до 5 МБ)',
+        'hint' => '',
+        'buttonTitle' => 'Выбрать главное изображение',
+    ])
     . $error('image')
-    . '</label>';
+    . '</div>';
 
 $content .= '<div class="space-y-3">'
     . '<p class="text-sm text-ink/70">Дополнительные изображения — до ' . e((string) CLASSIFIEDS_GALLERY_MAX) . ' штук</p>'
     . $galleryHtml
-    . '<label class="block" for="images">'
-    . '<span class="mb-1 block text-sm text-ink/70">Добавить изображения (jpg, png или webp)</span>'
-    . '<input class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white px-3 py-2" id="images" name="images[]" type="file"'
-    . ' accept="image/jpeg,image/png,image/webp" multiple' . $invalid('gallery') . '>'
+    . '<div class="space-y-2">'
+    . partial('partials/file-picker', [
+        'name' => '',
+        'fileKey' => 'images[]',
+        'label' => 'Добавить изображения (jpg, png или webp)',
+        'hint' => '',
+        'buttonTitle' => 'Выбрать изображения',
+        'multiple' => true,
+    ])
     . $error('gallery')
-    . '</label>'
+    . '</div>'
     . '</div>'
     . '<label class="block" for="status">'
     . '<span class="mb-1 block text-sm text-ink/70">Статус</span>'
