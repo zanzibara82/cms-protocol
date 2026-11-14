@@ -5,6 +5,7 @@ declare(strict_types=1);
 /** @var list<array<string, mixed>> $sections */
 /** @var string $target POST-адрес действий секции: у главной и у страницы он свой */
 /** @var list<array{kind: string, name: string, fields: list<array{key: string, label: string, hint: string}>}> $kinds */
+/** @var int $version */
 
 // Секции страницы в конструкторе: у каждой — форма правки полей (сохранение) и кнопки порядка,
 // видимости и удаления (отдельные формы: формы нельзя вкладывать друг в друга). Повторные
@@ -64,8 +65,8 @@ $field = static function (string $name, string $value): string {
 };
 
 /** Кнопка-форма действия: свой op и свои скрытые поля, без вложенных форм. */
-$actionForm = static function (string $op, array $hidden, string $label, string $classes) use ($target, $field): string {
-    $fields = '';
+$actionForm = static function (string $op, array $hidden, string $label, string $classes) use ($target, $field, $version): string {
+    $fields = $field('expected_version', (string) $version);
     foreach ($hidden as $name => $value) {
         $fields .= $field($name, (string) $value);
     }
@@ -136,7 +137,7 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
  * пустым массивом: op — create-section, вид выбирается селектом, а поля вида появятся после
  * создания и перезагрузки (JS не угадывает состав строк).
  */
-$sectionForm = static function (array $section) use ($input, $target, $kindSelect, $kindFields, $buttonsRows, $itemsRows, $layoutSelect): string {
+$sectionForm = static function (array $section) use ($input, $target, $kindSelect, $kindFields, $buttonsRows, $itemsRows, $layoutSelect, $field, $version): string {
     $exists = (string) ($section['id'] ?? '') !== '';
     $id = $exists ? '<input type="hidden" name="section" value="' . e((string) $section['id']) . '">' : '';
     $op = $exists ? 'save-section' : 'create-section';
@@ -183,7 +184,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
             . '<label class="order-1 block text-sm sm:col-start-1 sm:row-start-2"><span class="block font-medium">Примечание</span>'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="note" value="' . e($values('note')) . '"></label>'
             . $imagePreviewBlock
-            . '<div class="order-3 text-sm sm:col-start-2 sm:row-start-2"><label class="font-medium" for="' . e($imageFieldId) . '">Картинка</label>'
+            . '<div class="order-3 text-sm sm:col-start-2 sm:row-start-2"><span class="block font-medium">Картинка</span>'
             . '<div class="mt-1.5 flex items-start gap-2">'
             . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="image" value="' . e($values('image')) . '">'
             . '<input class="sr-only" id="' . e($imageFieldId) . '" type="file" name="image_file" accept="image/jpeg,image/png,image/webp">'
@@ -215,7 +216,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
     $layoutBlock = $allows('layout') ? $layoutSelect($section) : '';
 
     return '<form class="mt-3 space-y-3" method="post" action="' . e($target) . '" enctype="multipart/form-data" data-section-form>' . csrfField()
-        . '<input type="hidden" name="op" value="' . e($op) . '">' . $id
+        . '<input type="hidden" name="op" value="' . e($op) . '">' . $id . $field('expected_version', (string) $version)
         . '<div class="grid gap-3 sm:grid-cols-2">'
         . '<label class="block text-sm"><span class="font-medium">Вид</span>' . $kindSelect($exists ? (string) $section['kind'] : '') . '</label>'
         . '<label class="block text-sm"><span class="block font-medium">Якорь</span>'
