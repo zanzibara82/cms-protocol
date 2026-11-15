@@ -59,8 +59,10 @@ $fieldId = 'file-' . ($name !== '' ? $name : $fileKey) . '-' . $fileKey;
 // проверяет исходник шаблона и за переменной svg не видит — «кнопка без иконки» ложно сработала
 // бы на исправной разметке.
 
-// Рамка общая на всю строку, поэтому обе формы занимают ту же ширину, что соседние поля.
-$rowClass = 'mt-1.5 flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-lg border border-ink/20 bg-white pl-3 pr-1 text-sm';
+// Рамка общей строки-плейсхолдера: высота задана самой обёртке (h-11 = 44 px вместе с рамкой,
+// box-sizing: border-box), а внутренние элементы высоту не навязывают. Иначе 44 px содержимого
+// плюс два пикселя рамки давали 46 — на два выше соседних полей.
+$rowClass = 'mt-1.5 flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border border-ink/20 bg-white pl-3 pr-1 text-sm';
 
 // Форма без строки пути: подпись накрывает всю строку и открывает выбор файла — промахнуться по
 // иконке нельзя. Внутри подписи нет других контролов, поэтому разметка допустимая. Иконка
@@ -68,18 +70,20 @@ $rowClass = 'mt-1.5 flex min-h-[44px] w-full min-w-0 items-center gap-2 rounded-
 $placeholderRow = '<label class="' . $rowClass . ' cursor-pointer" for="' . e($fieldId) . '">'
     . '<span class="min-w-0 flex-1 truncate text-ink/60" data-file-placeholder>'
     . ($multiple ? 'Файлы не выбраны' : 'Файл не выбран') . '</span>'
-    . '<span class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center text-ink/70" aria-hidden="true">'
+    . '<span class="inline-flex h-9 w-11 shrink-0 items-center justify-center text-ink/70" aria-hidden="true">'
     . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">'
     . '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
     . '</svg></span>'
     . '</label>';
 
-// Форма со строкой пути: рамку несёт обёртка, а поле ввода внутри без своей рамки — иначе рамка
-// поля была бы уже соседних полей ровно на ширину кнопки.
-$textRow = '<div class="' . $rowClass . '">'
-    . '<input class="min-h-[44px] w-full min-w-0 flex-1 border-0 bg-transparent p-0 text-sm focus:outline-none"'
+// Форма со строкой пути: рамку несёт само поле ввода, а кнопка лежит поверх него справа
+// (absolute внутри relative-обёртки, у поля — pr-12 под неё). Так высота поля равна соседним
+// (min-h-[44px] вместе с рамкой), тогда как рамка на обёртке давала 46 px: 44 содержимого плюс
+// два пикселя её собственной рамки.
+$textRow = '<div class="relative mt-1.5">'
+    . '<input class="min-h-[44px] w-full rounded-lg border border-ink/20 bg-white pl-3 pr-12 py-2 text-sm"'
     . ' id="' . e($fieldId . '-text') . '" type="text" name="' . e($name) . '" value="' . e($value) . '"' . $max . '>'
-    . '<label class="inline-flex min-h-[44px] min-w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-ink/70 hover:bg-ink/5"'
+    . '<label class="absolute right-1 top-1/2 inline-flex min-h-[44px] min-w-[44px] -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-ink/70 hover:bg-ink/5"'
     . ' for="' . e($fieldId) . '" title="' . e($buttonTitle) . '">'
     . '<span class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center" aria-hidden="true">'
     . '<svg width="20" height="20" viewBox="0 0 24 24" fill="none">'
@@ -97,12 +101,15 @@ $caption = $name === ''
 
 // Вложенных <label> быть не может: подпись-кнопка внутри другой подписи даёт недопустимую
 // разметку и путает браузер. Поэтому подпись и строка с полем лежат рядом.
-$content = '<div class="space-y-2">' . $preview
+// Отступы заданы явно, а не обёрткой space-y-2: она давала 8 px там, где у обычных полей
+// mt-1.5 — 6 px, и строка картинки отставала от соседних полей на 3 px. В строке карточек поля
+// стоят рядом, и такая разница видна как разъехавшиеся подписи.
+$content = '<div>' . ($preview !== '' ? '<div class="mb-2">' . $preview . '</div>' : '')
     . $caption
     . '<input class="sr-only" id="' . e($fieldId) . '" type="file" name="' . e($fileKey) . '"'
     . ' accept="' . e($accept) . '"' . ($multiple ? ' multiple' : '') . ($required ? ' required' : '') . '>'
     . ($name === '' ? $placeholderRow : $textRow)
-    . ($hint !== '' ? '<span class="block text-ink/60">' . $hint . '</span>' : '')
+    . ($hint !== '' ? '<span class="mt-1.5 block text-ink/60">' . $hint . '</span>' : '')
     . '</div>';
 ?>
 <?= $content /* @safe html */ ?>

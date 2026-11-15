@@ -908,6 +908,50 @@ final class PagesAdminTest extends TestCase
         self::assertStringNotContainsString('lg:grid-cols-5', $body, 'прежний ряд из пяти колонок убран');
     }
 
+    public function testСтрокиБлокаВыровненыПоПолюКартинки(): void
+    {
+        $page = createPage([
+            'title' => 'Строки выровнены',
+            'slug' => 'stroki-vyrovneny',
+            'description' => '',
+            'status' => 'PUBLISHED',
+            'noindex' => '0',
+        ], nowUtc());
+
+        createSection((string) $page['id'], [
+            'kind' => 'cards',
+            'anchor' => '',
+            'badge' => '',
+            'title' => 'Карточки',
+            'lead_text' => '',
+            'note' => '',
+            'image' => '',
+            'image_alt' => '',
+            'buttons' => [],
+            'items' => [],
+            'settings' => [],
+            'visible' => true,
+        ], nowUtc());
+
+        $this->login();
+        $body = Kernel::get('/admin/pages/' . (string) $page['id'])['body'];
+
+        // Ячейка картинки выше соседних: под её полем стоит подсказка. При выравнивании по низу
+        // (items-end) подпись картинки уезжала вверх, а «Заголовок» и «Текст» — вниз, и поля
+        // строки выглядели разъехавшимися. Выравнивание по верху ставит все подписи на одну
+        // линию, а подсказка картинки свисает ниже, не сдвигая соседей.
+        self::assertStringContainsString(
+            'grid items-start gap-2 sm:grid-cols-2 lg:grid-cols-3" data-item-row=',
+            $body,
+            'ячейки строки выровнены по верхнему краю — по подписи поля картинки'
+        );
+        self::assertStringNotContainsString(
+            'grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-3',
+            $body,
+            'выравнивание по низу убрано'
+        );
+    }
+
     public function testКартинкаБлокаПоказываетсяПревьюНадПолем(): void
     {
         $page = createPage([

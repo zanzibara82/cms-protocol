@@ -101,6 +101,11 @@ $buttonsRows = static function (array $rows) use ($input): string {
  * «гибкое расписа…»), и человек не видел, что вписал. Две строки читаются целиком, а на узком
  * экране сетка складывается в одну колонку.
  *
+ * Выравнивание по верхнему краю (items-start), а не по низу: ячейка картинки выше соседних —
+ * под её полем стоит подсказка. При выравнивании по низу подпись картинки уезжала вверх, а
+ * «Заголовок» и «Текст» вниз, и поля строки выглядели разъехавшимися. По верху все подписи
+ * стоят на одной линии, а подсказка свисает ниже, не сдвигая соседей.
+ *
  * Поле картинки строки получает тот же выбор файла, что и общая картинка блока
  * (partials/file-picker): без него путь вписывали руками. Имена файлов повторяются с индексом
  * строки (`items[0][image_file]`), поэтому PHP собирает их вложенным массивом, а сервер читает
@@ -117,7 +122,7 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
 
     $rowsHtml = '';
     foreach (array_merge($rows, [$empty]) as $index => $row) {
-        $rowsHtml .= '<div class="grid items-end gap-2 sm:grid-cols-2 lg:grid-cols-3" data-item-row="' . e((string) $index) . '">';
+        $rowsHtml .= '<div class="grid items-start gap-2 sm:grid-cols-2 lg:grid-cols-3" data-item-row="' . e((string) $index) . '">';
         foreach ($fields as $field) {
             $key = $field['key'];
             $value = (string) ($row[$key] ?? '');
