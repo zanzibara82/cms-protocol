@@ -115,21 +115,25 @@ if ($overview) {
             . ' <span class="text-ink/50">' . e($when($row['publish_at'])) . ' (' . e((string) $row['timezone']) . ')</span></li>';
     }
 
-    $overviewHtml = '<div class="grid gap-4 lg:grid-cols-2">'
-        . '<section class="rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Очередь редакции</h2>'
+    // min-w-0 у каждой ячейки, а не у сетки: у grid-элемента `min-width` по умолчанию `auto`,
+    // поэтому секция с таблицей `min-w-[34rem]` не сжималась и распирала документ до 594 px при
+    // окне 360 — на телефоне секции обрезались, а не прокручивались. Класс на самой сетке этого
+    // не лечит: сетка уже была 313 px, шире были её ячейки.
+    $overviewHtml = '<div class="grid min-w-0 gap-4 lg:grid-cols-2">'
+        . '<section class="min-w-0 rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Очередь редакции</h2>'
         . ($queueRows === ''
             ? '<p class="mt-2 text-sm text-ink/60">Очередь пуста: откройте материал в конструкторе и отправьте его на проверку.</p>'
             : '<div class="mt-2 overflow-x-auto"><table class="w-full min-w-[34rem] text-sm"><thead><tr class="border-b border-ink/10 text-left text-ink/60"><th class="py-2 pr-3 pl-4 font-medium">Материал</th><th class="py-2 pr-3 font-medium">Стадия</th><th class="py-2 pr-3 font-medium">Кто</th><th class="py-2 pr-4 font-medium">Когда</th></tr></thead><tbody>' . $queueRows . '</tbody></table></div>')
         . '</section>'
-        . '<section class="rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Последние ревизии</h2>'
+        . '<section class="min-w-0 rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Последние ревизии</h2>'
         . ($historyRows === ''
             ? '<p class="mt-2 text-sm text-ink/60">История пока пуста. Первая ревизия появится при сохранении материала.</p>'
             : '<div class="mt-2 overflow-x-auto"><table class="w-full min-w-[34rem] text-sm"><thead><tr class="border-b border-ink/10 text-left text-ink/60"><th class="py-2 pr-3 pl-4 font-medium">Материал</th><th class="py-2 pr-3 font-medium">Версия</th><th class="py-2 pr-3 font-medium">Автор</th><th class="py-2 pr-4 font-medium">Когда</th></tr></thead><tbody>' . $historyRows . '</tbody></table></div>')
         . '</section>'
-        . '<section class="rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Кто сейчас редактирует</h2>'
+        . '<section class="min-w-0 rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Кто сейчас редактирует</h2>'
         . ($lockRows === '' ? '<p class="mt-2 text-sm text-ink/60">Активных блокировок нет.</p>' : '<ul class="mt-2">' . $lockRows . '</ul>')
         . '</section>'
-        . '<section class="rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Ближайшие публикации</h2>'
+        . '<section class="min-w-0 rounded-lg border border-ink/10 bg-white p-4"><h2 class="font-semibold">Ближайшие публикации</h2>'
         . ($upcomingRows === '' ? '<p class="mt-2 text-sm text-ink/60">Расписание пусто.</p>' : '<ul class="mt-2">' . $upcomingRows . '</ul>')
         . '</section></div>';
 
