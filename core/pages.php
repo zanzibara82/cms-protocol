@@ -274,7 +274,20 @@ function pageSlugTaken(string $slug, string $excludeId = ''): bool
 {
     $sql = 'SELECT COUNT(*) FROM ' . t('page') . ' WHERE slug = ?' . ($excludeId !== '' ? ' AND id <> ?' : '');
 
-    return (int) value($sql, $excludeId !== '' ? [$slug, $excludeId] : [$slug]) > 0;
+    if ((int) value($sql, $excludeId !== '' ? [$slug, $excludeId] : [$slug]) > 0) {
+        return true;
+    }
+
+    // RELEASE 2.3: адрес активного типа записей — такой же публичный первый сегмент, как страница.
+    // Две сущности на одном /{slug} сделали бы одну из них недоступной; архивный тип адрес не держит.
+    if (function_exists('contentTableExists') && contentTableExists('content_type')) {
+        return (int) value(
+            'SELECT COUNT(*) FROM ' . t('content_type') . ' WHERE slug = ? AND archived_at IS NULL',
+            [$slug]
+        ) > 0;
+    }
+
+    return false;
 }
 
 /** Занятость ключа секции в пределах одной страницы (решение 2 штурма). */

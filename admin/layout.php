@@ -9,6 +9,7 @@ const ADMIN_CORE_TABS = [
     ['href' => '/admin', 'label' => 'Сводка'],
     ['href' => '/admin/pages', 'label' => 'Страницы'],
     ['href' => '/admin/editorial', 'label' => 'Редакция'],
+    ['href' => '/admin/content', 'label' => 'Контент'],
     ['href' => '/admin/notifications', 'label' => 'Уведомления'],
     ['href' => '/admin/media', 'label' => 'Медиатека'],
     ['href' => '/admin/trash', 'label' => 'Корзина'],

@@ -159,7 +159,10 @@ function globalSearch(string $query): array
         searchAddGroup($result, 'Заявки', $items);
     }
 
-    return $result;
+    // RELEASE 2.3: записи пользовательских типов и глобальные блоки добавляет подписчик фильтра.
+    $filtered = applyFilters('search_groups', $result, $q, $like, $escape);
+
+    return is_array($filtered) ? $filtered : $result;
 }
 
 /**

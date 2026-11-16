@@ -53,6 +53,20 @@ final class RouterTest extends TestCase
         self::assertSame('newsSingle', matchRoute('GET', '/news/sobytiya')['handler']);
     }
 
+    // RELEASE 2.3: /{type}/{entry} зарегистрирован ядром раньше маршрутов разделов. Вес шаблона
+    // обязан поставить /news/{slug} перед ним, иначе новость с адресом «news/sobytiya» не открылась
+    // бы вовсе — маршрут записей пользовательского типа перехватил бы первый сегмент.
+    public function staticSegmentsBeatGenericEntryRoute(): void
+    {
+        addRoute('GET', '/{type}/{entry}', 'coreContentEntryPage');
+        addRoute('GET', '/news/{slug}', 'newsSingle');
+        addRoute('GET', '/news', 'newsFeed');
+
+        self::assertSame('newsSingle', matchRoute('GET', '/news/sobytiya')['handler']);
+        self::assertSame('coreContentEntryPage', matchRoute('GET', '/statyi/novost')['handler']);
+        self::assertSame('newsFeed', matchRoute('GET', '/news')['handler']);
+    }
+
     public function testМетодУчаствуетВСопоставлении(): void
     {
         addRoute('POST', '/news/admin/items', 'newsSave');

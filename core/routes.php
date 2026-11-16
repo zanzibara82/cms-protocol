@@ -59,6 +59,27 @@ function registerCoreRoutes(): void
     addRoute('GET', '/admin/consents', 'coreAdminConsents', ['private' => true, 'permission' => 'manage']);
     addRoute('GET', '/admin/consents/export', 'coreAdminConsentsExport', ['private' => true, 'permission' => 'manage']);
     addRoute('GET', '/admin/search', 'coreAdminSearch', ['private' => true, 'permission' => 'login']);
+    // RELEASE 2.3: свои типы записей, конструктор полей, записи и глобальные блоки. Управление
+    // типами и блоками — только администратор; список и правка записей открыты редактору, а
+    // права на публикацию/архив проверяет доменная операция.
+    addRoute('GET', '/admin/content', 'coreAdminContent', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/content/types/new', 'coreAdminContentTypeNew', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/content/types/new', 'coreAdminContentTypeSave', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/admin/content/types/{id}', 'coreAdminContentTypeEdit', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/content/types/{id}', 'coreAdminContentTypeAction', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/admin/content/types/{id}/entries', 'coreAdminContentEntries', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/content/types/{id}/entries', 'coreAdminContentEntriesAction', ['private' => true, 'permission' => 'login']);
+    // Отдельная форма новой записи: обязательные поля проверяет домен, поэтому создание из списка
+    // одним нажатием молча потеряло бы значения. Сюда ведёт кнопка «Новая запись».
+    addRoute('GET', '/admin/content/types/{id}/entries/new', 'coreAdminContentEntryNew', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/content/types/{id}/entries/new', 'coreAdminContentEntryCreate', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/content/entries/{id}', 'coreAdminContentEntryEdit', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/content/entries/{id}', 'coreAdminContentEntryAction', ['private' => true, 'permission' => 'login']);
+    addRoute('GET', '/admin/content/blocks', 'coreAdminContentBlocks', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/admin/content/blocks/new', 'coreAdminContentBlockNew', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/content/blocks/new', 'coreAdminContentBlockSave', ['private' => true, 'permission' => 'manage']);
+    addRoute('GET', '/admin/content/blocks/{id}', 'coreAdminContentBlockEdit', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/content/blocks/{id}', 'coreAdminContentBlockAction', ['private' => true, 'permission' => 'manage']);
     // RELEASE 2.2: история версий, сравнение, согласование, комментарии, задачи, расписание
     // и уведомления. Экран доступен вошедшему редактору; точные права проверяет обработчик.
     addRoute('GET', '/admin/editorial', 'coreAdminEditorial', ['private' => true, 'permission' => 'login']);
@@ -68,6 +89,9 @@ function registerCoreRoutes(): void
     // Страницы живут на /{slug} одним сегментом, поэтому маршрут идёт в конец реестра: точные
     // пути ядра и разделов выигрывают по построению сортировки (router.php ставит статические
     // раньше параметрических), а {slug} ограничен «[^/]+» и не отбирает у разделов их подразделы.
+    // RELEASE 2.3: карточка записи пользовательского типа — два сегмента; список типа разбирает
+    // corePage по первому сегменту, потому что /{slug} у страницы уже занят.
+    addRoute('GET', '/{type}/{entry}', 'coreContentEntryPage');
     addRoute('GET', '/{slug}', 'corePage');
 }
 
@@ -89,6 +113,12 @@ function corePage(array $params = []): void
 {
     $slug = (string) ($params['slug'] ?? '');
 
+    // RELEASE 2.3: активный тип записей занимает первый сегмент раньше страницы. Создать страницу
+    // с таким адресом нельзя (pageSlugTaken), поэтому две сущности не спорят за один /{slug}.
+    if (function_exists('contentTypePublicDispatch') && contentTypePublicDispatch($slug)) {
+        return;
+    }
+
     // Прежний адрес ведёт на живой адрес страницы. Черновик-владелец отвечает как несуществующий:
     // 301 выдал бы существование скрытой страницы.
     $owner = pageByOldSlug($slug);
@@ -100,6 +130,14 @@ function corePage(array $params = []): void
     $page = findPage($slug);
 
     if ($page === null) {
+        // Прежний адрес типа записей: переезд раздела не должен ломать внешние ссылки. Архивный
+        // тип адреса не держит — иначе он выдал бы существование снятого раздела.
+        $oldType = function_exists('contentTypeOldSlug') ? contentTypeOldSlug($slug) : null;
+
+        if ($oldType !== null && $oldType['archived_at'] === null) {
+            redirect('/' . (string) $oldType['slug'], 301);
+        }
+
         notFound();
     }
 

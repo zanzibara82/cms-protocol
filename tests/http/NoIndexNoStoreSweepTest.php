@@ -91,13 +91,17 @@ final class NoIndexNoStoreSweepTest extends TestCase
     // `additions()`).
     // Числа не подгоняются под прогон: любое расхождение плана с деревом краснит именем адреса,
     // а молча удалённый из списка вариант краснит нижней границей объёма.
-    private const VARIANTS_TOTAL = 159;
-    private const MARKED_TOTAL = 130;
+    // RELEASE 2.3 добавляет десять GET-строк: обзор контента, шесть экранов управления и список
+    // записей, форму новой записи и карточку /{type}/{entry}. Типами и блоками управляет только
+    // администратор, поэтому под редактором шесть экранов отдают помеченный 403; три экрана с
+    // несуществующим идентификатором уводят в список, а промах по карточке — помеченный 404.
+    private const VARIANTS_TOTAL = 169;
+    private const MARKED_TOTAL = 137;
 
     // Помеченных на неустановленной схеме — на один меньше объёма: канал 503 подменяет собой каждый
     // экран маршрутизатора, но адрес установщика обслуживается файлом и от признака установки не
     // зависит, поэтому шаг 2 остаётся перенаправлением и на этой схеме (159 − 1).
-    private const MARKED_ON_NOT_INSTALLED = 158;
+    private const MARKED_ON_NOT_INSTALLED = 168;
 
     // Канал «сайт не установлен» отвечает одним экраном на любой адрес маршрутизатора, поэтому его
     // ожидаемый исход — один на весь список: помеченный экран со статусом 503. Исключение названо
@@ -748,6 +752,40 @@ final class NoIndexNoStoreSweepTest extends TestCase
             ],
             'GET /admin/notifications' => [
                 ['path' => '/admin/notifications', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+
+            // RELEASE 2.3: конструктор контента. Обзор и список записей открыты редактору;
+            // управление типами и блоками — только администратору (помеченный отказ 403 под
+            // редактором). Промахи по идентификатору возвращают к списку без метки на редиректе.
+            'GET /admin/content' => [
+                ['path' => '/admin/content', 'outcome' => self::MARKED, 'status' => 200],
+            ],
+            'GET /admin/content/types/new' => [
+                ['path' => '/admin/content/types/new', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /admin/content/types/{id}' => [
+                ['path' => '/admin/content/types/net-takoy-tip', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /admin/content/types/{id}/entries' => [
+                ['path' => '/admin/content/types/net-takoy-tip/entries', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/admin/content'],
+            ],
+            'GET /admin/content/types/{id}/entries/new' => [
+                ['path' => '/admin/content/types/net-takoy-tip/entries/new', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/admin/content'],
+            ],
+            'GET /admin/content/entries/{id}' => [
+                ['path' => '/admin/content/entries/net-takaya-zapis', 'outcome' => self::REDIRECT, 'status' => 302, 'target' => '/admin/content'],
+            ],
+            'GET /admin/content/blocks' => [
+                ['path' => '/admin/content/blocks', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /admin/content/blocks/new' => [
+                ['path' => '/admin/content/blocks/new', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /admin/content/blocks/{id}' => [
+                ['path' => '/admin/content/blocks/net-takoy-blok', 'outcome' => self::MARKED, 'status' => 403],
+            ],
+            'GET /{type}/{entry}' => [
+                ['path' => '/net-takoy-tip/net-takaya-zapis', 'outcome' => self::MARKED, 'status' => 404],
             ],
 
             // Конструктор страниц: список, редакторы и правка — приватные экраны админки с меткой;

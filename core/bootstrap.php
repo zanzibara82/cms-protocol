@@ -49,6 +49,12 @@ require_once __DIR__ . '/revisions.php';
 require_once __DIR__ . '/diff.php';
 require_once __DIR__ . '/editorial.php';
 require_once __DIR__ . '/scheduler.php';
+// RELEASE 2.3: свои типы записей, связи, глобальные блоки и экраны управления ими. Модули идут
+// после редакции и планировщика: снимки ревизий и расписание уже определены, а маршруты из
+// routes.php ссылаются на обработчики по имени в момент запроса.
+require_once __DIR__ . '/content-types.php';
+require_once __DIR__ . '/content-public.php';
+require_once __DIR__ . '/content-admin.php';
 // Экраны и JSON-обработчики редакции: функции слоя уже подключены, маршруты регистрирует routes.php.
 require_once __DIR__ . '/editorial-routes.php';
 require_once __DIR__ . '/media.php';

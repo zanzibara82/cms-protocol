@@ -93,6 +93,23 @@ const CORE_NOTICE_TEXT = [
     'editorial_task_saved' => 'Задача сохранена.',
     'editorial_notifications_read' => 'Уведомления отмечены прочитанными.',
     'editorial_settings_saved' => 'Настройки хранения истории сохранены.',
+    // RELEASE 2.3: конструктор контента. По одному ключу на действие; причина отказа едет flash-ом.
+    'content_type_created' => 'Тип записей создан.',
+    'content_type_saved' => 'Тип записей и его поля сохранены.',
+    'content_type_archived' => 'Тип записей убран в архив.',
+    'content_type_restored' => 'Тип записей восстановлен.',
+    'content_entries_bulk_done' => 'Выбранные записи изменены.',
+    'content_entry_created' => 'Запись создана — теперь можно заполнить поля и опубликовать её.',
+    'content_entry_saved' => 'Запись сохранена.',
+    'content_entry_published' => 'Запись опубликована.',
+    'content_entry_unpublished' => 'Запись снята с публикации.',
+    'content_entry_archived' => 'Запись убрана в архив.',
+    'content_entry_scheduled' => 'Публикация записи запланирована.',
+    'content_schedule_cancelled' => 'Расписание публикации отменено.',
+    'content_block_created' => 'Глобальный блок создан.',
+    'content_block_saved' => 'Глобальный блок сохранён.',
+    'content_block_archived' => 'Глобальный блок убран в архив.',
+    'content_block_restored' => 'Глобальный блок восстановлен.',
 ];
 
 /** @param array<string, string> $dictionary */

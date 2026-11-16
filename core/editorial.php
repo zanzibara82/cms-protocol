@@ -155,7 +155,8 @@ function editorialContentExists(string $type, string $id): bool
             && one('SELECT id FROM ' . t('commerce_product') . ' WHERE id = ? LIMIT 1', [$key]) !== null;
     }
 
-    return false;
+    // Новые типы контента (RELEASE 2.3) ядру неизвестны: о них отвечает подписчик фильтра.
+    return (bool) applyFilters('editorial_content_exists', false, $type, $key);
 }
 
 function editorialContentTitle(string $type, string $id): string
@@ -188,7 +189,9 @@ function editorialContentTitle(string $type, string $id): string
         return $row === null ? 'Товар' : (string) $row['title'];
     }
 
-    return 'Материал';
+    $custom = applyFilters('editorial_content_title', null, $type, $key);
+
+    return is_string($custom) && $custom !== '' ? $custom : 'Материал';
 }
 
 function editorialContentUrl(string $type, string $id): string
@@ -199,7 +202,12 @@ function editorialContentUrl(string $type, string $id): string
         'page' => $key === 'home' ? '/admin/pages/home' : '/admin/pages/' . rawurlencode($key),
         'news' => '/news/admin/items/' . rawurlencode($key),
         'product' => '/commerce/admin/products/' . rawurlencode($key),
-        default => '/admin/editorial?type=' . rawurlencode($type) . '&id=' . rawurlencode($key),
+        default => (string) applyFilters(
+            'editorial_content_url',
+            '/admin/editorial?type=' . rawurlencode($type) . '&id=' . rawurlencode($key),
+            $type,
+            $key
+        ),
     };
 }
 
@@ -209,7 +217,7 @@ function editorialTypeLabel(string $type): string
         'page' => 'Страница',
         'news' => 'Новость',
         'product' => 'Товар',
-        default => 'Материал',
+        default => (string) applyFilters('editorial_type_label', 'Материал', $type),
     };
 }
 
@@ -475,7 +483,11 @@ function editorialApplyPublication(string $type, string $key, bool $publish, arr
         return contentRevisionCommit('product', $key, $meta, $now)['version'];
     }
 
-    return 0;
+    // Новые типы контента (RELEASE 2.3) меняет подписчик фильтра: ядро уже открыло транзакцию,
+    // проверило версию и метаданные ревизии, поэтому обработчик только пишет строку и событие.
+    $version = applyFilters('editorial_apply_publication', 0, $type, $key, $publish, $meta, $now);
+
+    return is_int($version) ? $version : 0;
 }
 
 /** @param array<string, mixed> $state

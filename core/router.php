@@ -64,6 +64,27 @@ function routesReset(): void
     $registry = [];
 }
 
+/**
+ * Вес шаблона: сколько в нём статических сегментов и сколько сегментов всего. RELEASE 2.3 добавил
+ * маршрут /{type}/{entry} — он параметрический, но двухсегментный, и без веса перехватил бы
+ * /news/{slug}, /shop/{slug} и прочие разделы, которые регистрируются позже ядра.
+ *
+ * @return array{int, int}
+ */
+function routeSpecificity(string $pattern): array
+{
+    $segments = array_values(array_filter(explode('/', trim($pattern, '/')), static fn (string $part): bool => $part !== ''));
+    $static = 0;
+
+    foreach ($segments as $segment) {
+        if (preg_match('/^\{[a-zA-Z_][a-zA-Z0-9_]*\}$/', $segment) !== 1) {
+            $static++;
+        }
+    }
+
+    return [$static, count($segments)];
+}
+
 /** @return array{handler: string|Closure, params: array<string, string>, meta: array<string, mixed>}|null */
 function matchRoute(string $method, string $path): ?array
 {
@@ -72,7 +93,12 @@ function matchRoute(string $method, string $path): ?array
 
     // Точные пути идут раньше параметрических: иначе /news/admin/items попал бы в /news/{slug}.
     $registry = &routeRegistry();
-    usort($registry, static fn (array $a, array $b): int => ($b['static'] ? 1 : 0) <=> ($a['static'] ? 1 : 0));
+    usort($registry, static function (array $a, array $b): int {
+        $weightA = routeSpecificity((string) $a['pattern']);
+        $weightB = routeSpecificity((string) $b['pattern']);
+
+        return $weightB <=> $weightA;
+    });
 
     foreach ($registry as $route) {
         if ($route['method'] !== $method) {
