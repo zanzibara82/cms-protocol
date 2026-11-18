@@ -1273,7 +1273,6 @@ function commercePricebookRenderImport(string $importError, ?array $report, stri
     ], commerceAdminAlert()), ['head' => FILE_FIELD_HEAD, 'title' => 'Прайс-лист — магазин', 'noindex' => true]);
 }
 
-
 // ---------------------------------------------------------------------------
 // Webhooks (M6): приёмники событий заказов
 // ---------------------------------------------------------------------------
@@ -1389,7 +1388,6 @@ function commerceWebhooksRenderFailure(?array $webhook, array $values, array $er
         'errors' => $errors,
     ], commerceAdminAlert()), ['title' => 'Webhooks — магазин', 'noindex' => true]);
 }
-
 
 /**
  * Абзацы тела при отказе формы: значения читаются из сырого POST здесь, а не в шаблоне —

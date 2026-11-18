@@ -1218,7 +1218,6 @@ final class NoIndexNoStoreSweepTest extends TestCase
                 ['path' => '/seo/api/v1/net-takogo-razreza', 'outcome' => self::MARKED, 'status' => 401],
             ],
 
-
             // Фикстурные разделы не установлены, поэтому гейт маршрута отвечает по ним 404 —
             // тот же помеченный экран, собранный ядром.
             'GET /broken' => [
