@@ -54,15 +54,16 @@ function logoutUser(): void
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
         // Момент берём из nowUtc(): время в обход core/date.php запрещает страж.
-        setcookie(
-            session_name(),
-            '',
-            nowUtc()->getTimestamp() - 42000,
-            $params['path'],
-            $params['domain'],
-            $params['secure'],
-            $params['httponly']
-        );
+        // Атрибуты — тем же массивом, что и при выдаче: позиционная форма не умеет
+        // SameSite, и на HTTPS кука не гасилась бы своим secure.
+        setcookie(session_name(), '', [
+            'expires' => nowUtc()->getTimestamp() - 42000,
+            'path' => $params['path'],
+            'domain' => $params['domain'],
+            'secure' => $params['secure'],
+            'httponly' => $params['httponly'],
+            'samesite' => $params['samesite'],
+        ]);
     }
     session_destroy();
 }

@@ -83,4 +83,32 @@ final class SessionFlagsTest extends TestCase
         self::assertMatchesRegularExpression('/\$_SESSION\s*=\s*\[\]/', $source, 'Выход обязан чистить данные сессии');
         self::assertStringContainsString('setcookie(', $source, 'Выход обязан гасить куку и в браузере');
     }
+
+    // Гашение куки обязано нести те же атрибуты, что и выдача: позиционная форма
+    // не умеет SameSite, и браузер видит куку с другим набором атрибутов, чем та,
+    // которую ставил startSession(). На HTTPS такая кука не гасится «своим» secure.
+    public function testВыходГаситКукуСТемиЖеФлагами(): void
+    {
+        $source = $this->source();
+
+        $logout = strpos($source, 'function logoutUser(');
+        self::assertNotFalse($logout, 'Нет logoutUser()');
+
+        $next = strpos($source, 'function ', (int) $logout + 1);
+        $body = substr($source, (int) $logout, $next === false ? null : (int) $next - (int) $logout);
+
+        self::assertMatchesRegularExpression(
+            '/setcookie\(\s*session_name\(\),\s*\'\',\s*\[/',
+            $body,
+            'Кука гасится массивом параметров, а не позиционно: иначе SameSite не выставить'
+        );
+
+        foreach (['secure', 'httponly', 'samesite'] as $flag) {
+            self::assertStringContainsString(
+                "'" . $flag . "' =>",
+                $body,
+                'Гашение куки не несёт флаг ' . $flag . ': атрибуты расходятся с выдачей'
+            );
+        }
+    }
 }
