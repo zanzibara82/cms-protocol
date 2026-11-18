@@ -59,9 +59,21 @@ $footer = '<section class="space-y-4 rounded-lg border border-ink/10 bg-white p-
     . $textField('footer_copyright', 'Копирайт подвала', 'Строка в самом низу подвала. Пусто — строки нет.')
     . '</section>';
 
+// Режим техобслуживания: флажок и текст заглушки в одной форме с шапкой и подвалом — включение
+// режима это тоже настройка сайта, а не отдельное действие. Публичная часть при включённом
+// флажке отдаёт заглушку (503, noindex, no-store), а вход и админка остаются открытыми: иначе
+// режим нечем снять.
+$maintenance = '<section class="space-y-4 rounded-lg border border-ink/10 bg-white p-4">'
+    . '<h2 class="font-semibold">Техобслуживание</h2>'
+    . '<p class="text-sm text-ink/70">Пока флажок включён, посетители видят заглушку, а вход и админка остаются открытыми — режим снимается здесь же.</p>'
+    . adminCheckbox('maintenance_mode', 'Включить режим техобслуживания', '1', ($values['maintenance_mode'] ?? '') === '1')
+    . $textField('maintenance_text', 'Текст заглушки', 'Объяснение для посетителя. Пусто — запасной текст «Скоро вернёмся…».', true)
+    . '</section>';
+
 $form = '<form class="space-y-4" method="post" action="/admin/settings" enctype="multipart/form-data">' . csrfField()
     . $header
     . $footer
+    . $maintenance
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 py-2 text-sm font-medium text-cream hover:opacity-90" type="submit">Сохранить настройки</button>'
     . '</form>';
 

@@ -31,6 +31,11 @@ final class NoIndexNoStoreSourceTest extends TestCase
         'core/templates/not-installed.php' => [
             'public/index.php' => "partial('not-installed')",
         ],
+        // Экран техобслуживания печатается до разбора маршрута, мимо render(): заголовки
+        // запрета хранения и индексирования он несёт сам, в массиве respond().
+        'core/templates/maintenance.php' => [
+            'core/maintenance.php' => "partial('maintenance'",
+        ],
     ];
 
     /**

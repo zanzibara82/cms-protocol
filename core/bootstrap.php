@@ -72,6 +72,9 @@ require_once __DIR__ . '/lead-mail.php';
 require_once __DIR__ . '/options.php';
 // Поля шапки и подвала — надстройка над опциями: тема читает их на каждой странице.
 require_once __DIR__ . '/settings.php';
+// Режим техобслуживания читает настройки, поэтому подключается после них: гейт стоит в dispatch()
+// и обязан видеть siteSettingValue().
+require_once __DIR__ . '/maintenance.php';
 // Seo-слой строит адреса из конфигурации сборки: absoluteUrl читает configValue из config-loader.php,
 // поэтому подключается после него и раньше своих потребителей — маршрутов /sitemap.xml и /robots.txt.
 require_once __DIR__ . '/seo.php';

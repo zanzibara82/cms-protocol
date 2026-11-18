@@ -23,6 +23,9 @@ final class ViewportMetaTest extends TestCase
         'theme/layout.php',
         'core/templates/error.php',
         'core/templates/not-installed.php',
+        // Экран техобслуживания печатает свой каркас: он отдаётся до разбора маршрута и до каркаса
+        // темы, а без viewport заглушка на телефоне рендерилась бы в 980 px.
+        'core/templates/maintenance.php',
     ];
 
     private function root(): string
