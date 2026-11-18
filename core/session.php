@@ -6,6 +6,10 @@ declare(strict_types=1);
 // use_strict_mode не даёт серверу принять принесённый извне идентификатор сессии.
 const SESSION_LIFETIME_SECONDS = 8 * 60 * 60;
 
+// Имя куки вынесено в константу: его читает не только startSession(), но и гейт режима
+// техобслуживания — он смотрит, пришла ли кука вообще, и только тогда поднимает сессию.
+const SESSION_COOKIE_NAME = 'cms_session';
+
 function startSession(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
@@ -22,7 +26,7 @@ function startSession(): void
     ]);
     ini_set('session.use_strict_mode', '1');
     ini_set('session.gc_maxlifetime', (string) SESSION_LIFETIME_SECONDS);
-    session_name('cms_session');
+    session_name(SESSION_COOKIE_NAME);
     session_start();
 }
 

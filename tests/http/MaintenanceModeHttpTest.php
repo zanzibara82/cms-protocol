@@ -101,6 +101,9 @@ final class MaintenanceModeHttpTest extends TestCase
     {
         $this->enableMaintenance();
 
+        // Включивший режим администратор видит сайт как обычно, поэтому гостем становится
+        // запрос с чистой колбой — иначе эта проверка смотрела бы на сотрудника.
+        Kernel::freshCookies();
         $home = Kernel::get('/', ['follow' => false]);
 
         self::assertSame(503, $home['status'], 'заглушка отвечает 503');
@@ -120,6 +123,7 @@ final class MaintenanceModeHttpTest extends TestCase
     public function testНесуществующийАдресТожеОтдаётЗаглушку(): void
     {
         $this->enableMaintenance();
+        Kernel::freshCookies();
 
         // Гейт стоит до разбора маршрута: закрытый сайт не должен выдавать 404 на любой путь —
         // иначе по коду ответа видно, какие адреса существуют.
@@ -140,6 +144,7 @@ final class MaintenanceModeHttpTest extends TestCase
     public function testСнятиеФлажкаВозвращаетСайт(): void
     {
         $this->enableMaintenance();
+        Kernel::freshCookies();
 
         self::assertSame(503, Kernel::get('/', ['follow' => false])['status'], 'сайт закрыт');
 
@@ -169,10 +174,52 @@ final class MaintenanceModeHttpTest extends TestCase
     public function testЛентаИКартаСайтаТожеЗакрыты(): void
     {
         $this->enableMaintenance();
+        Kernel::freshCookies();
 
         // Лента и карта сайта — публичные адреса: при закрытом сайте они не выдавали бы материалы.
         foreach (['/feed.xml', '/sitemap.xml', '/robots.txt'] as $path) {
             self::assertSame(503, Kernel::get($path, ['follow' => false])['status'], 'закрыт: ' . $path);
         }
+    }
+
+    public function testЗалогиненныйАдминистраторВидитСайтКакОбычно(): void
+    {
+        $this->enableMaintenance();
+        // enableMaintenance() уже вошла администратором; вход повторяем явно, потому что
+        // проверка ниже смотрит именно на залогиненного человека, а не на порядок вызовов.
+        $this->login();
+
+        $home = Kernel::get('/', ['follow' => false]);
+
+        // Сотрудник включил режим и обязан видеть, что именно он закрыл: заглушка вместо
+        // собственных страниц не дала бы проверить вёрстку и содержимое перед открытием сайта.
+        self::assertSame(200, $home['status'], 'администратор видит обычную главную');
+        self::assertStringNotContainsString('Сайт на техобслуживании', $home['body'], 'заглушки нет');
+
+        foreach (['/feed.xml', '/sitemap.xml', '/robots.txt'] as $path) {
+            self::assertSame(200, Kernel::get($path, ['follow' => false])['status'], 'администратору открыт: ' . $path);
+        }
+    }
+
+    public function testГостьБезКукиНеПолучаетДоступаКСайту(): void
+    {
+        $this->enableMaintenance();
+
+        // Тот же адрес, но чистая колба: проверка отделяет «пускаем сотрудника» от
+        // «пускаем всякого, кто прислал любую куку».
+        Kernel::freshCookies();
+
+        self::assertSame(503, Kernel::get('/', ['follow' => false])['status'], 'гость видит заглушку');
+    }
+
+    public function testПодделаннаяКукаНеПускаетНаСайт(): void
+    {
+        $this->enableMaintenance();
+        Kernel::freshCookies();
+
+        // Кука с несуществующим идентификатором: сессия поднимется, но пользователя в базе нет.
+        Kernel::setCookie(SESSION_COOKIE_NAME, 'poddelka-1234567890');
+
+        self::assertSame(503, Kernel::get('/', ['follow' => false])['status'], 'подделка остаётся гостем');
     }
 }

@@ -36,4 +36,13 @@ final class MaintenanceModeTest extends TestCase
         self::assertFalse(maintenanceAllowsPath('/loginfo'));
         self::assertFalse(maintenanceAllowsPath('/adminx'));
     }
+
+    public function testСайтОткрытСотрудникамНоНеГостям(): void
+    {
+        // Список ролей — обе стороны правила: администратор и редактор правят содержимое и обязаны
+        // видеть результат своей работы; блокировка и чужая роль оставляют заглушку.
+        self::assertContains(ROLES['admin'], MAINTENANCE_STAFF_ROLES);
+        self::assertContains(ROLES['editor'], MAINTENANCE_STAFF_ROLES);
+        self::assertNotContains('student', MAINTENANCE_STAFF_ROLES);
+    }
 }

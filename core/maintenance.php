@@ -33,6 +33,35 @@ function maintenanceModeOn(): bool
     return getOption('maintenance_mode') === '1';
 }
 
+// Кому при закрытом сайте положено видеть его как обычно. Редактор тоже правит содержимое и обязан
+// проверять вёрстку перед открытием — иначе режим закрывал бы сайт и от того, кто его готовит.
+const MAINTENANCE_STAFF_ROLES = [ROLES['admin'], ROLES['editor']];
+
+/**
+ * Вошёл ли сотрудник. Гейт режима стоит в dispatch() до разбора маршрута, а сессию там поднимает
+ * более поздний шаг — поэтому здесь она поднимается сама, но только когда кука пришла: гостю с
+ * пустой колбасой session_start() выдал бы новый идентификатор на каждый заход, хотя ему и так
+ * положена заглушка.
+ *
+ * Проверка повторяет currentUser(), а не доверяет куке: подделанный идентификатор сессии не найдёт
+ * пользователя в базе, а отозванная сессия не сойдётся по session_version — оба останутся гостем.
+ */
+function maintenanceStaffSignedIn(): bool
+{
+    if (!isset($_COOKIE[SESSION_COOKIE_NAME]) || !is_string($_COOKIE[SESSION_COOKIE_NAME])) {
+        return false;
+    }
+
+    startSession();
+
+    $user = currentUser();
+    if ($user === null || $user['blocked_at'] !== null) {
+        return false;
+    }
+
+    return in_array((string) $user['role'], MAINTENANCE_STAFF_ROLES, true);
+}
+
 /**
  * Единственная точка, где режим закрывает публичный запрос. Вызывается из dispatch() ДО разбора
  * маршрута: заглушку обязаны увидеть и страницы, и ленты, и карта сайта, и несуществующие адреса —
@@ -40,7 +69,13 @@ function maintenanceModeOn(): bool
  */
 function maintenanceGuard(): void
 {
-    if (!maintenanceModeOn() || maintenanceAllowsPath(requestPath())) {
+    if (!maintenanceModeOn()) {
+        return;
+    }
+
+    // Дверь (вход, админка, сброс пароля) и вошедший сотрудник проходят: первый нужен, чтобы режим
+    // можно было снять, второй — чтобы увидеть, что именно он закрыл.
+    if (maintenanceAllowsPath(requestPath()) || maintenanceStaffSignedIn()) {
         return;
     }
 

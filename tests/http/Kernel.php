@@ -133,6 +133,23 @@ final class Kernel
     }
 
     /**
+     * Кладёт куку в общую банку: так проверка поддельного идентификатора отправляет серверу
+     * ровно ту строку, что задумал тест. Формат файла curl — семь полей через табуляцию;
+     * срок «0» означает сессионную куку.
+     */
+    public static function setCookie(string $name, string $value): void
+    {
+        if (self::$cookieJar === null) {
+            return;
+        }
+
+        file_put_contents(
+            self::$cookieJar,
+            self::HOST . "\tFALSE\t/\tFALSE\t0\t" . $name . "\t" . $value . "\n"
+        );
+    }
+
+    /**
      * Идентификатор сессии из файла куки: curl пишет строку вида
      * `#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tcms_session\t<id>`. Префикс `#HttpOnly_` живёт в
      * нулевом поле (поле домена) и остаётся на месте: поиск идёт по имени на позиции 5, поэтому на
