@@ -149,12 +149,6 @@ function classifiedsCategoryById(string $id): ?array
     ];
 }
 
-/** @return array{id: string, parent_id: ?string, slug: string, title: string, order_index: int, visible: bool}|null */
-function classifiedsCategoryRow(string $id): ?array
-{
-    return classifiedsCategoryById($id);
-}
-
 /**
  * Дети узла в порядке следования списком. Родитель может отсутствовать: корни живут под ''.
  *

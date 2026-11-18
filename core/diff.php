@@ -7,7 +7,6 @@ declare(strict_types=1);
 // сравнивается отдельным блоком, включая canonical/robots/Open Graph/Schema.org, даже если
 // текущая схема хранит часть полей пустыми.
 
-const CONTENT_DIFF_MAX_LINES = 2000;
 const CONTENT_DIFF_MAX_CELLS = 1500000;
 
 /**

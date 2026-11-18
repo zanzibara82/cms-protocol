@@ -101,7 +101,6 @@ const CLASSIFIEDS_REPORT_REASONS = [
     'wrong_category' => 'Не та категория',
     'other' => 'Другое',
 ];
-const CLASSIFIEDS_REPORT_STATUS = ['NEW' => 'NEW', 'RESOLVED' => 'RESOLVED'];
 
 const CLASSIFIEDS_NOTIFICATION_KINDS = [
     'message' => 'Сообщение',

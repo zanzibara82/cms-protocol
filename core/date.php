@@ -6,7 +6,6 @@ declare(strict_types=1);
 // видит московское время: правило «9:00 — значит в девять утра по Москве» работает только так.
 // Вне этого файла date(), ->format() и new DateTime запрещены стражем tests/guard/DateUsageTest.php.
 const DB_DATETIME_FORMAT = 'Y-m-d H:i:s';
-const MOSCOW_OFFSET_SECONDS = 3 * 60 * 60;
 
 const MONTHS_RU_GENITIVE = [
     1 => 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
@@ -193,20 +192,6 @@ function parseFormDateTimeInZone(string $raw, string $timezone = 'Europe/Moscow'
     }
 
     return $parsed;
-}
-
-// Значение для input type="datetime-local" в выбранном поясе. Формат один на все экраны.
-function formatDateTimeLocal(?DateTimeImmutable $date, string $timezone = 'Europe/Moscow'): string
-{
-    if ($date === null) {
-        return '';
-    }
-
-    $zone = in_array($timezone, DateTimeZone::listIdentifiers(), true)
-        ? new DateTimeZone($timezone)
-        : moscowZone();
-
-    return $date->setTimezone($zone)->format('Y-m-d\TH:i');
 }
 
 // Дни акций «ГГГГ-ММ-ДД» из форм магазина: край 'start' — начало дня по Москве

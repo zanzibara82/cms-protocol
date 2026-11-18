@@ -5,8 +5,6 @@ declare(strict_types=1);
 // RELEASE 2.2: редакционные статусы, права, согласование, комментарии, задачи, уведомления,
 // присутствие и блокировки. Все проверки прав — серверные; интерфейс лишь показывает доступное.
 
-const EDITORIAL_STATUSES = ['draft', 'review', 'changes', 'approved', 'scheduled', 'published', 'unpublished'];
-
 const EDITORIAL_STATUS_LABELS = [
     'draft' => 'Черновик',
     'review' => 'На проверке',

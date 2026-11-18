@@ -20,20 +20,14 @@ function appDirs(): array
     return $dirs;
 }
 
-// Кеш живёт в ссылке, а не в static-переменной внутри appManifests(): тестам нужно сбрасывать его
-// между наборами, а static-переменная функции извне недоступна.
+// Кеш живёт в ссылке на процесс: каталоги разделов не меняются во время работы, а повторный
+// glob() и чтение manifest.php на каждом запросе дороже, чем одно поле в памяти.
 /** @return array<string, array<string, mixed>>|null */
 function &appManifestsRef(): ?array
 {
     static $manifests = null;
 
     return $manifests;
-}
-
-function appsReset(): void
-{
-    $manifests = &appManifestsRef();
-    $manifests = null;
 }
 
 /** @return array<string, array<string, mixed>> */

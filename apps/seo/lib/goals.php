@@ -20,9 +20,6 @@ const SEO_GOAL_TYPE_EVENT = 'event';
 const SEO_GOAL_MATCH_PREFIX = 'prefix';
 const SEO_GOAL_MATCH_EXACT = 'exact';
 
-const SEO_GOALS_PERIODS = [7, 30, 90];
-const SEO_GOALS_PERIOD_DEFAULT = 30;
-
 /** @return array<string, string> */
 function seoGoalTypes(): array
 {

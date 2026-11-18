@@ -139,6 +139,3 @@ const COMMERCE_WEBHOOK_DENIED_NETWORKS = [
     'ff00::/8',
 ];
 const COMMERCE_API_PAGE_SIZE = 20;
-// События заказов: создание гостем и правка статуса в админке (включая отмену).
-/** @var list<string> */
-const COMMERCE_WEBHOOK_EVENTS = ['order.created', 'order.status_changed'];

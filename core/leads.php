@@ -30,7 +30,6 @@ const LEAD_NAME_MAX = 80;
 const LEAD_CONTACT_MIN = 5;
 const LEAD_CONTACT_MAX = 120;
 const LEAD_MESSAGE_MAX = 1000;
-const LEAD_SOURCE_MAX = 120;
 
 const LEAD_REPLY_MIN = 10;
 const LEAD_REPLY_MAX = 2000;
@@ -156,17 +155,6 @@ function leadRateTooMany(string $scope, int $limit, int $windowMinutes, ?DateTim
     insert('lead_attempt', ['scope' => $scope, 'created_at' => utcStamp($moment)]);
 
     return false;
-}
-
-/**
- * @param array<string, mixed> $data
- * @return array{ok: bool, error: string}
- */
-function leadValidationResult(array $data): array
-{
-    $error = leadValidationError($data);
-
-    return $error === '' ? ['ok' => true, 'error' => ''] : ['ok' => false, 'error' => $error];
 }
 
 /**

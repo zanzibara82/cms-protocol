@@ -392,18 +392,6 @@ function visibleTags(): array
     return $out;
 }
 
-/** @return list<array{slug: string, label: string}> */
-function tagOptions(): array
-{
-    $rows = all('SELECT slug, label FROM ' . t('news_tag') . ' ORDER BY label LIMIT 500');
-    $out = [];
-    foreach ($rows as $row) {
-        $out[] = ['slug' => (string) $row['slug'], 'label' => (string) $row['label']];
-    }
-
-    return $out;
-}
-
 // Счётчик материалов тега читает все строки, а не только видимые: снятый с публикации материал
 // всё ещё держит тег, и удалить его справочник не даст — иначе удаление упало бы на внешнем ключе.
 function tagCountOf(string $id): int
