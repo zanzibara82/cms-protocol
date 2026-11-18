@@ -95,6 +95,7 @@ final class Release23HttpTest extends TestCase
         $newForm = Kernel::get('/admin/content/types/' . rawurlencode($typeId) . '/entries/new');
         self::assertSame(200, $newForm['status']);
         self::assertStringContainsString('Описание', $newForm['body']);
+        self::assertStringContainsString('enctype="multipart/form-data"', $newForm['body'], 'Форма поля-картинки обязана уметь принимать файл');
 
         $entrySaved = Kernel::post('/admin/content/types/' . rawurlencode($typeId) . '/entries/new', [
             '_token' => Kernel::tokenFrom($newForm['body']),

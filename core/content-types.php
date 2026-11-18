@@ -145,8 +145,27 @@ function contentTypeSlugTaken(string $slug, string $excludeId = ''): bool
         return true;
     }
 
+    // Прежние адреса страниц и типов не отдаём под новый раздел: corePage обязан провести
+    // посетителя 301 на живой адрес, а не показать список другого типа.
+    if (contentTableExists('page_old_slug') && (int) value(
+        'SELECT COUNT(*) FROM ' . t('page_old_slug') . ' WHERE slug = ?',
+        [$slug]
+    ) > 0) {
+        return true;
+    }
+
     if (!contentTableExists('content_type')) {
         return false;
+    }
+
+    if (contentTableExists('content_type_old_slug')) {
+        $oldSql = 'SELECT COUNT(*) FROM ' . t('content_type_old_slug') . ' WHERE slug = ?'
+            . ($excludeId !== '' ? ' AND type_id <> ?' : '');
+        $oldArgs = $excludeId !== '' ? [$slug, $excludeId] : [$slug];
+
+        if ((int) value($oldSql, $oldArgs) > 0) {
+            return true;
+        }
     }
 
     $sql = 'SELECT COUNT(*) FROM ' . t('content_type') . ' WHERE slug = ? AND archived_at IS NULL'
@@ -238,7 +257,21 @@ function contentEntrySlugTaken(string $typeId, string $slug, string $excludeId =
         . ($excludeId !== '' ? ' AND id <> ?' : '');
     $args = $excludeId !== '' ? [$typeId, $slug, $excludeId] : [$typeId, $slug];
 
-    return (int) value($sql, $args) > 0;
+    if ((int) value($sql, $args) > 0) {
+        return true;
+    }
+
+    // Прежний адрес записи обязан доводить до неё 301. Если отдать его новой записи, точное
+    // совпадение перекроет переадресацию и внешние ссылки начнут показывать чужой материал.
+    if (!contentTableExists('content_entry_old_slug')) {
+        return false;
+    }
+
+    $oldSql = 'SELECT COUNT(*) FROM ' . t('content_entry_old_slug') . ' WHERE type_id = ? AND slug = ?'
+        . ($excludeId !== '' ? ' AND entry_id <> ?' : '');
+    $oldArgs = $excludeId !== '' ? [$typeId, $slug, $excludeId] : [$typeId, $slug];
+
+    return (int) value($oldSql, $oldArgs) > 0;
 }
 
 /** @return array<string, mixed>|null */
@@ -874,6 +907,22 @@ function contentEntryInput(array $fields, array $post): array
                     continue;
                 }
 
+                // Список кандидатов не показывает архивные записи и архивные типы: POST не должен
+                // принимать связь, которую редактор не мог выбрать в форме.
+                if ((string) $target['status'] === CONTENT_STATUS_ARCHIVED) {
+                    $errors[$key] = 'Связанная запись «' . $label . '» лежит в архиве.';
+
+                    continue;
+                }
+
+                $targetType = contentTypeById((string) $target['type_id']);
+
+                if ($targetType === null || $targetType['archived_at'] !== null) {
+                    $errors[$key] = 'Тип связанной записи «' . $label . '» лежит в архиве.';
+
+                    continue;
+                }
+
                 $allowed = contentFieldOptions($field)['types'];
 
                 if ($allowed !== [] && !in_array((string) $target['type_id'], $allowed, true)) {
@@ -1009,6 +1058,26 @@ function contentEntryDataJson(array $data): string
 }
 
 /**
+ * Повторное создание по тому же ключу идемпотентности возвращает уже созданную строку. Уник-ключ
+ * ревизии включает content_id, поэтому при создании (где id генерируется заново) обычный guard
+ * такой повтор не ловит — ищем ревизию по ключу через весь тип контента.
+ */
+function contentCreationReplayId(string $type, string $idempotencyKey): string
+{
+    if ($idempotencyKey === '' || !contentRevisionTableExists('content_revisions')) {
+        return '';
+    }
+
+    $row = one(
+        'SELECT content_id FROM ' . t('content_revisions')
+        . ' WHERE content_type = ? AND idempotency_key = ? ORDER BY created_at DESC LIMIT 1',
+        [$type, mb_substr($idempotencyKey, 0, 80)]
+    );
+
+    return $row === null ? '' : (string) $row['content_id'];
+}
+
+/**
  * Создание записи. Адрес приходит уже проверенным планом; пустой — собирается из заголовка.
  * Права проверяются здесь же, чтобы прямой вызов не обошёл редакционный гейт.
  *
@@ -1041,6 +1110,25 @@ function contentEntryCreate(string $typeId, array $values, array $post, ?DateTim
 
     if ($type === null || $type['archived_at'] !== null) {
         return $fail('Тип записей не найден или лежит в архиве.');
+    }
+
+    // Повторный запрос с тем же ключом возвращает существующую запись до проверки адреса и полей:
+    // иначе второй POST упрется в занятый слаг и откажет вместо честного idempotent-ответа.
+    // Ключ ищется в пределах своего типа: чужой тип не должен отдавать свою запись по совпадению.
+    $replayId = contentCreationReplayId('entry', mb_substr(trim((string) ($meta['idempotency_key'] ?? '')), 0, 80));
+    $replayed = $replayId !== '' ? contentEntryById($replayId) : null;
+
+    if ($replayed !== null && (string) $replayed['type_id'] === $typeId) {
+        return [
+            'ok' => true,
+            'error' => '',
+            'id' => $replayId,
+            'slug' => (string) $replayed['slug'],
+            'notice' => 'content_entry_created',
+            'version' => contentRevisionVersion('entry', $replayId),
+            'errors' => [],
+            'replayed' => true,
+        ];
     }
 
     $title = mb_substr(trim((string) ($values['title'] ?? '')), 0, CONTENT_TITLE_MAX);
@@ -1103,12 +1191,14 @@ function contentEntryCreate(string $typeId, array $values, array $post, ?DateTim
         });
     } catch (ContentVersionReplay $replay) {
         $row = contentRevisionFetch($replay->revisionId);
+        $priorId = $row === null ? $id : (string) $row['content_id'];
+        $prior = contentEntryById($priorId);
 
         return [
             'ok' => true,
             'error' => '',
-            'id' => $id,
-            'slug' => $slug,
+            'id' => $priorId,
+            'slug' => $prior === null ? $slug : (string) $prior['slug'],
             'notice' => 'content_entry_created',
             'version' => (int) ($row['version'] ?? 0),
             'errors' => [],
@@ -1209,6 +1299,32 @@ function contentEntryUpdate(string $id, array $values, array $post, ?DateTimeImm
         ]);
     }
 
+    // Форма печатает только активные поля, но значения архивных полей обязаны пережить правку:
+    // поле можно вернуть тем же ключом, и его данные должны остаться на месте.
+    $preservedData = $input['data'];
+    $preservedRelations = $input['relations'];
+    $previousData = contentEntryData($entry);
+    $previousRelations = contentEntryRelations($id);
+
+    foreach (contentTypeFields($typeId, true) as $field) {
+        if ($field['archived_at'] === null) {
+            continue;
+        }
+
+        $key = (string) $field['field_key'];
+
+        if (array_key_exists($key, $previousData)) {
+            $preservedData[$key] = $previousData[$key];
+        }
+
+        if ((string) $field['kind'] === CONTENT_FIELD_RELATION && isset($previousRelations[$key])) {
+            $preservedRelations[$key] = array_map(
+                static fn (array $row): string => (string) $row['id'],
+                $previousRelations[$key]
+            );
+        }
+    }
+
     $slug = $plan['slug'];
     $previousSlug = (string) $entry['slug'];
     $slugChanged = $slug !== $previousSlug;
@@ -1220,7 +1336,7 @@ function contentEntryUpdate(string $id, array $values, array $post, ?DateTimeImm
     contentRevisionEnsureBaseline('entry', $id, $now);
 
     try {
-        tx(static function () use ($id, $typeId, $slug, $title, $input, $seoTitle, $seoDescription, $userId, $moment, $slugChanged, $previousSlug, $revisionMeta, $now): void {
+        tx(static function () use ($id, $typeId, $slug, $title, $preservedData, $preservedRelations, $seoTitle, $seoDescription, $userId, $moment, $slugChanged, $previousSlug, $revisionMeta, $now): void {
             contentRevisionGuard('entry', $id, $revisionMeta, $now);
             run(
                 'UPDATE ' . t('content_entry') . ' SET slug = ?, title = ?, data = ?, seo_title = ?, seo_description = ?,'
@@ -1228,7 +1344,7 @@ function contentEntryUpdate(string $id, array $values, array $post, ?DateTimeImm
                 [
                     $slug,
                     $title,
-                    contentEntryDataJson($input['data']),
+                    contentEntryDataJson($preservedData),
                     $seoTitle,
                     $seoDescription,
                     $userId !== '' ? $userId : null,
@@ -1237,7 +1353,7 @@ function contentEntryUpdate(string $id, array $values, array $post, ?DateTimeImm
                 ]
             );
 
-            contentEntryRelationsReplace($id, $input['relations'], $moment);
+            contentEntryRelationsReplace($id, $preservedRelations, $moment);
 
             if ($slugChanged) {
                 run(
@@ -1464,8 +1580,8 @@ function contentStatusNotice(string $status): string
 
 /**
  * Публикация/снятие записи из редакционного центра или планировщика. Вызывается внутри уже
- * открытой транзакции после contentRevisionGuard, поэтому сама guard не повторяет и ревизию
- * фиксирует как событие.
+ * открытой транзакции; версию проверяет сама, потому что редакционный центр вызывает фильтр
+ * сразу, не делая guard для новых типов. Конфликт всплывает наружу и откатывает всю транзакцию.
  *
  * @param array<string, mixed> $meta
  */
@@ -1477,6 +1593,7 @@ function contentEntryApplyPublication(string $key, bool $publish, array $meta = 
         return 0;
     }
 
+    contentRevisionGuard('entry', $key, contentRevisionMeta($meta), $now);
     $moment = utcStamp($now ?? nowUtc());
     $publishedAt = $entry['published_at'];
 
@@ -1789,6 +1906,24 @@ function globalBlockSave(?string $id, array $values, ?DateTimeImmutable $now = n
         return $fail('Блок не найден — обновите список.');
     }
 
+    if ($existing === null) {
+        $replayId = contentCreationReplayId('block', mb_substr(trim((string) ($meta['idempotency_key'] ?? '')), 0, 80));
+
+        if ($replayId !== '' && globalBlockById($replayId) !== null) {
+            $replayed = globalBlockById($replayId);
+
+            return [
+                'ok' => true,
+                'error' => '',
+                'id' => $replayId,
+                'slug' => (string) $replayed['slug'],
+                'notice' => 'content_block_created',
+                'version' => contentRevisionVersion('block', $replayId),
+                'replayed' => true,
+            ];
+        }
+    }
+
     $title = mb_substr(trim((string) ($values['title'] ?? '')), 0, GLOBAL_BLOCK_TITLE_MAX);
 
     if (mb_strlen($title) < 2) {
@@ -2059,7 +2194,7 @@ function contentSitemapUrls(array $urls): array
  */
 function contentMetaUser(array $meta): ?array
 {
-    $user = $meta['user'] ?? null;
+    $user = $meta['user'] ?? $meta['author'] ?? null;
 
     if (is_array($user)) {
         return $user;
@@ -2117,13 +2252,32 @@ function contentEntryRevisionSnapshot(string $key): array
     ];
 }
 
-/** @param array<string, mixed> $payload */
-function contentEntryApplyRevision(string $key, array $payload, ?DateTimeImmutable $now = null): void
+/** @param array<string, mixed> $payload
+ *  @param array<string, mixed> $meta
+ */
+function contentEntryApplyRevision(string $key, array $payload, ?DateTimeImmutable $now = null, array $meta = []): void
 {
     $entry = contentEntryById($key);
 
     if ($entry === null) {
         throw new RuntimeException('Запись уже удалена — восстановить её нельзя.');
+    }
+
+    // Восстановление ревизии не должно тихо возвращать материал в публикацию: право restore есть
+    // и у редактора, а право publish — только у администратора. Архив — тоже решение о том, что
+    // видит посетитель, поэтому требует того же права.
+    $targetStatus = in_array($payload['status'] ?? '', CONTENT_STATUSES, true) ? (string) $payload['status'] : CONTENT_STATUS_DRAFT;
+
+    if (in_array($targetStatus, [CONTENT_STATUS_PUBLISHED, CONTENT_STATUS_ARCHIVED], true)
+        && !editorialCan('publish', contentMetaUser($meta))
+    ) {
+        throw new RuntimeException('Восстановление опубликованной или архивной версии требует права публикации.');
+    }
+
+    // Расписание живёт отдельной заявкой в планировщике, а не в строке записи: восстановленный
+    // статус «запланировано» без заявки оставил бы материал невидимым навсегда.
+    if ($targetStatus === CONTENT_STATUS_SCHEDULED) {
+        throw new RuntimeException('Версия со статусом «Запланировано» не восстанавливается — запланируйте публикацию заново.');
     }
 
     $typeId = (string) $entry['type_id'];
@@ -2178,7 +2332,7 @@ function contentEntryApplyRevision(string $key, array $payload, ?DateTimeImmutab
             contentEntryDataJson($data),
             (string) ($payload['seo_title'] ?? ''),
             (string) ($payload['seo_description'] ?? ''),
-            in_array($payload['status'] ?? '', CONTENT_STATUSES, true) ? (string) $payload['status'] : CONTENT_STATUS_DRAFT,
+            $targetStatus,
             (string) ($payload['published_at'] ?? '') !== '' ? (string) $payload['published_at'] : null,
             $moment,
             $key,
@@ -2204,6 +2358,12 @@ function contentBlockRevisionSnapshot(string $key): array
 /** @param array<string, mixed> $payload */
 function contentBlockApplyRevision(string $key, array $payload, ?DateTimeImmutable $now = null): void
 {
+    // Блоки — зона администратора, а право restore есть и у редактора. Прямой POST в редакционный
+    // центр не должен обходить гейт управления блоками.
+    if (!grantsAppManage()) {
+        throw new RuntimeException('Восстанавливать глобальные блоки может только администратор.');
+    }
+
     if (globalBlockById($key) === null) {
         throw new RuntimeException('Блок уже удалён — восстановить его нельзя.');
     }
@@ -2259,11 +2419,13 @@ function contentRevisionPayloadFilter(mixed $payload, string $type, string $key)
     return $payload;
 }
 
-/** @param array<string, mixed> $payload */
-function contentRevisionApplyHook(string $type, string $key, array $payload): void
+/** @param array<string, mixed> $payload
+ *  @param array<string, mixed> $meta
+ */
+function contentRevisionApplyHook(string $type, string $key, array $payload, array $meta = []): void
 {
     if ($type === 'entry') {
-        contentEntryApplyRevision($key, $payload);
+        contentEntryApplyRevision($key, $payload, null, $meta);
 
         return;
     }
@@ -2279,28 +2441,52 @@ function contentRevisionApplyHook(string $type, string $key, array $payload): vo
  */
 function contentEditorialExistsFilter(mixed $exists, string $type, string $key): mixed
 {
-    return $type === 'entry' ? contentEntryById($key) !== null : $exists;
+    if ($type === 'entry') {
+        return contentEntryById($key) !== null;
+    }
+
+    // Блоки ведёт только администратор: редактор не должен открывать их историю даже прямым
+    // адресом, иначе прямой POST восстановил бы содержимое архивного блока.
+    if ($type === 'block') {
+        return grantsAppManage() && globalBlockById($key) !== null;
+    }
+
+    return $exists;
 }
 
 function contentEditorialTitleFilter(mixed $title, string $type, string $key): mixed
 {
-    if ($type !== 'entry') {
-        return $title;
+    if ($type === 'entry') {
+        $entry = contentEntryById($key);
+
+        return $entry === null ? 'Запись' : (string) $entry['title'];
     }
 
-    $entry = contentEntryById($key);
+    if ($type === 'block') {
+        $block = globalBlockById($key);
 
-    return $entry === null ? 'Запись' : (string) $entry['title'];
+        return $block === null ? 'Глобальный блок' : (string) $block['title'];
+    }
+
+    return $title;
 }
 
 function contentEditorialUrlFilter(mixed $url, string $type, string $key): mixed
 {
-    return $type === 'entry' ? '/admin/content/entries/' . rawurlencode($key) : $url;
+    if ($type === 'entry') {
+        return '/admin/content/entries/' . rawurlencode($key);
+    }
+
+    return $type === 'block' ? '/admin/content/blocks/' . rawurlencode($key) : $url;
 }
 
 function contentEditorialLabelFilter(mixed $label, string $type): mixed
 {
-    return $type === 'entry' ? 'Запись' : $label;
+    return match ($type) {
+        'entry' => 'Запись',
+        'block' => 'Глобальный блок',
+        default => $label,
+    };
 }
 
 /**

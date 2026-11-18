@@ -799,7 +799,7 @@ function coreAdminContentEntryAction(array $params = []): void
         'user' => is_array($user) ? $user : null,
         'comment' => postString('comment'),
         'expected_version' => postString('expected_version'),
-        'idempotency_key' => newId(),
+        'idempotency_key' => postString('idempotency_key'),
     ];
     $fields = contentTypeFields((string) $type['id']);
     $fallback = contentAdminPostedFields(postAll());
@@ -968,7 +968,7 @@ function coreAdminContentBlockAction(array $params = []): void
             'user' => currentUser(),
             'comment' => postString('comment'),
             'expected_version' => postString('expected_version'),
-            'idempotency_key' => newId(),
+            'idempotency_key' => postString('idempotency_key'),
         ];
         $result = globalBlockSave($blockId, $values, null, $meta);
 

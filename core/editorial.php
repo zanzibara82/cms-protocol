@@ -484,7 +484,7 @@ function editorialApplyPublication(string $type, string $key, bool $publish, arr
     }
 
     // Новые типы контента (RELEASE 2.3) меняет подписчик фильтра: ядро уже открыло транзакцию,
-    // проверило версию и метаданные ревизии, поэтому обработчик только пишет строку и событие.
+    // а версию подписчик проверяет сам — у page/news/product она проверяется выше.
     $version = applyFilters('editorial_apply_publication', 0, $type, $key, $publish, $meta, $now);
 
     return is_int($version) ? $version : 0;
@@ -1041,6 +1041,13 @@ function editorialRecentRevisions(int $limit = 50): array
         . ' LEFT JOIN ' . t('user') . ' u ON u.id = r.author_id'
         . ' ORDER BY r.created_at DESC, r.id DESC LIMIT ' . max(1, min(200, $limit))
     );
+
+    // Ревизия удалённого материала вела бы на экран 404, а ревизия блока — в зону, закрытую для
+    // редактора. Лента показывает только то, что вызывающий действительно может открыть.
+    $rows = array_values(array_filter(
+        $rows,
+        static fn (array $row): bool => editorialContentExists((string) $row['content_type'], (string) $row['content_id'])
+    ));
 
     foreach ($rows as $index => $row) {
         $type = (string) $row['content_type'];

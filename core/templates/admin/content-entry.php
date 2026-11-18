@@ -38,13 +38,13 @@ $back = '/admin/content/types/' . rawurlencode((string) $type['id']) . '/entries
     <p class="text-sm text-ink/60">Черновик виден только сотрудникам редакции по прямому адресу.</p>
 <?php endif; ?>
 
-<form class="space-y-4" method="post" action="<?= e($target) ?>">
+<form class="space-y-4" method="post" action="<?= e($target) ?>" enctype="multipart/form-data">
     <?= csrfField() /* @safe html */ ?>
     <input type="hidden" name="op" value="save-entry">
     <?php if (!$isNew): ?>
         <input type="hidden" name="expected_version" value="<?= e((string) $version) ?>">
-        <input type="hidden" name="idempotency_key" value="<?= e(newId()) ?>">
     <?php endif; ?>
+    <input type="hidden" name="idempotency_key" value="<?= e(newId()) ?>">
     <section class="rounded-lg border border-ink/10 bg-white p-4">
         <h2 class="font-semibold">Заголовок и адрес</h2>
         <div class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -108,6 +108,7 @@ $back = '/admin/content/types/' . rawurlencode((string) $type['id']) . '/entries
             <?= csrfField() /* @safe html */ ?>
             <input type="hidden" name="op" value="status">
             <input type="hidden" name="expected_version" value="<?= e((string) $version) ?>">
+            <input type="hidden" name="idempotency_key" value="<?= e(newId()) ?>">
             <label class="block min-w-0 text-sm"><span class="block font-medium">Состояние</span>
                 <select class="min-h-[44px] <?= e($input) ?>" name="status">
                     <?php foreach ([CONTENT_STATUS_DRAFT, CONTENT_STATUS_PUBLISHED, CONTENT_STATUS_ARCHIVED] as $status): ?>

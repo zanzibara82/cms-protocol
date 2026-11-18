@@ -175,6 +175,229 @@ final class Release23ContentTest extends TestCase
         self::assertStringContainsString('<strong>блока</strong>', globalBlockHtml(globalBlockById($blockId)));
     }
 
+    public function testАрхивноеПолеИСвязьПереживаютПравкуЗаписи(): void
+    {
+        $targetType = contentTypeSave(null, ['name' => 'Справочник', 'slug' => 'spravochnik'], $this->fieldRows([
+            ['label' => 'Название', 'key' => 'name', 'kind' => CONTENT_FIELD_TEXT, 'required' => true],
+        ]), $this->now, $this->meta());
+        $target = contentEntryCreate((string) $targetType['id'], ['title' => 'Цель связи'], [
+            'fields' => ['name' => 'Цель связи'],
+        ], $this->now, $this->meta());
+
+        $type = contentTypeSave(null, ['name' => 'Карточки', 'slug' => 'kartochki'], $this->fieldRows([
+            ['label' => 'Заголовок', 'key' => 'zagolovok', 'kind' => CONTENT_FIELD_TEXT, 'required' => true],
+            ['label' => 'Биография', 'key' => 'bio', 'kind' => CONTENT_FIELD_TEXT],
+            ['label' => 'Связь', 'key' => 'svyaz', 'kind' => CONTENT_FIELD_RELATION, 'types' => [(string) $targetType['id']]],
+        ]), $this->now, $this->meta());
+        $typeId = (string) $type['id'];
+
+        $entry = contentEntryCreate($typeId, ['title' => 'Карточка'], ['fields' => [
+            'zagolovok' => 'Карточка',
+            'bio' => 'Биография сохраняется',
+            'svyaz' => [(string) $target['id']],
+        ]], $this->now, $this->meta());
+        $entryId = (string) $entry['id'];
+
+        // Убираем два поля через конструктор: они уходят в архив, но значения остаются в JSON.
+        $kept = contentTypeSave($typeId, ['name' => 'Карточки', 'slug' => 'kartochki'], $this->fieldRows([
+            ['label' => 'Заголовок', 'key' => 'zagolovok', 'kind' => CONTENT_FIELD_TEXT, 'required' => true, 'original' => 'zagolovok'],
+        ]), $this->now, $this->meta());
+        self::assertTrue($kept['ok'], (string) $kept['error']);
+
+        $updated = contentEntryUpdate($entryId, ['title' => 'Карточка обновлена'], ['fields' => [
+            'zagolovok' => 'Карточка обновлена',
+        ]], $this->now, $this->meta());
+        self::assertTrue($updated['ok'], (string) $updated['error']);
+
+        self::assertSame('Биография сохраняется', contentEntryData(contentEntryById($entryId))['bio']);
+        $relations = contentEntryRelations($entryId);
+        self::assertSame($target['id'], $relations['svyaz'][0]['id']);
+    }
+
+    public function testПовторСозданияПоКлючуИдемпотентностиНеДублируетКонтент(): void
+    {
+        $type = contentTypeSave(null, ['name' => 'Заметки', 'slug' => 'zametki'], $this->fieldRows([
+            ['label' => 'Текст', 'key' => 'text', 'kind' => CONTENT_FIELD_TEXT],
+        ]), $this->now, $this->meta());
+        $meta = $this->meta(['idempotency_key' => 'odin-klyuch']);
+        $first = contentEntryCreate((string) $type['id'], ['title' => 'Заметка'], ['fields' => ['text' => 'Текст']], $this->now, $meta);
+        $second = contentEntryCreate((string) $type['id'], ['title' => 'Заметка'], ['fields' => ['text' => 'Текст']], $this->now, $meta);
+
+        self::assertTrue($first['ok'], (string) $first['error']);
+        self::assertTrue($second['ok'], (string) $second['error']);
+        self::assertTrue((bool) ($second['replayed'] ?? false));
+        self::assertSame($first['id'], $second['id']);
+        self::assertSame(1, (int) value('SELECT COUNT(*) FROM ' . t('content_entry') . ' WHERE type_id = ?', [(string) $type['id']]));
+
+        $blockMeta = $this->meta(['idempotency_key' => 'blok-klyuch']);
+        $blockFirst = globalBlockSave(null, ['title' => 'Блок', 'slug' => 'blok'], $this->now, $blockMeta);
+        $blockSecond = globalBlockSave(null, ['title' => 'Блок', 'slug' => 'blok'], $this->now, $blockMeta);
+        self::assertTrue((bool) ($blockSecond['replayed'] ?? false));
+        self::assertSame($blockFirst['id'], $blockSecond['id']);
+    }
+
+    public function testВосстановлениеПубликацииТребуетПраваПубликации(): void
+    {
+        $type = contentTypeSave(null, ['name' => 'Публикации', 'slug' => 'publikacii'], $this->fieldRows([
+            ['label' => 'Текст', 'key' => 'text', 'kind' => CONTENT_FIELD_TEXT],
+        ]), $this->now, $this->meta());
+        $entry = contentEntryCreate((string) $type['id'], ['title' => 'Материал'], ['fields' => ['text' => 'Текст']], $this->now, $this->meta());
+        $entryId = (string) $entry['id'];
+
+        $published = contentEntryStatus($entryId, CONTENT_STATUS_PUBLISHED, $this->now, $this->meta());
+        self::assertTrue($published['ok'], (string) $published['error']);
+        $revisionId = (string) contentRevisionLatest('entry', $entryId)['id'];
+
+        $unpublished = contentEntryStatus($entryId, CONTENT_STATUS_DRAFT, $this->now, $this->meta());
+        self::assertTrue($unpublished['ok'], (string) $unpublished['error']);
+
+        $editorId = TestDb::seedUser('editor23@example.test', 'пароль-для-теста', ROLES['editor']);
+        $_SESSION['user_id'] = $editorId;
+        $editor = currentUser();
+        $restored = contentRevisionRestore('entry', $entryId, $revisionId, ['author' => $editor], $this->now);
+        self::assertFalse($restored['ok'], 'Редактор не должен снимать барьер публикации через восстановление');
+        self::assertSame(CONTENT_STATUS_DRAFT, (string) contentEntryById($entryId)['status']);
+    }
+
+    public function testПрежнийСлагНеОтдаётсяПодНовыйРаздел(): void
+    {
+        $type = contentTypeSave(null, ['name' => 'Статьи', 'slug' => 'statyi'], [], $this->now, $this->meta());
+        $renamed = contentTypeSave((string) $type['id'], ['name' => 'Статьи', 'slug' => 'articles'], [], $this->now, $this->meta());
+        self::assertTrue($renamed['ok'], (string) $renamed['error']);
+
+        $taken = contentTypeSave(null, ['name' => 'Другие статьи', 'slug' => 'statyi'], [], $this->now, $this->meta());
+        self::assertFalse($taken['ok'], 'Старый адрес типа не должен доставаться другому типу');
+
+        $page = createPage(['slug' => 'statyi', 'title' => 'Страница', 'status' => PAGES_STATUS_PUBLISHED], $this->now);
+        self::assertFalse($page['ok'], 'Старый адрес типа не должен доставаться странице');
+    }
+
+    public function testСвязьОтклоняетАрхивнуюЗапись(): void
+    {
+        $type = contentTypeSave(null, ['name' => 'Записи', 'slug' => 'zapisi'], $this->fieldRows([
+            ['label' => 'Название', 'key' => 'name', 'kind' => CONTENT_FIELD_TEXT, 'required' => true],
+            ['label' => 'Связь', 'key' => 'svyaz', 'kind' => CONTENT_FIELD_RELATION],
+        ]), $this->now, $this->meta());
+        $first = contentEntryCreate((string) $type['id'], ['title' => 'Первая'], ['fields' => ['name' => 'Первая']], $this->now, $this->meta());
+        $second = contentEntryCreate((string) $type['id'], ['title' => 'Вторая'], ['fields' => ['name' => 'Вторая']], $this->now, $this->meta());
+
+        $archived = contentEntryStatus((string) $first['id'], CONTENT_STATUS_ARCHIVED, $this->now, $this->meta());
+        self::assertTrue($archived['ok'], (string) $archived['error']);
+
+        $updated = contentEntryUpdate((string) $second['id'], ['title' => 'Вторая'], ['fields' => [
+            'name' => 'Вторая',
+            'svyaz' => [(string) $first['id']],
+        ]], $this->now, $this->meta());
+        self::assertFalse($updated['ok']);
+        self::assertArrayHasKey('svyaz', $updated['errors']);
+    }
+
+    public function testБлокиВРедакционномЦентреДоступныТолькоАдминистратору(): void
+    {
+        $created = globalBlockSave(null, [
+            'title' => 'Общий блок',
+            'slug' => 'obshchij-blok',
+            'text' => 'Текст блока',
+        ], $this->now, $this->meta());
+        self::assertTrue($created['ok'], (string) $created['error']);
+        $blockId = (string) $created['id'];
+        $revisionId = (string) contentRevisionLatest('block', $blockId)['id'];
+
+        // Администратор видит историю блока и его место в ленте редакции.
+        self::assertTrue(editorialContentExists('block', $blockId));
+        self::assertSame('Общий блок', editorialContentTitle('block', $blockId));
+        self::assertSame('/admin/content/blocks/' . $blockId, editorialContentUrl('block', $blockId));
+        $feed = array_filter(editorialRecentRevisions(10), static fn (array $row): bool => (string) $row['content_type'] === 'block');
+        self::assertNotEmpty($feed, 'Лента администратора показывает блок');
+
+        $updated = globalBlockSave($blockId, ['title' => 'Изменённый блок', 'text' => 'Текст блока'], $this->now, $this->meta());
+        self::assertTrue($updated['ok'], (string) $updated['error']);
+
+        $editorId = TestDb::seedUser('block-editor@example.test', 'пароль-для-теста', ROLES['editor']);
+        $_SESSION['user_id'] = $editorId;
+        self::assertFalse(editorialContentExists('block', $blockId), 'Редактор не открывает историю блоков');
+        $feed = array_filter(editorialRecentRevisions(10), static fn (array $row): bool => (string) $row['content_type'] === 'block');
+        self::assertSame([], array_values($feed), 'Лента редактора не показывает блоки');
+        $denied = contentRevisionRestore('block', $blockId, $revisionId, ['author' => currentUser()], $this->now);
+        self::assertFalse($denied['ok'], 'Прямой POST не обходит гейт управления блоками');
+        self::assertSame('Изменённый блок', (string) globalBlockById($blockId)['title']);
+
+        // Администратор возвращает прежнюю версию блока.
+        $_SESSION['user_id'] = (string) $this->admin['id'];
+        $restored = contentRevisionRestore('block', $blockId, $revisionId, ['author' => $this->admin], $this->now);
+        self::assertTrue($restored['ok'], (string) $restored['error']);
+        self::assertSame('Общий блок', (string) globalBlockById($blockId)['title']);
+    }
+
+    public function testВосстановлениеЗапланированнойВерсииОтклоняется(): void
+    {
+        $type = contentTypeSave(null, ['name' => 'Планы', 'slug' => 'plany'], $this->fieldRows([
+            ['label' => 'Текст', 'key' => 'text', 'kind' => CONTENT_FIELD_TEXT],
+        ]), $this->now, $this->meta());
+        $entry = contentEntryCreate((string) $type['id'], ['title' => 'Будущий материал'], ['fields' => [
+            'text' => 'Текст',
+        ]], $this->now, $this->meta());
+        $entryId = (string) $entry['id'];
+
+        $scheduled = contentEntrySchedule($entryId, '2030-01-01T12:00', 'UTC', $this->admin, $this->now);
+        self::assertTrue($scheduled['ok'], (string) $scheduled['error']);
+        $revisionId = (string) contentRevisionLatest('entry', $entryId)['id'];
+
+        $cancelled = contentEntryScheduleCancel((string) $scheduled['id'], $this->admin, $this->now);
+        self::assertTrue($cancelled['ok'], (string) $cancelled['error']);
+
+        $restored = contentRevisionRestore('entry', $entryId, $revisionId, ['author' => $this->admin], $this->now);
+        self::assertFalse($restored['ok'], 'Статус «запланировано» без заявки не восстанавливается');
+        self::assertStringContainsString('Запланировано', (string) $restored['error']);
+        self::assertSame(CONTENT_STATUS_DRAFT, (string) contentEntryById($entryId)['status']);
+    }
+
+    public function testВосстановлениеАрхивнойВерсииТребуетПраваПубликации(): void
+    {
+        $type = contentTypeSave(null, ['name' => 'Архив', 'slug' => 'arhiv'], $this->fieldRows([
+            ['label' => 'Текст', 'key' => 'text', 'kind' => CONTENT_FIELD_TEXT],
+        ]), $this->now, $this->meta());
+        $entry = contentEntryCreate((string) $type['id'], ['title' => 'Материал'], ['fields' => [
+            'text' => 'Текст',
+        ]], $this->now, $this->meta());
+        $entryId = (string) $entry['id'];
+
+        $archived = contentEntryStatus($entryId, CONTENT_STATUS_ARCHIVED, $this->now, $this->meta());
+        self::assertTrue($archived['ok'], (string) $archived['error']);
+        $revisionId = (string) contentRevisionLatest('entry', $entryId)['id'];
+
+        $editorId = TestDb::seedUser('archive-editor@example.test', 'пароль-для-теста', ROLES['editor']);
+        $_SESSION['user_id'] = $editorId;
+        $restored = contentRevisionRestore('entry', $entryId, $revisionId, ['author' => currentUser()], $this->now);
+        self::assertFalse($restored['ok'], 'Редактор не возвращает архивную версию');
+        self::assertSame(CONTENT_STATUS_ARCHIVED, (string) contentEntryById($entryId)['status']);
+    }
+
+    public function testПрежнийСлагЗаписиНеОтдаётсяДругойЗаписи(): void
+    {
+        $type = contentTypeSave(null, ['name' => 'Материалы', 'slug' => 'materialy'], $this->fieldRows([
+            ['label' => 'Текст', 'key' => 'text', 'kind' => CONTENT_FIELD_TEXT],
+        ]), $this->now, $this->meta());
+        $typeId = (string) $type['id'];
+
+        $first = contentEntryCreate($typeId, ['title' => 'Первая', 'slug' => 'pervaya'], ['fields' => ['text' => 'Текст']], $this->now, $this->meta());
+        self::assertTrue($first['ok'], (string) $first['error']);
+        $renamed = contentEntryUpdate((string) $first['id'], ['title' => 'Первая', 'slug' => 'novaya'], ['fields' => ['text' => 'Текст']], $this->now, $this->meta());
+        self::assertTrue($renamed['ok'], (string) $renamed['error']);
+
+        // Старый адрес держит 301 на живую запись: второй материал его не получает.
+        $renamedRow = contentEntryById((string) $first['id']);
+        self::assertNotNull($renamedRow);
+        self::assertSame('novaya', (string) $renamedRow['slug']);
+        $second = contentEntryCreate($typeId, ['title' => 'Вторая', 'slug' => 'pervaya'], ['fields' => ['text' => 'Текст']], $this->now, $this->meta());
+        self::assertFalse($second['ok']);
+
+        // Владелец может вернуться на прежний адрес: свой прежний слаг ему не чужой.
+        $back = contentEntryUpdate((string) $first['id'], ['title' => 'Первая', 'slug' => 'pervaya'], ['fields' => ['text' => 'Текст']], $this->now, $this->meta());
+        self::assertTrue($back['ok'], (string) $back['error']);
+        self::assertSame('pervaya', (string) contentEntryById((string) $first['id'])['slug']);
+    }
+
     /** @param list<array<string, mixed>> $rows
      *  @return array<string, mixed>
      */
@@ -188,6 +411,7 @@ final class Release23ContentTest extends TestCase
         foreach ($rows as $index => $row) {
             $raw['field_label'][$index] = $row['label'];
             $raw['field_key'][$index] = $row['key'];
+            $raw['field_original'][$index] = $row['original'] ?? '';
             $raw['field_kind'][$index] = $row['kind'];
             $raw['field_required'][$index] = ($row['required'] ?? false) ? '1' : '0';
             $raw['field_types'][$index] = $row['types'] ?? [];

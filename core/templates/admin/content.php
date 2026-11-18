@@ -31,7 +31,10 @@ $typeTable = '<section class="overflow-hidden rounded-lg border border-ink/10 bg
     . '<div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 p-4">'
     . '<div><h2 class="font-semibold">Типы записей</h2>'
     . '<p class="mt-1 text-sm text-ink/60">Свои разделы с настраиваемыми полями и публичными адресами.</p></div>'
-    . '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" href="/admin/content/types/new">Новый тип</a></div>';
+    . (grantsAppManage()
+        ? '<a class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" href="/admin/content/types/new">Новый тип</a>'
+        : '')
+    . '</div>';
 
 if ($typeRows === '') {
     $typeTable .= '<p class="p-4 text-sm text-ink/60">Типов пока нет. Создайте первый — например, «Статьи» или «Сотрудники».</p>';

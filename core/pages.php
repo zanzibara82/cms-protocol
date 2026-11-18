@@ -269,7 +269,11 @@ final class PagesLimitReached extends \RuntimeException
 {
 }
 
-/** Занятость адреса страницы: excludeId — правка своей страницы свой адрес не считает занятием. */
+/**
+ * Занятость адреса страницы: excludeId — правка своей страницы свой адрес не считает занятием.
+ *
+ * @phpstan-impure результат зависит от состояния базы и может измениться между вызовами.
+ */
 function pageSlugTaken(string $slug, string $excludeId = ''): bool
 {
     $sql = 'SELECT COUNT(*) FROM ' . t('page') . ' WHERE slug = ?' . ($excludeId !== '' ? ' AND id <> ?' : '');
@@ -281,10 +285,21 @@ function pageSlugTaken(string $slug, string $excludeId = ''): bool
     // RELEASE 2.3: адрес активного типа записей — такой же публичный первый сегмент, как страница.
     // Две сущности на одном /{slug} сделали бы одну из них недоступной; архивный тип адрес не держит.
     if (function_exists('contentTableExists') && contentTableExists('content_type')) {
-        return (int) value(
+        if ((int) value(
             'SELECT COUNT(*) FROM ' . t('content_type') . ' WHERE slug = ? AND archived_at IS NULL',
             [$slug]
-        ) > 0;
+        ) > 0) {
+            return true;
+        }
+
+        // Прежний адрес типа держит 301 на живой раздел; страница с этим адресом перехватила бы
+        // перенаправление и сделала бы внешние ссылки мёртвыми.
+        if (contentTableExists('content_type_old_slug')) {
+            return (int) value(
+                'SELECT COUNT(*) FROM ' . t('content_type_old_slug') . ' WHERE slug = ?',
+                [$slug]
+            ) > 0;
+        }
     }
 
     return false;
@@ -918,6 +933,22 @@ function createPage(array $values, ?DateTimeImmutable $now = null): array
     if ($slug === '') {
         // Пустой адрес без причины — молчаливая страница на «/»: отказ честнее.
         return ['ok' => false, 'error' => 'Адрес страницы не собран — впишите адрес сами.', 'id' => '', 'slug' => '', 'notice' => ''];
+    }
+
+    if (pageSlugTaken($slug)) {
+        // Причина называется точно: занятый адрес страницы и адрес раздела записей — разные
+        // находки, и общая фраза «страница или тип» не подсказывает, что именно менять.
+        $pageBusy = (int) value('SELECT COUNT(*) FROM ' . t('page') . ' WHERE slug = ?', [$slug]) > 0;
+
+        return [
+            'ok' => false,
+            'error' => $pageBusy
+                ? 'По такому адресу уже есть страница — придумайте другой.'
+                : 'По такому адресу уже есть раздел записей — выберите другой.',
+            'id' => '',
+            'slug' => '',
+            'notice' => '',
+        ];
     }
 
     $id = newId();

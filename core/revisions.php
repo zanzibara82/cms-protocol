@@ -901,15 +901,19 @@ function contentRevisionRestore(string $type, string $id, string $revisionId, ar
 
     $key = contentRevisionKeyId($type, $id);
     $now ??= nowUtc();
+    // Исходный автор нужен фильтру восстановления: ревизии новых сущностей проверяют право
+    // публикации, а нормализованные метаданные несут только author_id/author_email.
+    $restoringUser = $meta['user'] ?? $meta['author'] ?? null;
     $meta = contentRevisionMeta($meta);
     $meta['operation'] = 'restore';
     $meta['comment'] = $meta['comment'] !== '' ? $meta['comment'] : 'Восстановлена версия ' . (string) $revision['version'];
+    $applyMeta = is_array($restoringUser) ? ['user' => $restoringUser] : [];
     $payload = $revision['payload'];
 
     try {
-        $result = tx(static function () use ($type, $key, $payload, $meta, $now): array {
+        $result = tx(static function () use ($type, $key, $payload, $meta, $applyMeta, $now): array {
             contentRevisionGuard($type, $key, $meta, $now);
-            contentRevisionApply($type, $key, $payload, $now);
+            contentRevisionApply($type, $key, $payload, $now, $applyMeta);
 
             return contentRevisionCommit($type, $key, $meta, $now);
         });
@@ -919,6 +923,15 @@ function contentRevisionRestore(string $type, string $id, string $revisionId, ar
         $row = contentRevisionFetch($replay->revisionId);
 
         return ['ok' => true, 'error' => '', 'revision_id' => $replay->revisionId, 'version' => (int) ($row['version'] ?? 0)];
+    } catch (\PDOException $error) {
+        // Ошибку базы не показываем человеку: в тексте исключения бывают имена таблиц и SQL.
+        logError('revisions.restore_failed', ['type' => $type, 'id' => $key, 'message' => $error->getMessage()]);
+
+        return $fail('Версия не восстановилась — повторите попытку.');
+    } catch (RuntimeException $error) {
+        // Фильтры восстановления новых сущностей отклоняют недопустимые сценарии (например,
+        // возврат опубликованной версии редактором) человеческим текстом, а не 500-й страницей.
+        return $fail($error->getMessage());
     }
 
     return ['ok' => true, 'error' => '', 'revision_id' => (string) $result['revision_id'], 'version' => (int) $result['version']];
@@ -926,8 +939,9 @@ function contentRevisionRestore(string $type, string $id, string $revisionId, ar
 
 /** Применяет payload ревизии к живой таблице. Вызывается внутри транзакции после guard.
  *  @param array<string, mixed> $payload
+ *  @param array<string, mixed> $meta
  */
-function contentRevisionApply(string $type, string $key, array $payload, ?DateTimeImmutable $now = null): void
+function contentRevisionApply(string $type, string $key, array $payload, ?DateTimeImmutable $now = null, array $meta = []): void
 {
     if ($type === 'page') {
         contentRevisionApplyPage($key, $payload, $now);
@@ -936,7 +950,7 @@ function contentRevisionApply(string $type, string $key, array $payload, ?DateTi
     } elseif ($type === 'product') {
         contentRevisionApplyProduct($key, $payload, $now);
     } else {
-        doAction('content_revision_apply', $type, $key, $payload);
+        doAction('content_revision_apply', $type, $key, $payload, $meta);
     }
 }
 
