@@ -131,4 +131,21 @@ function securityHeaders(): void
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('X-Frame-Options: SAMEORIGIN');
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
+
+    $hsts = securityHeadersHstsValue(isHttps());
+
+    if ($hsts !== '') {
+        header('Strict-Transport-Security: ' . $hsts);
+    }
+}
+
+/**
+ * Значение HSTS для ответа: по HTTP пусто. Заголовок браузер запоминает для всего
+ * домена на год, поэтому отдавать его по обычному HTTP нельзя — локальная приёмка
+ * на 127.0.0.1 перестала бы открываться по http:// вовсе. Правило чистым
+ * помощником: стенд поднимается по HTTP, и проверить обе стороны иначе нечем.
+ */
+function securityHeadersHstsValue(bool $secure): string
+{
+    return $secure ? 'max-age=31536000; includeSubDomains' : '';
 }

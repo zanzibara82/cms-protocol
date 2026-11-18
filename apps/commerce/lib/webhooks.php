@@ -38,6 +38,196 @@ function commerceWebhook(string $id): ?array
 }
 
 /**
+ * Разбор адреса на части с проверкой схемы и учётных данных.
+ *
+ * Адрес вебхука — это куда сервер сам сделает запрос. Поэтому мало «начинается
+ * с http://»: нужен ещё запрет внутренних диапазонов (см. commerceWebhookIpDenied).
+ * Разбор отделён от разрешения имён: форма проверяет адрес мгновенно и без сети, а
+ * доставка повторяет проверку с разрешением — имя может указывать внутрь и сменить
+ * адрес между сохранением и отправкой (DNS rebinding).
+ *
+ * @return array{problem: string, host: string}
+ */
+function commerceWebhookUrlParse(string $url): array
+{
+    $parts = parse_url($url);
+
+    if ($parts === false || !isset($parts['scheme']) || !isset($parts['host'])) {
+        return ['problem' => 'Адрес не читается: нет схемы или имени хоста.', 'host' => ''];
+    }
+
+    $scheme = strtolower((string) $parts['scheme']);
+
+    if ($scheme !== 'http' && $scheme !== 'https') {
+        return ['problem' => 'Адрес начинается с http:// или https://.', 'host' => ''];
+    }
+
+    // Логин и пароль в адресе уезжают в заголовок Authorization: секрет вебхука
+    // не должен попасть в чужие руки этим путём.
+    if (isset($parts['user']) || isset($parts['pass'])) {
+        return ['problem' => 'Адрес приёмника не содержит логина и пароля.', 'host' => ''];
+    }
+
+    $host = (string) $parts['host'];
+
+    if (str_starts_with($host, '[') && str_ends_with($host, ']')) {
+        $host = substr($host, 1, -1);
+    }
+
+    if ($host === '') {
+        return ['problem' => 'Адрес не читается: нет имени хоста.', 'host' => ''];
+    }
+
+    return ['problem' => '', 'host' => $host];
+}
+
+/** Причина отказа адреса вебхука: пустая строка — адрес годен. */
+function commerceWebhookUrlProblem(string $url, ?callable $resolve = null): string
+{
+    $parsed = commerceWebhookUrlParse($url);
+
+    if ($parsed['problem'] !== '') {
+        return $parsed['problem'];
+    }
+
+    $host = $parsed['host'];
+    $literal = filter_var($host, FILTER_VALIDATE_IP);
+
+    if ($literal !== false) {
+        return commerceWebhookIpDenied((string) $literal)
+            ? 'Адрес приёмника указывает на внутренний адрес сети.'
+            : '';
+    }
+
+    /** @var list<string> $addresses */
+    $addresses = $resolve !== null ? (array) $resolve($host) : commerceWebhookResolveHost($host);
+
+    if ($addresses === []) {
+        return 'Адрес приёмника не удалось разрешить в IP.';
+    }
+
+    foreach ($addresses as $address) {
+        if ($address === '' || commerceWebhookIpDenied($address)) {
+            return 'Адрес приёмника указывает на внутренний адрес сети.';
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Проверка адреса для формы: без сети и без разрешения имён. Разрешение на сохранении
+ * дало бы ложные отказы (чужой DNS на прогонной машине, переезд приёмника), а саму
+ * защиту всё равно обязан повторить транспорт — перед запросом.
+ */
+function commerceWebhookUrlSavedProblem(string $url): string
+{
+    $parsed = commerceWebhookUrlParse($url);
+
+    if ($parsed['problem'] !== '') {
+        return $parsed['problem'];
+    }
+
+    $literal = filter_var($parsed['host'], FILTER_VALIDATE_IP);
+
+    return $literal !== false && commerceWebhookIpDenied((string) $literal)
+        ? 'Адрес приёмника указывает на внутренний адрес сети.'
+        : '';
+}
+
+/**
+ * Адреса имени хоста: IPv4 и IPv6. Разрешение вынесено отдельной функцией, чтобы
+ * проверку можно было подменить в тесте и не зависеть от DNS прогонной машины.
+ *
+ * @return list<string>
+ */
+function commerceWebhookResolveHost(string $host): array
+{
+    $addresses = [];
+
+    $four = @gethostbynamel($host);
+    if (is_array($four)) {
+        foreach ($four as $address) {
+            if ($address !== '') {
+                $addresses[] = $address;
+            }
+        }
+    }
+
+    $six = @dns_get_record($host, DNS_AAAA);
+    if (is_array($six)) {
+        foreach ($six as $record) {
+            $value = $record['ipv6'] ?? null;
+            if (is_string($value) && $value !== '') {
+                $addresses[] = $value;
+            }
+        }
+    }
+
+    return array_values(array_unique($addresses));
+}
+
+/**
+ * Внутренний ли адрес. Список сетей шире «приватных диапазонов» PHP: встроенные флаги
+ * пропускают 100.64.0.0/10 (адреса операторов) и диапазоны документации, а нам нужен
+ * запрет всего, что не является публичным адресом.
+ */
+function commerceWebhookIpDenied(string $ip): bool
+{
+    $binary = @inet_pton($ip);
+
+    if ($binary === false) {
+        return true;
+    }
+
+    // IPv4-в-IPv6 (::ffff:127.0.0.1) проверяется как тот же IPv4: иначе запрет обходится записью.
+    if (strlen($binary) === 16 && str_starts_with($binary, str_repeat("\0", 10) . "\xff\xff")) {
+        $binary = substr($binary, 12);
+    }
+
+    foreach (COMMERCE_WEBHOOK_DENIED_NETWORKS as $network) {
+        if (commerceWebhookCidrMatch($binary, $network)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** Совпадение двоичного адреса с сетью в записи CIDR. */
+function commerceWebhookCidrMatch(string $binary, string $cidr): bool
+{
+    $slash = strpos($cidr, '/');
+
+    if ($slash === false) {
+        return false;
+    }
+
+    $network = @inet_pton(substr($cidr, 0, $slash));
+    $bits = (int) substr($cidr, $slash + 1);
+
+    if ($network === false || strlen($network) !== strlen($binary)) {
+        return false;
+    }
+
+    $whole = intdiv($bits, 8);
+
+    if ($whole > 0 && substr($binary, 0, $whole) !== substr($network, 0, $whole)) {
+        return false;
+    }
+
+    $rest = $bits % 8;
+
+    if ($rest === 0 || $whole >= strlen($binary)) {
+        return true;
+    }
+
+    $mask = (0xFF << (8 - $rest)) & 0xFF;
+
+    return (ord($binary[$whole]) & $mask) === (ord($network[$whole]) & $mask);
+}
+
+/**
  * Разбор формы вебхука: принять можно только http/https-адрес и секрет понятного
  * размера. Секрет держится в чужих руках никаких: он подписывает события.
  *
@@ -57,8 +247,12 @@ function commerceValidateWebhook(array $post): array
         $errors['url'] = 'Укажите адрес приёмника.';
     } elseif (mb_strlen($values['url']) > COMMERCE_WEBHOOK_URL_MAX) {
         $errors['url'] = 'Адрес не длиннее ' . COMMERCE_WEBHOOK_URL_MAX . ' символов.';
-    } elseif (preg_match('#^https?://.+#i', $values['url']) !== 1) {
-        $errors['url'] = 'Адрес начинается с http:// или https://.';
+    } else {
+        $problem = commerceWebhookUrlSavedProblem($values['url']);
+
+        if ($problem !== '') {
+            $errors['url'] = $problem;
+        }
     }
 
     if ($values['secret'] === '') {
@@ -282,6 +476,14 @@ function commerceWebhookSignature(string $payload, string $secret): string
 function commerceWebhookTransportDefault(array $receiver, string $event, string $payload): bool
 {
     if (!function_exists('curl_init')) {
+        return false;
+    }
+
+    // Повторная проверка перед запросом: имя могло разрешиться внутрь уже после
+    // сохранения (DNS rebinding), а строку в базе мог положить импорт или миграция.
+    if (commerceWebhookUrlProblem((string) $receiver['url']) !== '') {
+        logWarn('commerce.webhook_denied', ['webhookId' => (string) $receiver['id']]);
+
         return false;
     }
 
