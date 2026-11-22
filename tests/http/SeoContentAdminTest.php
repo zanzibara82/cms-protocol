@@ -104,7 +104,7 @@ final class SeoContentAdminTest extends TestCase
         ]);
         $goalId = (string) one('SELECT id FROM ' . t('seo_goal') . ' WHERE name = ?', ['Завершение заказа'])['id'];
 
-        $today = '2026-10-22';
+        $today = moscowDayKey(nowUtc());
         $stamp = utcStamp(nowUtc());
         $visitorId = str_repeat('a', 32);
 
