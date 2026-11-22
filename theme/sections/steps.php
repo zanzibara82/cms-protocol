@@ -13,7 +13,7 @@ $items = array_values(array_filter(
 $anchor = (string) $section['anchor'];
 ?>
 <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-    <div class="mx-auto max-w-5xl px-4 sm:px-6">
+    <?= partial('partials/section-open', ['section' => $section]) ?>
         <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
         <?php if ($items !== []): ?>
             <ol class="mt-8 space-y-4">

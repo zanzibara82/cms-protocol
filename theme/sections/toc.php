@@ -12,7 +12,7 @@ $anchor = (string) $section['anchor'];
 ?>
 <?php if (count($entries) >= 2): ?>
     <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-        <div class="mx-auto max-w-3xl px-4 sm:px-6">
+        <?= partial('partials/section-open', ['section' => $section]) ?>
             <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
             <nav class="mt-6" aria-label="Содержание">
                 <ol class="space-y-3">

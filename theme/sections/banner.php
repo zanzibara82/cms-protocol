@@ -37,7 +37,7 @@ $hasContent = (string) $section['badge'] !== '' || (string) $section['title'] !=
             <img class="absolute inset-0 size-full object-cover" src="<?= e($image) ?>" alt="<?= e((string) $section['image_alt']) ?>">
             <div class="absolute inset-0 bg-linear-to-r from-paper via-paper/85 to-paper/40"></div>
         <?php endif; ?>
-        <div class="relative mx-auto max-w-5xl px-4 sm:px-6">
+        <div class="relative"><?= partial('partials/section-open', ['section' => $section]) ?>
             <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
             <?php if ($cards !== []): ?>
                 <div class="mt-8 grid gap-4 sm:grid-cols-2">

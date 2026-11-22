@@ -34,8 +34,9 @@ $imageClass = $layout === 'full'
     : 'mb-4 w-full sm:mb-0 sm:w-[42%] ' . ($layout === 'right' ? 'sm:float-right sm:ml-6' : 'sm:float-left sm:mr-6');
 ?>
 <?php if ($image !== '' || $paragraphs !== []): ?>
-    <section class="mx-auto max-w-3xl px-4 py-12 sm:px-6"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
+    <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
         <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
+        <?= partial('partials/section-open', ['section' => $section]) ?>
         <div class="mt-8 flow-root">
             <?php if ($image !== ''): ?>
                 <img class="aspect-[4/3] w-full rounded-xl border border-ink/10 bg-cream object-cover shadow-sm <?= e($imageClass) ?>" src="<?= e($image) ?>" alt="<?= e($imageAlt) ?>">

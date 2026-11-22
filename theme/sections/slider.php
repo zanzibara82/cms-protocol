@@ -29,7 +29,7 @@ $anchor = (string) $section['anchor'];
 ?>
 <?php if ($slides !== []): ?>
     <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-        <div class="mx-auto max-w-5xl px-4 sm:px-6">
+        <?= partial('partials/section-open', ['section' => $section]) ?>
             <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
             <div class="mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4" role="region" aria-label="Слайды">
                 <?php foreach ($slides as $slide): ?>

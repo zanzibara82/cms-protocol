@@ -17,7 +17,7 @@ $image = (string) $section['image'];
 $gridClass = $image !== '' ? 'grid gap-6 sm:grid-cols-2' : '';
 ?>
 <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-    <div class="mx-auto max-w-5xl px-4 sm:px-6">
+    <?= partial('partials/section-open', ['section' => $section]) ?>
         <div class="<?= e($gridClass) ?>">
             <div>
                 <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>

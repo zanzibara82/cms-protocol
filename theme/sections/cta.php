@@ -10,7 +10,7 @@ $buttons = pagesButtonsOf($section['buttons'] ?? null);
 $anchor = (string) $section['anchor'];
 ?>
 <section class="bg-ink py-12 text-cream"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-    <div class="mx-auto max-w-5xl px-4 text-center sm:px-6">
+    <?= partial('partials/section-open', ['section' => $section, 'align' => 'text-center']) ?>
         <?php if ((string) $section['badge'] !== ''): ?>
             <p class="text-sm font-semibold uppercase tracking-wide text-cream/60"><?= e((string) $section['badge']) ?></p>
         <?php endif; ?>

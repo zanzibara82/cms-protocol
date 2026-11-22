@@ -10,6 +10,28 @@ declare(strict_types=1);
 /** @var bool $noindex */
 /** @var string $robots */
 /** @var bool $chrome сайтовая обвязка: установщик рисует каркас без шапки и подвала */
+/** @var string $layout макет страницы: default, landing, blank, no-header, no-footer, wide, sidebar-* */
+
+// Макет управляет обвязкой: шапка, подвал и боковые панели — флаги описания, а не имена макетов
+// в шаблоне. Новый макет добавляется строкой в перечень (core/page-layout.php), каркас не меняется.
+// $chrome = false (установщик) сильнее макета: у установщика нет ни меню, ни настроек сайта.
+$plan = pageLayoutPlan($layout ?? PAGE_LAYOUT_DEFAULT);
+$showHeader = $chrome && $plan['header'];
+$showFooter = $chrome && $plan['footer'];
+$sidebar = $plan['sidebar'];
+$hasSidebar = $sidebar !== 'none';
+
+// Сетка и контейнер каркаса. Классы живут здесь, в теме, а не в ядре: сборка стилей читает
+// только каталоги разметки, и класс, написанный в core/, не попал бы в артефакт.
+$shell = match (true) {
+    $plan['blank'] => 'w-full',
+    $plan['layout'] === 'wide' => 'mx-auto w-full max-w-6xl px-4 py-8 sm:px-6',
+    $hasSidebar => 'mx-auto grid w-full max-w-5xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[16rem_minmax(0,1fr)]',
+    default => 'mx-auto w-full max-w-5xl px-4 py-8 sm:px-6',
+};
+
+// Сайдбар — не отдельный вид контента, а колонка каркаса: его наполняет меню раздела, если оно
+// есть. Пустая колонка не печатается: страница без навигации не обрастает пустой рамкой.
 ?>
 <!doctype html>
 <html lang="ru">
@@ -33,11 +55,21 @@ declare(strict_types=1);
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
 <a class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-white focus:px-4 focus:py-2" href="#main">К содержимому</a>
-<?php if ($chrome): ?><?= partial('partials/header') /* @safe html */ ?><?php endif; ?>
-<main id="main" class="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
-    <?= $content /* @safe html */ ?>
+<?php if ($showHeader): ?><?= partial('partials/header') /* @safe html */ ?><?php endif; ?>
+<main id="main" class="<?= e($shell) ?>">
+    <?php if ($hasSidebar): ?>
+        <?php if ($sidebar === 'left' || $sidebar === 'both'): ?>
+            <aside class="min-w-0"><?= partial('partials/sidebar') /* @safe html */ ?></aside>
+        <?php endif; ?>
+        <div class="min-w-0"><?= $content /* @safe html */ ?></div>
+        <?php if ($sidebar === 'right' || $sidebar === 'both'): ?>
+            <aside class="min-w-0"><?= partial('partials/sidebar') /* @safe html */ ?></aside>
+        <?php endif; ?>
+    <?php else: ?>
+        <?= $content /* @safe html */ ?>
+    <?php endif; ?>
 </main>
-<?php if ($chrome): ?><?= partial('partials/footer') /* @safe html */ ?><?php endif; ?>
+<?php if ($showFooter): ?><?= partial('partials/footer') /* @safe html */ ?><?php endif; ?>
 <?= $footer /* @safe html */ ?>
 </body>
 </html>

@@ -59,6 +59,30 @@ $layoutSelect = static function (array $section) use ($input): string {
         . '<select class="min-h-[44px] ' . e($input) . '" name="layout">' . $html . '</select></label>';
 };
 
+/**
+ * Селект ширины контейнера: есть у всех видов, потому что ширина — свойство секции, а не вида.
+ * «Полная ширина» печатает блок во весь экран без внутреннего ограничителя; «своя» показывает
+ * поле числа пикселей (JS переключает его видимость без перезагрузки).
+ */
+$widthBlock = static function (array $section) use ($input): string {
+    $current = sectionWidthOf($section['width'] ?? null);
+    $custom = sectionWidthCustomOf($section['width_custom'] ?? null);
+    $options = '';
+
+    foreach (PAGE_WIDTHS as $width) {
+        $selected = $width === $current ? ' selected' : '';
+        $options .= '<option value="' . e($width) . '"' . $selected . '>' . e(PAGE_WIDTH_NAMES[$width]) . '</option>';
+    }
+
+    return '<div class="grid gap-3 sm:grid-cols-2">'
+        . '<label class="block text-sm"><span class="block font-medium">Ширина блока</span>'
+        . '<select class="min-h-[44px] ' . e($input) . '" name="width">' . $options . '</select>'
+        . '<span class="mt-1.5 block text-ink/60">«Во всю ширину» — блок на весь экран, без внутреннего ограничителя.</span></label>'
+        . '<label class="block text-sm"><span class="block font-medium">Своя ширина, px</span>'
+        . '<input class="min-h-[44px] ' . e($input) . '" type="number" name="width_custom" min="' . PAGE_CONTAINER_CUSTOM_MIN . '" max="' . PAGE_CONTAINER_CUSTOM_MAX . '" value="' . e((string) $custom) . '"></label>'
+        . '</div>';
+};
+
 /** Пара «скрытое поле» формы действия. */
 $field = static function (string $name, string $value): string {
     return '<input type="hidden" name="' . e($name) . '" value="' . e($value) . '">';
@@ -168,7 +192,7 @@ $itemsRows = static function (array $rows, array $fields) use ($input): string {
  * пустым массивом: op — create-section, вид выбирается селектом, а поля вида появятся после
  * создания и перезагрузки (JS не угадывает состав строк).
  */
-$sectionForm = static function (array $section) use ($input, $target, $kindSelect, $kindFields, $buttonsRows, $itemsRows, $layoutSelect, $field, $version): string {
+$sectionForm = static function (array $section) use ($input, $target, $kindSelect, $kindFields, $buttonsRows, $itemsRows, $layoutSelect, $field, $version, $widthBlock): string {
     $exists = (string) ($section['id'] ?? '') !== '';
     $id = $exists ? '<input type="hidden" name="section" value="' . e((string) $section['id']) . '">' : '';
     $op = $exists ? 'save-section' : 'create-section';
@@ -264,6 +288,7 @@ $sectionForm = static function (array $section) use ($input, $target, $kindSelec
         . '<textarea class="min-h-[44px] ' . e($input) . '" name="lead_text" rows="3">' . e($values('lead_text')) . '</textarea>'
         . '<span class="mt-1.5 block text-ink/60">Абзацы разделяются пустой строкой.</span></label>'
         . $layoutBlock
+        . $widthBlock($section)
         . $sectionMedia
         . $settingsBlock
         . $buttonsBlock

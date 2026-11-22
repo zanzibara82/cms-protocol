@@ -25,7 +25,7 @@ $anchor = (string) $section['anchor'];
 ?>
 <?php if ($steps !== []): ?>
     <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-        <div class="mx-auto max-w-4xl px-4 sm:px-6">
+        <?= partial('partials/section-open', ['section' => $section]) ?>
             <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
             <div class="mt-8 flex flex-wrap items-center gap-3">
                 <?php foreach ($steps as $index => $step): ?>

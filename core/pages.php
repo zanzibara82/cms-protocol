@@ -356,7 +356,7 @@ function pagesDecodeRow(array $row): array
 function findPage(string $slug): ?array
 {
     return one(
-        'SELECT id, slug, title, description, status, noindex, created_at, updated_at FROM ' . t('page') . ' WHERE slug = ?',
+        'SELECT id, slug, title, description, status, noindex, layout, created_at, updated_at FROM ' . t('page') . ' WHERE slug = ?',
         [$slug]
     );
 }
@@ -367,7 +367,7 @@ function findPage(string $slug): ?array
 function pageById(string $id): ?array
 {
     return one(
-        'SELECT id, slug, title, description, status, noindex, created_at, updated_at FROM ' . t('page') . ' WHERE id = ?',
+        'SELECT id, slug, title, description, status, noindex, layout, created_at, updated_at FROM ' . t('page') . ' WHERE id = ?',
         [$id]
     );
 }
@@ -378,7 +378,7 @@ function pageById(string $id): ?array
 function sectionById(string $id): ?array
 {
     $row = one(
-        'SELECT id, page_id, sec_key, kind, layout, anchor, badge, title, lead_text, note, image,'
+        'SELECT id, page_id, sec_key, kind, layout, width, width_custom, anchor, badge, title, lead_text, note, image,'
         . ' image_alt, buttons, items, settings, sort, visible, updated_at FROM ' . t('page_section') . ' WHERE id = ?',
         [$id]
     );
@@ -393,7 +393,7 @@ function sectionById(string $id): ?array
  */
 function pageSections(string $pageId, bool $onlyVisible = false): array
 {
-    $sql = 'SELECT id, page_id, sec_key, kind, layout, anchor, badge, title, lead_text, note, image,'
+    $sql = 'SELECT id, page_id, sec_key, kind, layout, width, width_custom, anchor, badge, title, lead_text, note, image,'
         . ' image_alt, buttons, items, settings, sort, visible, updated_at FROM ' . t('page_section')
         . ' WHERE page_id = ?' . ($onlyVisible ? ' AND visible = ?' : '')
         . ' ORDER BY sort ASC, id ASC';
@@ -963,6 +963,9 @@ function createPage(array $values, ?DateTimeImmutable $now = null): array
                 'description' => trim((string) ($values['description'] ?? '')),
                 'status' => (string) ($values['status'] ?? PAGES_STATUS_DRAFT),
                 'noindex' => (string) ($values['noindex'] ?? '0') === '1' ? 1 : 0,
+                // Макет приходит из формы создания и проверяется перечнем: чужое значение
+                // означает стандартный каркас, а не страницу без шапки.
+                'layout' => pageLayoutPlan($values['layout'] ?? null)['layout'],
                 'created_at' => $moment,
                 'updated_at' => $moment,
             ]);
@@ -1021,13 +1024,14 @@ function updatePage(string $id, array $values, ?DateTimeImmutable $now = null, a
         tx(static function () use ($id, $values, $slug, $moment, $slugChanged, $previousSlug, $revisionMeta, $now): void {
             contentRevisionGuard('page', $id, $revisionMeta, $now);
             run(
-                'UPDATE ' . t('page') . ' SET slug = ?, title = ?, description = ?, status = ?, noindex = ?, updated_at = ? WHERE id = ?',
+                'UPDATE ' . t('page') . ' SET slug = ?, title = ?, description = ?, status = ?, noindex = ?, layout = ?, updated_at = ? WHERE id = ?',
                 [
                     $slug,
                     trim((string) ($values['title'] ?? '')),
                     trim((string) ($values['description'] ?? '')),
                     (string) ($values['status'] ?? PAGES_STATUS_DRAFT),
                     (string) ($values['noindex'] ?? '0') === '1' ? 1 : 0,
+                    pageLayoutPlan($values['layout'] ?? null)['layout'],
                     $moment,
                     $id,
                 ]
@@ -1164,6 +1168,13 @@ function createSection(string $pageId, array $values, ?DateTimeImmutable $now = 
                 'sec_key' => $secKey,
                 'kind' => (string) ($values['kind'] ?? ''),
                 'layout' => (string) ($values['layout'] ?? ''),
+                // Ширина контейнера секции: перечень проверяется правилом, своя ширина
+                // подрезается пределами — значение приходит из формы.
+                'width' => sectionWidthOf($values['width'] ?? null),
+                'width_custom' => max(
+                    PAGE_CONTAINER_CUSTOM_MIN,
+                    min(PAGE_CONTAINER_CUSTOM_MAX, (int) ($values['width_custom'] ?? PAGE_CONTAINER_CUSTOM_MAX))
+                ),
                 'anchor' => $anchor,
                 'badge' => trim((string) ($values['badge'] ?? '')),
                 'title' => $title,
@@ -1240,11 +1251,16 @@ function updateSection(string $sectionId, array $values, ?DateTimeImmutable $now
         tx(static function () use ($sectionId, $values, $moment, $pageId, $revisionMeta, $now): void {
             contentRevisionGuard('page', $pageId, $revisionMeta, $now);
             run(
-                'UPDATE ' . t('page_section') . ' SET kind = ?, layout = ?, anchor = ?, badge = ?, title = ?, lead_text = ?,'
+                'UPDATE ' . t('page_section') . ' SET kind = ?, layout = ?, width = ?, width_custom = ?, anchor = ?, badge = ?, title = ?, lead_text = ?,'
                 . ' note = ?, image = ?, image_alt = ?, buttons = ?, items = ?, settings = ?, visible = ?, updated_at = ? WHERE id = ?',
                 [
                     (string) ($values['kind'] ?? ''),
                     (string) ($values['layout'] ?? ''),
+                    sectionWidthOf($values['width'] ?? null),
+                    max(
+                        PAGE_CONTAINER_CUSTOM_MIN,
+                        min(PAGE_CONTAINER_CUSTOM_MAX, (int) ($values['width_custom'] ?? PAGE_CONTAINER_CUSTOM_MAX))
+                    ),
                     slugify((string) ($values['anchor'] ?? ''), 40),
                     trim((string) ($values['badge'] ?? '')),
                     trim((string) ($values['title'] ?? '')),

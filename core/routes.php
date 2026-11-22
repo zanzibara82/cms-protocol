@@ -161,6 +161,9 @@ function corePage(array $params = []): void
         'title' => (string) $page['title'],
         'description' => (string) $page['description'],
         'noindex' => !$published || (int) $page['noindex'] === 1,
+        // Макет страницы задаёт каркас: шапку, подвал и боковые панели. Значение пришло из базы,
+        // поэтому проверяется правилом, а не доверяется как есть.
+        'layout' => pageLayoutPlan($page['layout'] ?? null)['layout'],
     ]);
 }
 
@@ -572,6 +575,9 @@ function pagesPageValuesFromPost(): array
         'description' => postString('description'),
         'status' => in_array($status, PAGES_STATUSES, true) ? $status : PAGES_STATUS_DRAFT,
         'noindex' => postString('noindex'),
+        // Макет проверяется правилом: чужая строка из формы означает стандартный каркас,
+        // а не страницу без шапки и подвала.
+        'layout' => pageLayoutPlan(postString('layout'))['layout'],
     ];
 }
 
@@ -618,6 +624,9 @@ function pagesSectionValuesFromPost(?array $existing = null): array
         // Вёрстка есть только у float и files; у остальных видов ключа в POST нет — прежнее
         // значение остаётся, как у примечания и картинки.
         'layout' => $allows('layout') ? $kept('layout') : (string) ($existing['layout'] ?? ''),
+        // Ширина контейнера есть у всех видов — это не поле вида, а свойство секции.
+        'width' => sectionWidthOf(postString('width')),
+        'width_custom' => postInt('width_custom') ?? PAGE_CONTAINER_CUSTOM_MAX,
         'buttons' => $allows('buttons') && array_key_exists('buttons', $post)
             ? pagesFormRows($post['buttons'], ['label', 'href', 'blank'])
             : $existingButtons,

@@ -29,7 +29,7 @@ $source = requestPath()
 $noticeKey = queryString('notice');
 ?>
 <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-    <div class="mx-auto max-w-5xl px-4 sm:px-6">
+    <?= partial('partials/section-open', ['section' => $section]) ?>
         <div class="grid gap-8 md:grid-cols-2">
             <div>
                 <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>

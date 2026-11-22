@@ -29,7 +29,7 @@ $note = (string) $section['note'];
 ?>
 <?php if ($rows !== []): ?>
     <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-        <div class="mx-auto max-w-5xl px-4 sm:px-6">
+        <?= partial('partials/section-open', ['section' => $section]) ?>
             <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
             <div class="mt-8 overflow-x-auto rounded-xl border border-ink/10 bg-cream">
                 <table class="w-full text-left text-sm">

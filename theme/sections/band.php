@@ -10,7 +10,7 @@ $anchor = (string) $section['anchor'];
 $note = (string) $section['note'];
 ?>
 <section class="bg-ink/5 py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-    <div class="mx-auto max-w-5xl px-4 text-center sm:px-6">
+    <?= partial('partials/section-open', ['section' => $section, 'align' => 'text-center']) ?>
         <?php if ((string) $section['badge'] !== ''): ?>
             <p class="text-sm font-semibold uppercase tracking-wide text-ink/60"><?= e((string) $section['badge']) ?></p>
         <?php endif; ?>

@@ -13,7 +13,7 @@ $note = (string) $section['note'];
 $image = (string) $section['image'];
 ?>
 <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-    <div class="mx-auto max-w-5xl px-4 sm:px-6">
+    <?= partial('partials/section-open', ['section' => $section]) ?>
         <?php if ((string) $section['badge'] !== ''): ?>
             <p class="text-sm font-semibold uppercase tracking-wide text-ink/60"><?= e((string) $section['badge']) ?></p>
         <?php endif; ?>

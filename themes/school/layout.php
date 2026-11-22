@@ -2,10 +2,15 @@
 
 declare(strict_types=1);
 
-// Каркас темы «Школа». Отличие от встроенного `theme/layout.php` — контентный контейнер шире
-// (max-w-6xl вместо max-w-5xl) и акцентная полоса под шапкой. Иерархия шаблонов одна и та же:
-// этот файл перекрывает встроенный каркас, а партиалы и секции тема не переопределяет —
-// они берутся из `theme/`, поэтому смена темы не требует копировать всё дерево.
+// Каркас темы «Школа». Отличие от встроенного `theme/layout.php` — акцентная полоса под шапкой и
+// широкий контейнер содержимого. Иерархия шаблонов одна и та же: этот файл перекрывает встроенный
+// каркас, а партиалы и секции тема не переопределяет — они берутся из `theme/`, поэтому смена
+// темы не требует копировать всё дерево.
+//
+// Тема обязана уважать макет страницы: `$layout` приходит из render() описанием каркаса
+// (core/page-layout.php). Без этого лендинг без шапки и страница с сайдбаром работали бы только
+// на встроенной теме, а на этой — молча показывали полную обвязку. Именно так и случилось:
+// тема была написана до появления макетов и читала только $chrome.
 /** @var string $title */
 /** @var string $description */
 /** @var string $content */
@@ -14,6 +19,18 @@ declare(strict_types=1);
 /** @var string $robots */
 /** @var bool $chrome */
 /** @var string $footer вывод хука page_footer */
+/** @var string $layout макет страницы */
+
+$plan = pageLayoutPlan($layout ?? PAGE_LAYOUT_DEFAULT);
+$showHeader = $chrome && $plan['header'];
+$showFooter = $chrome && $plan['footer'];
+$sidebar = $plan['sidebar'];
+$hasSidebar = $sidebar !== 'none';
+$shell = match (true) {
+    $plan['blank'] => 'w-full',
+    $hasSidebar => 'mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[16rem_minmax(0,1fr)]',
+    default => 'mx-auto w-full max-w-6xl px-4 py-8 sm:px-6',
+};
 ?>
 <!doctype html>
 <html lang="ru">
@@ -37,14 +54,24 @@ declare(strict_types=1);
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
 <a class="sr-only focus:not-sr-only focus:bg-white focus:px-4" href="#main">К содержимому</a>
-<?php if ($chrome): ?>
+<?php if ($showHeader): ?>
     <?= partial('partials/header') /* @safe html */ ?>
     <div class="h-1 w-full bg-accent"></div>
 <?php endif; ?>
-<main id="main" class="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-    <?= $content /* @safe html */ ?>
+<main id="main" class="<?= e($shell) ?>">
+    <?php if ($hasSidebar): ?>
+        <?php if ($sidebar === 'left' || $sidebar === 'both'): ?>
+            <aside class="min-w-0"><?= partial('partials/sidebar') /* @safe html */ ?></aside>
+        <?php endif; ?>
+        <div class="min-w-0"><?= $content /* @safe html */ ?></div>
+        <?php if ($sidebar === 'right' || $sidebar === 'both'): ?>
+            <aside class="min-w-0"><?= partial('partials/sidebar') /* @safe html */ ?></aside>
+        <?php endif; ?>
+    <?php else: ?>
+        <?= $content /* @safe html */ ?>
+    <?php endif; ?>
 </main>
-<?php if ($chrome): ?>
+<?php if ($showFooter): ?>
     <?= partial('partials/footer') /* @safe html */ ?>
 <?php endif; ?>
 <?= $footer /* @safe html */ ?>

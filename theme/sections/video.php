@@ -37,7 +37,7 @@ $gridClass = 'mt-8 grid gap-6' . (count($clips) > 1 ? ' lg:grid-cols-2' : '');
 ?>
 <?php if ($clips !== []): ?>
     <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-        <div class="mx-auto max-w-5xl px-4 sm:px-6">
+        <?= partial('partials/section-open', ['section' => $section]) ?>
             <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
             <div class="<?= e($gridClass) ?>">
                 <?php foreach ($clips as $clip): ?>

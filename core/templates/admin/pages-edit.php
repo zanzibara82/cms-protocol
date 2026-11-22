@@ -26,6 +26,15 @@ foreach (PAGES_STATUSES as $status) {
     $statusOptions .= '<option value="' . e($status) . '"' . $selected . '>' . e($label) . '</option>';
 }
 
+// Макет страницы: каркас (шапка, подвал, сайдбар), а не содержимое. Смена макета не трогает
+// блоки, адрес и SEO — она меняет только обвязку вокруг того, что уже есть.
+$layoutOptions = '';
+$currentLayout = pageLayoutPlan($page['layout'] ?? null)['layout'];
+foreach (PAGE_LAYOUTS as $layout) {
+    $selected = $layout === $currentLayout ? ' selected' : '';
+    $layoutOptions .= '<option value="' . e($layout) . '"' . $selected . '>' . e(PAGE_LAYOUT_NAMES[$layout]) . '</option>';
+}
+
 // RELEASE 2.2: панель редакции над формой полей. Скрипт admin-editorial.js читает версию,
 // держит блокировку и присылает автосохранение; без скрипта форма работает обычным POST.
 $editorialPanel = '<section class="rounded-lg border border-ink/10 bg-white p-4" data-editorial-panel'
@@ -69,6 +78,9 @@ $pageForm = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
     . '<select class="min-h-[44px] ' . e($input) . '" name="status">' . $statusOptions . '</select></label>'
     . adminCheckbox('noindex', 'Скрыть страницу от поисковиков', '1', (int) $page['noindex'] === 1)
     . '</div>'
+    . '<label class="block text-sm"><span class="block font-medium">Макет страницы</span>'
+    . '<select class="min-h-[44px] ' . e($input) . '" name="layout">' . $layoutOptions . '</select>'
+    . '<span class="mt-1.5 block text-ink/60">Макет меняет только обвязку: блоки, адрес и SEO остаются прежними.</span></label>'
     . '<button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">Сохранить страницу</button>'
     . '</form></section>';
 

@@ -49,8 +49,9 @@ $listClass = $layout === 'cards'
     : 'mt-8 divide-y rounded-xl border border-ink/10 bg-white';
 ?>
 <?php if ($files !== []): ?>
-    <section class="mx-auto max-w-4xl px-4 py-12 sm:px-6"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
+    <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
         <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
+        <?= partial('partials/section-open', ['section' => $section]) ?>
         <ul class="<?= e($listClass) ?>">
             <?php foreach ($files as $file): ?>
                 <?php if ($layout === 'cards'): ?>
@@ -100,5 +101,6 @@ $listClass = $layout === 'cards'
         <?php if ($note !== ''): ?>
             <p class="mt-6 text-sm text-ink/50"><?= e($note) ?></p>
         <?php endif; ?>
+        </div>
     </section>
 <?php endif; ?>

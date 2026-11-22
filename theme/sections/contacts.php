@@ -31,7 +31,7 @@ $anchor = (string) $section['anchor'];
 ?>
 <?php if ($contacts !== []): ?>
     <section class="py-12"<?php if ($anchor !== ''): ?> id="<?= e($anchor) ?>"<?php endif; ?>>
-        <div class="mx-auto max-w-4xl px-4 sm:px-6">
+        <?= partial('partials/section-open', ['section' => $section]) ?>
             <?= partial('sections/head', ['section' => $section, 'tag' => 'h2']) ?>
             <ul class="mt-8 grid gap-4 sm:grid-cols-2">
                 <?php foreach ($contacts as $contact): ?>
