@@ -110,6 +110,9 @@ const CORE_NOTICE_TEXT = [
     'content_block_saved' => 'Глобальный блок сохранён.',
     'content_block_archived' => 'Глобальный блок убран в архив.',
     'content_block_restored' => 'Глобальный блок восстановлен.',
+    // RELEASE 2.3: темы. Переключение меняет оформление всего сайта, поэтому ключи отдельные.
+    'theme_activated' => 'Тема активирована.',
+    'theme_deactivated' => 'Сайт вернулся к встроенной теме.',
 ];
 
 /** @param array<string, string> $dictionary */

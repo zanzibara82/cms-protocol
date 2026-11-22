@@ -11,7 +11,20 @@ function themeRoots(): array
     $root = dirname(__DIR__);
     $extra = (string) configValue('EXTRA_THEME_DIR', '');
 
-    return $extra !== '' ? [$extra, $root . '/theme'] : [$root . '/theme'];
+    // Порядок: подменённый каталог (тесты и EXTRA_THEME_DIR) → активная тема из `themes/` →
+    // встроенная `theme/`. Активная тема идёт раньше встроенной, но позже EXTRA_THEME_DIR: иначе
+    // тесты, подменяющие каркас, получали бы файлы установленной темы вместо своих.
+    $roots = [];
+    if ($extra !== '') {
+        $roots[] = $extra;
+    }
+    $active = function_exists('themeActiveRoot') ? themeActiveRoot() : '';
+    if ($active !== '') {
+        $roots[] = $active;
+    }
+    $roots[] = $root . '/theme';
+
+    return $roots;
 }
 
 function resolveTemplate(string $template): string
@@ -117,7 +130,10 @@ function render(string $template, array $data = [], array $page = []): void
         header('X-Robots-Tag: noindex, nofollow');
     }
 
-    require dirname(__DIR__) . '/theme/layout.php';
+    // Каркас ищется по обычной иерархии: активная тема перекрывает встроенный `theme/layout.php`.
+    // Прямой require встроенного пути сделал бы переключение темы декоративным — настройка менялась
+    // бы, а страница оставалась прежней.
+    require resolveTemplate('layout');
 }
 
 // Страницы отказа задают статус и заголовки в respond(), поэтому им нужна собранная строка, а не

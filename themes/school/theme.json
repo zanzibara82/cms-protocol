@@ -1,0 +1,16 @@
+{
+  "slug": "school",
+  "name": "Школа",
+  "version": "1.0.0",
+  "description": "Тема школы английского: тёплая бумажная палитра, крупные заголовки, широкий контентный контейнер.",
+  "author": "NovaCMS",
+  "license": "proprietary",
+  "cms": ">=2.3.0",
+  "preview": "",
+  "colors": {
+    "paper": "#fdf6ec",
+    "ink": "#2b2118",
+    "accent": "#b45309"
+  },
+  "layouts": ["default", "landing", "full-width"]
+}

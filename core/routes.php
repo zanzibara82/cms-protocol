@@ -30,6 +30,10 @@ function registerCoreRoutes(): void
     // Текст и логотипы шапки/подвала — настройки контента, поэтому право то же, что у меню.
     addRoute('GET', '/admin/settings', 'coreAdminSettings', ['private' => true, 'permission' => 'login']);
     addRoute('POST', '/admin/settings', 'coreAdminSettingsAction', ['private' => true, 'permission' => 'login']);
+    // Дизайн → Темы: каталог установленных тем и переключение активной. Установка темы меняет
+    // оформление всего сайта, поэтому право — администратора (manage), а не редактора контента.
+    addRoute('GET', '/admin/themes', 'coreAdminThemes', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/themes', 'coreAdminThemesAction', ['private' => true, 'permission' => 'manage']);
     // Заявки с публичных форм: приём — публичный POST, список и действия — только администратор
     // (контакты — личные данные; портал зовёт requireAdmin, здесь право manage, как /admin/apps).
     addRoute('POST', '/lead', 'coreLeadSubmit');
@@ -1130,6 +1134,70 @@ function coreAdminSettingsAction(array $params = []): void
     auditLog('settings.update', 'settings', '', ['keys' => implode(',', array_keys(SITE_SETTINGS_FIELDS))], 'Сохранены настройки шапки и подвала');
 
     finishAppAction(['ok' => true, 'error' => ''], '/admin/settings', 'settings_saved');
+}
+
+// ---------------------------------------------------------------------------
+// Дизайн → Темы: каталог установленных тем и переключение активной
+// ---------------------------------------------------------------------------
+
+/**
+ * Экран «Темы»: карточки установленных тем из каталога `themes/` и отметка активной. Тема —
+ * каталог с манифестом `theme.json` и каркасом `layout.php`; встроенная тема `theme/` тоже
+ * показывается карточкой, чтобы переключение с неё было видно на экране.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminThemes(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $registry = themeRegistryRead(themesRoot());
+    $active = themeActiveSlug();
+
+    render('admin/themes', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'themes' => $registry['themes'],
+        'broken' => $registry['broken'],
+        'active' => $active,
+    ], ['title' => 'Темы — админка', 'noindex' => true]);
+}
+
+/**
+ * Переключение темы: `op=activate` с полем `slug` либо `op=deactivate` для возврата к встроенной.
+ * Активация проверяет реестр заново — между открытием экрана и нажатием тему могли удалить с диска.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminThemesAction(array $params = []): void
+{
+    csrfCheck();
+
+    $op = (string) ($_POST['op'] ?? '');
+    $slug = trim((string) ($_POST['slug'] ?? ''));
+
+    if ($op === 'deactivate') {
+        $result = themeDeactivate();
+        auditLog('theme.deactivate', 'theme', '', [], 'Возврат к встроенной теме');
+
+        finishAppAction($result, '/admin/themes', 'theme_deactivated');
+
+        return;
+    }
+
+    if ($op !== 'activate') {
+        finishAppAction(['ok' => false, 'error' => 'Неизвестное действие.'], '/admin/themes', '');
+
+        return;
+    }
+
+    $result = themeActivate($slug);
+
+    if (($result['ok'] ?? false) === true) {
+        auditLog('theme.activate', 'theme', $slug, [], 'Активирована тема ' . $slug);
+    }
+
+    finishAppAction($result, '/admin/themes', 'theme_activated');
 }
 
 // ---------------------------------------------------------------------------

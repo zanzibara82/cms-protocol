@@ -17,6 +17,9 @@ require_once __DIR__ . '/notice.php';
 require_once __DIR__ . '/form.php';
 require_once __DIR__ . '/hooks.php';
 require_once __DIR__ . '/template.php';
+// Реестр тем читается иерархией шаблонов (themeRoots()), поэтому идёт сразу после template.php.
+// Каталог тем может отсутствовать: тогда сайт работает на встроенной theme/.
+require_once __DIR__ . '/theme.php';
 require_once __DIR__ . '/request.php';
 // Приём картинок конструктора страниц: файл проверяется до записи на диск, а имя генерирует сервер.
 require_once __DIR__ . '/upload.php';
