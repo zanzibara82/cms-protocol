@@ -1189,6 +1189,86 @@ function coreAdminThemesAction(array $params = []): void
     $op = (string) ($_POST['op'] ?? '');
     $slug = trim((string) ($_POST['slug'] ?? ''));
 
+    // Выгрузка оформления: файл отдаётся ответом, а не пишется на диск сервера. Так на хостинге
+    // не появляется каталог с чужими файлами, и человек получает ровно то, что выбрал.
+    if ($op === 'export') {
+        $registry = themeRegistryRead(themesRoot());
+        $manifest = null;
+
+        foreach ($registry['themes'] as $theme) {
+            if ((string) $theme['slug'] === $slug) {
+                $manifest = $theme;
+
+                break;
+            }
+        }
+
+        if ($manifest === null) {
+            // Встроенная тема тоже выгружается: у неё нет манифеста, но палитра сайта есть, и
+            // перенести оформление на другой сайт — обычное дело.
+            $manifest = ['slug' => $slug !== '' ? $slug : 'builtin', 'name' => 'Встроенная тема', 'version' => CORE_VERSION, 'description' => '', 'author' => ''];
+        }
+
+        $current = designSystemCurrent();
+        $json = themeTransferJson(
+            [
+                'slug' => (string) $manifest['slug'],
+                'name' => (string) $manifest['name'],
+                'version' => (string) $manifest['version'],
+                'description' => (string) ($manifest['description'] ?? ''),
+                'author' => (string) ($manifest['author'] ?? ''),
+            ],
+            $current['colors'],
+            $current['sizes']
+        );
+
+        auditLog('theme.export', 'theme', (string) $manifest['slug'], [], 'Выгружено оформление темы');
+
+        respond(200, $json, [
+            'Content-Type' => 'application/json; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . themeTransferFilename((string) $manifest['slug'], (string) $manifest['version']) . '"',
+            // Файл с настройками не должен остаться в кеше прокси и браузера.
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
+    // Ввоз файла: правила проверяют формат и поля, применение пишет палитру и размеры той же
+    // транзакцией, что и экран оформления. Пользовательский PHP в файл не входит вовсе, поэтому
+    // ввозить код через форму нечего.
+    if ($op === 'import') {
+        $file = uploadedFile('theme_file');
+
+        if ($file === null) {
+            finishAppAction(['ok' => false, 'error' => 'Файл не выбран.'], '/admin/themes', '');
+
+            return;
+        }
+
+        $json = @file_get_contents((string) ($file['tmp_name'] ?? ''));
+
+        if (!is_string($json)) {
+            finishAppAction(['ok' => false, 'error' => 'Файл не читается.'], '/admin/themes', '');
+
+            return;
+        }
+
+        $checked = themeTransferValidate($json);
+
+        if ($checked['error'] !== '') {
+            finishAppAction(['ok' => false, 'error' => $checked['error']], '/admin/themes', '');
+
+            return;
+        }
+
+        designSystemSave(['colors' => $checked['payload']['colors'], 'sizes' => $checked['payload']['fonts']]);
+        optionsReset();
+        auditLog('theme.import', 'theme', (string) $checked['payload']['manifest']['slug'], [], 'Ввезено оформление темы');
+
+        finishAppAction(['ok' => true, 'error' => ''], '/admin/themes', 'theme_imported');
+
+        return;
+    }
+
     if ($op === 'deactivate') {
         $result = themeDeactivate();
         auditLog('theme.deactivate', 'theme', '', [], 'Возврат к встроенной теме');

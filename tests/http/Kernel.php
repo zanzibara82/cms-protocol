@@ -274,6 +274,32 @@ final class Kernel
     }
 
     /**
+     * POST с файлом: содержимое пишется во временный файл, потому что CURLFile берёт путь, а не
+     * строку. Проверка ввоза обязана пройти тот же путь, что и живая форма, — иначе она
+     * проверяла бы функцию напрямую и не замечала, что форма файл не принимает.
+     *
+     * @param array<string, array<int|string, mixed>|\CURLFile|string> $fields
+     * @param array<string, mixed> $options
+     * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}
+     */
+    public static function postFile(string $path, array $fields, string $fieldName, string $filename, string $content, array $options = []): array
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'cmsfile');
+        if ($tmp === false) {
+            throw new \RuntimeException('Не удалось создать временный файл для загрузки');
+        }
+
+        file_put_contents($tmp, $content);
+        $fields[$fieldName] = new \CURLFile($tmp, 'application/json', $filename);
+
+        try {
+            return self::request('POST', $path, $fields, $options);
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    /**
      * @param array<string, array<int|string, mixed>|\CURLFile|string> $fields
      * @param array<string, mixed> $options
      * @return array{status: int, body: string, headers: array<string, string>, redirects: list<string>}

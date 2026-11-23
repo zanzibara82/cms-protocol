@@ -109,4 +109,36 @@ $help = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
 
 $alert = partial('admin/alert', ['title' => $alertTitle, 'reason' => $alertReason]);
 
-/* @safe html */ echo adminShell('Темы', $alert . $brokenHtml . $empty . '<div class="grid gap-3 sm:grid-cols-2">' . $cards . '</div>' . $help, $notice);
+// Обмен оформлением: выгрузка файла и ввоз файла. Формат JSON, а не ZIP: распаковка чужого
+// архива — это Zip Slip, символические ссылки и права файлов, а перенос палитры файлов не
+// требует. Пользовательский PHP в файл не входит: тема — код на сервере, и ввозить код через
+// форму нельзя.
+$transfer = '<section class="rounded-lg border border-ink/10 bg-white p-4">'
+    . '<h2 class="text-base font-semibold">Обмен оформлением</h2>'
+    . '<p class="mt-1 text-sm text-ink/70">Файл несёт манифест, палитру и размеры шрифтов — то, '
+    . 'что программа умеет применить списком. Код темы и файлы шаблонов в него не входят: '
+    . 'их переносят копированием каталога на сервере.</p>'
+    . '<div class="mt-3 grid gap-3 sm:grid-cols-2">'
+    . '<form class="rounded-lg border border-ink/10 p-3" method="post" action="/admin/themes">' . csrfField()
+    . '<input type="hidden" name="op" value="export">'
+    . '<input type="hidden" name="slug" value="' . e($active) . '">'
+    . '<p class="text-sm font-medium">Выгрузить оформление</p>'
+    . '<p class="mt-1 text-xs text-ink/50">Активная тема: ' . ($active === '' ? 'встроенная' : e($active)) . '</p>'
+    . '<button class="mt-2 inline-flex min-h-[44px] items-center rounded-lg border border-ink/20 px-4 text-sm hover:bg-ink/5" type="submit">Скачать JSON</button>'
+    . '</form>'
+    . '<form class="rounded-lg border border-ink/10 p-3" method="post" action="/admin/themes" enctype="multipart/form-data">' . csrfField()
+    . '<input type="hidden" name="op" value="import">'
+    . '<p class="text-sm font-medium">Ввезти оформление</p>'
+    . '<div class="mt-1">' . partial('partials/file-picker', [
+        'name' => '',
+        'fileKey' => 'theme_file',
+        'label' => 'Файл JSON',
+        'hint' => 'Файл, выгруженный с другого сайта. Предел — 256 КБ.',
+        'accept' => '.json,application/json',
+        'buttonTitle' => 'Выбрать файл оформления',
+    ]) . '</div>'
+    . '<button class="mt-2 inline-flex min-h-[44px] items-center rounded-lg bg-ink px-4 text-sm font-medium text-cream hover:opacity-90" type="submit">Применить файл</button>'
+    . '</form>'
+    . '</div></section>';
+
+/* @safe html */ echo adminShell('Темы', $alert . $brokenHtml . $empty . '<div class="grid gap-3 sm:grid-cols-2">' . $cards . '</div>' . $transfer . $help, $notice);

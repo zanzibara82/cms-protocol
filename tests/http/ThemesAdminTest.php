@@ -158,4 +158,45 @@ final class ThemesAdminTest extends TestCase
         self::assertSame(302, $saved['status'], 'отказ возвращает на экран, а не отдаёт 500');
         self::assertSame('', getOption('active_theme'), 'неизвестная тема не стала активной');
     }
+
+    public function testВыгрузкаОформленияОтдаётФайлСТекущейПалитрой(): void
+    {
+        setOption('design_color_paper', '#101010');
+        optionsReset();
+        $this->login(self::ADMIN_EMAIL, self::ADMIN_PASSWORD);
+        $token = Kernel::tokenFrom(Kernel::get('/admin/themes')['body']);
+
+        $export = Kernel::post('/admin/themes', [
+            '_token' => $token,
+            'op' => 'export',
+            'slug' => 'school',
+        ]);
+
+        self::assertSame(200, $export['status']);
+        self::assertStringContainsString('application/json', $export['headers']['content-type']);
+        self::assertStringContainsString('attachment; filename="theme-school', $export['headers']['content-disposition']);
+        self::assertStringContainsString('no-store', $export['headers']['cache-control'], 'файл настроек не кешируется');
+
+        // Файл своей же темы обязан проходить проверку ввоза — иначе перенос между сайтами
+        // не работал бы вовсе, и заметить это можно было бы только на другом сайте.
+        $checked = themeTransferValidate($export['body']);
+        self::assertSame('', $checked['error']);
+        self::assertSame('school', $checked['payload']['manifest']['slug']);
+        self::assertSame('#101010', $checked['payload']['colors']['paper']);
+    }
+
+    public function testВвозЧужогоФайлаОтклоняется(): void
+    {
+        $this->login(self::ADMIN_EMAIL, self::ADMIN_PASSWORD);
+        $token = Kernel::tokenFrom(Kernel::get('/admin/themes')['body']);
+
+        // Не JSON: файл приходит от человека, и всё в нём — недоверенные данные.
+        $saved = Kernel::postFile('/admin/themes', [
+            '_token' => $token,
+            'op' => 'import',
+        ], 'theme_file', 'theme.json', '{"format":"cms-theme"');
+
+        self::assertSame(302, $saved['status'], 'отказ возвращает на экран, а не отдаёт 500');
+        self::assertStringContainsString('migration-failed', (string) $saved['headers']['location']);
+    }
 }
