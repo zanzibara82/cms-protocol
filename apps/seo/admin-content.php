@@ -12,7 +12,11 @@ declare(strict_types=1);
 function seoContentPage(array $params = []): void
 {
     $period = seoSearchPeriod();
-    $range = seoSearchRange($period);
+    // Свои посещения счётчик раскладывает по московским дням (seoStatsDayKey), поэтому отчёт по
+    // страницам обязан брать то же окно. Пара к seoSearchRange() (дни UTC) здесь не годится:
+    // с 00:00 до 03:00 по Москве её «сегодня» — ещё вчерашний день, и свежие просмотры выпадали
+    // бы из отчёта ровно в те часы, когда их и смотрят.
+    $range = seoStatsPeriod($period);
     $rows = seoContentReport($range['from'], $range['to']);
 
     $views = 0;
