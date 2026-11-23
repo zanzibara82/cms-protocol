@@ -140,6 +140,7 @@ const ADMIN_PAGES = [
   { name: 'меню', href: '/admin/menu' },
   { name: 'настройки', href: '/admin/settings' },
   { name: 'темы', href: '/admin/themes' },
+  { name: 'оформление', href: '/admin/design' },
   { name: 'заявки', href: '/admin/leads' },
   { name: 'корзина', href: '/admin/trash' },
   { name: 'медиатека', href: '/admin/media' },

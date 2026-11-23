@@ -34,6 +34,10 @@ function registerCoreRoutes(): void
     // оформление всего сайта, поэтому право — администратора (manage), а не редактора контента.
     addRoute('GET', '/admin/themes', 'coreAdminThemes', ['private' => true, 'permission' => 'manage']);
     addRoute('POST', '/admin/themes', 'coreAdminThemesAction', ['private' => true, 'permission' => 'manage']);
+    // Дизайн → Оформление: цвета и типографика активной темы. Цвета меняют читаемость всего
+    // сайта, поэтому право то же, что у установки темы, — администратора.
+    addRoute('GET', '/admin/design', 'coreAdminDesign', ['private' => true, 'permission' => 'manage']);
+    addRoute('POST', '/admin/design', 'coreAdminDesignAction', ['private' => true, 'permission' => 'manage']);
     // Заявки с публичных форм: приём — публичный POST, список и действия — только администратор
     // (контакты — личные данные; портал зовёт requireAdmin, здесь право manage, как /admin/apps).
     addRoute('POST', '/lead', 'coreLeadSubmit');
@@ -1207,6 +1211,68 @@ function coreAdminThemesAction(array $params = []): void
     }
 
     finishAppAction($result, '/admin/themes', 'theme_activated');
+}
+
+// ---------------------------------------------------------------------------
+// Дизайн → Оформление: цвета и типографика темы
+// ---------------------------------------------------------------------------
+
+/**
+ * Экран «Оформление»: палитра и размеры шрифтов активной темы. Значения печатаются инлайновым
+ * <style> поверх артефакта CSS, поэтому экран показывает и предупреждение о контрасте: своя
+ * палитра легко даёт светлый текст на светлом фоне, и заметить это можно только на живой
+ * странице.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminDesign(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $current = designSystemCurrent();
+
+    render('admin/design', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'colors' => $current['colors'],
+        'sizes' => $current['sizes'],
+        // Пары, которые читаются вместе: текст на фоне и текст на карточке. Ниже 4.5:1 —
+        // порог WCAG AA для обычного текста, и экран говорит об этом числами, а не «плохо».
+        'contrast' => [
+            'text' => round(designContrast($current['colors']['ink'], $current['colors']['paper']), 2),
+            'card' => round(designContrast($current['colors']['ink'], $current['colors']['cream']), 2),
+        ],
+        'colorNames' => DESIGN_COLOR_NAMES,
+        'defaults' => DESIGN_COLOR_DEFAULTS,
+        'fontNames' => DESIGN_FONT_NAMES,
+    ], ['title' => 'Оформление — админка', 'noindex' => true]);
+}
+
+/**
+ * Сохранение оформления: цвета и размеры одной транзакцией. Чужое значение цвета не отклоняет
+ * форму — оно заменяется прежним: страницу уже открыли, и терять остальные правки из-за одной
+ * опечатки хуже, чем сохранить палитру без неё.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminDesignAction(array $params = []): void
+{
+    csrfCheck();
+
+    $values = designSystemFromPost();
+
+    try {
+        designSystemSave($values);
+    } catch (Throwable $error) {
+        logError('design.save_failed', ['message' => $error->getMessage()]);
+        finishAppAction(['ok' => false, 'error' => 'Оформление не сохранилось — повторите попытку.'], '/admin/design', '');
+
+        return;
+    }
+
+    auditLog('design.update', 'design', '', ['colors' => implode(',', array_keys($values['colors']))], 'Сохранено оформление темы');
+
+    finishAppAction(['ok' => true, 'error' => ''], '/admin/design', 'design_saved');
 }
 
 // ---------------------------------------------------------------------------
