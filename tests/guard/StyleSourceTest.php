@@ -27,10 +27,10 @@ final class StyleSourceTest extends TestCase
      * класс из php-файла приложения вне `templates/` обязан краснеть проверкой «каждый класс
      * разметки собран в артефакте», а не выпадать из обеих проверок.
      */
-    private const MARKUP_DIRS = ['theme', 'admin', 'core/templates', 'apps'];
+    private const MARKUP_DIRS = ['theme', 'admin', 'core/templates', 'apps', 'themes'];
 
     /** Где вообще ядро и приложения печатают HTML: просвет между этим списком и MARKUP_DIRS — находка. */
-    private const PRINT_DIRS = ['core', 'admin', 'theme', 'apps', 'public'];
+    private const PRINT_DIRS = ['core', 'admin', 'theme', 'apps', 'public', 'themes'];
 
     /** Классы пункта зон нажатия: их отсутствие ломает 44 px на живых страницах. */
     private const REQUIRED_CLASSES = ['min-h-[44px]', 'inline-flex', 'items-center'];
