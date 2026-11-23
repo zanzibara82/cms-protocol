@@ -83,6 +83,18 @@ final class SettingsAdminTest extends TestCase
         self::assertStringContainsString('name="footer_copyright"', $screen['body'], 'копирайт подвала');
         self::assertStringContainsString('noindex, nofollow', $screen['body'], 'приватный экран поисковой машине закрыт');
         self::assertStringContainsString('href="/admin/menu"', $screen['body'], 'вкладка меню в каркасе админки');
+
+        // У обоих полей загрузки есть подпись-кнопка с иконкой папки: нативное поле человек
+        // находит по браузерной строке «Выберите файл», а иконку ищет глазами. Страж
+        // FilePickerIconTest читает исходник шаблона, поэтому здесь проверяется уже напечатанный
+        // экран — ровно то, что видит администратор.
+        foreach (['header_logo', 'footer_logo'] as $logoKey) {
+            self::assertMatchesRegularExpression(
+                '~<label\b[^>]*\bfor="settings-' . $logoKey . '-file"[^>]*>\s*<svg\b~u',
+                $screen['body'],
+                'у поля «' . $logoKey . '» нет подписи-кнопки с иконкой папки'
+            );
+        }
     }
 
     public function testСохранениеПишетТекстыИВозвращаетПлашку(): void
