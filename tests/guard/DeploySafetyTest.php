@@ -22,12 +22,13 @@ final class DeploySafetyTest extends TestCase
 {
     private const ROOT = __DIR__ . '/../..';
 
-    // Одиннадцать служебных каталогов, закрытых единой алтернанцией единственного правила-списка
+    // Десять служебных каталогов, закрытых единой алтернанцией единственного правила-списка
     // корневого .htaccess. Список сверяется целиком и в обе стороны: выпавшее имя открывает каталог
     // исходников наружу, а лишнее означает, что эталон отстал от дерева и перестал что-то
-    // закреплять. Имя `config` в список не входит — его закрывает отдельное правило того же
-    // блока, и сверяется оно своим якорем в проверке ниже.
-    private const BLOCKED_NAMES = ['admin', 'apps', 'core', 'docker', 'docs', 'node_modules',
+    // закреплять. `admin` в списке нет намеренно: /admin — публичный маршрут админки, и в этой
+    // раскладке его собирает front controller. Закрыт только исходник каркаса admin/layout.php,
+    // у него отдельное правило. Имя `config` тоже закрывает отдельное правило того же блока.
+    private const BLOCKED_NAMES = ['apps', 'core', 'docker', 'docs', 'node_modules',
         'scripts', 'sql', 'tests', 'theme', 'vendor'];
 
     public function testСкриптВыкладкиСуществуетИЗапускается(): void
@@ -59,7 +60,7 @@ final class DeploySafetyTest extends TestCase
         );
     }
 
-    public function testЧетыреПутиНаСервереНеУдаляются(): void
+    public function testДанныеСервераНеУдаляютсяИСекретыНеУезжают(): void
     {
         $sh = $this->read('scripts/deploy.sh');
 
@@ -102,13 +103,62 @@ final class DeploySafetyTest extends TestCase
         // Исключение обязано быть заякорено на каталог выкладки: `--exclude uploads/` молча
         // совпадёт с любым каталогом одноимённого имени вглубь дерева. Здесь тоже читается код без
         // пояснений: строка флага, переписанная в комментарий, ничего с сервера не защищает.
-        foreach (['/config.php', '/public/install.lock', '/public/uploads/', '/core/storage/'] as $path) {
+        //
+        // uploads и storage исключены по содержимому (`/*`), а не каталогами целиком: иначе на
+        // чистой выкладке не появились бы сами каталоги, барьер public/uploads/.htaccess и
+        // каталог журнала, без которого установщик отказывает. `backup/` и `dump/` не должны ни
+        // уезжать на сервер, ни стираться с него: в них лежат копии базы и выгрузки.
+        $flags = $this->withoutCommentLines($sh);
+        foreach ([
+            '/config.php',
+            '/public/install.lock',
+            '/public/uploads/*',
+            '/core/storage/*',
+            '/backup/',
+            '/dump/',
+        ] as $path) {
             self::assertMatchesRegularExpression(
                 '/--exclude=' . preg_quote("'$path'", '/') . '/',
-                $this->withoutCommentLines($sh),
+                $flags,
                 $path . ' обязан быть в --exclude: --delete стёр бы его с сервера'
             );
         }
+
+        // Ключи, файлы окружения и локальные журналы — не данные сервера, а секреты разработчика:
+        // они не должны попадать в веб-зону ни при первой выкладке, ни при повторной.
+        foreach (['/.env*', '*.pem', '*.key', 'id_rsa*'] as $pattern) {
+            self::assertMatchesRegularExpression(
+                '/--exclude=' . preg_quote("'$pattern'", '/') . '/',
+                $flags,
+                $pattern . ' обязан быть в --exclude: секрет не должен уехать на сервер'
+            );
+        }
+
+        // Каталоги загрузок и журнала не исключаются целиком. Проверка парная: если кто-то
+        // вернёт старую строку с завершающим слэшем, содержимое сервера уцелеет, но свежая
+        // выкладка останется без каталогов и барьера.
+        foreach (['/public/uploads/', '/core/storage/'] as $wholeDir) {
+            self::assertStringNotContainsString(
+                "--exclude='" . $wholeDir . "'",
+                $flags,
+                $wholeDir . ' нельзя исключать целиком: каталог и его барьер обязаны доехать '
+                . 'до чистой выкладки, а содержимое защищается маской /*'
+            );
+        }
+
+        // Барьер исполнения PHP внутри загрузок обязан выкладываться, и правило включения должно
+        // стоять раньше маски: rsync берёт первое совпадение, и после `--exclude .../*` файл уже
+        // не вернуть.
+        $includeAt = strpos($flags, "--include='/public/uploads/.htaccess'");
+        $excludeAt = strpos($flags, "--exclude='/public/uploads/*'");
+        self::assertIsInt($includeAt, 'public/uploads/.htaccess обязан быть в --include');
+        self::assertIsInt($excludeAt, 'содержимое public/uploads обязано закрываться маской /*');
+        self::assertLessThan(
+            $excludeAt,
+            $includeAt,
+            'включение public/uploads/.htaccess обязано стоять раньше маски содержимого: '
+            . 'rsync берёт первое совпадение'
+        );
     }
 
     public function testЗондХостингаЗакрытКлючомИУдаляетСебя(): void
@@ -201,10 +251,11 @@ final class DeploySafetyTest extends TestCase
         // директива просто выпадала бы из сравнения оставшихся.
         $denyAll = $this->offsets($htaccess, '/^[ \t]*RewriteRule\b[^\n]*\[F/m');
         self::assertCount(
-            4,
+            5,
             $denyAll,
-            'служебное закрывают ровно четыре директивы RewriteRule с флагом [F]: меньше — каталог '
-            . 'исходников открыт, больше — эталон отстал от дерева'
+            'служебное закрывают ровно пять директив RewriteRule с флагом [F]: список каталогов, '
+            . 'исходник admin/layout.php, config.php, файлы сборки и скрытые каталоги. Меньше — '
+            . 'что-то открыто, больше — эталон отстал от дерева'
         );
 
         $firstRewrite = $this->offset($htaccess, '/^[ \t]*RewriteRule\b[^\n]*[ \t]public\//m');
@@ -251,8 +302,17 @@ final class DeploySafetyTest extends TestCase
         self::assertSame($expected, $actual, 'список закрытых имён обязан совпадать с эталоном — '
             . 'пропущенное имя открывает каталог исходников наружу');
 
+        // Каталог admin/ остаётся доступен маршрутизатору: иначе /admin и /admin/apps получают
+        // 403, и сотрудник не войдёт в админку. Закрыт должен быть ровно исходник каркаса.
+        self::assertMatchesRegularExpression(
+            '/^[ \t]*RewriteRule[ \t]+\^admin\/layout[^\n]*\[F,L\]/m',
+            $htaccess,
+            'admin/layout.php обязан закрываться отдельным правилом: сам маршрут /admin открыт, '
+            . 'а исходник каркаса наружу отдаваться не должен'
+        );
+
         // Файл настроек закрывается вторым правилом того же блока: `config` не входит в
-        // алтернанцию каталогов выше, поэтому эталон одиннадцати имён его не покрывает и сверен
+        // алтернанцию каталогов выше, поэтому эталон десяти имён его не покрывает и сверен
         // он отдельным якорем по строке этого правила — снова директивой, а не пояснением.
         $configRule = $this->line($htaccess, '/^[ \t]*RewriteRule[ \t]+\^config[^\n]*\[F,L\]/m');
         self::assertIsString($configRule, 'config.php обязан закрываться отдельным правилом с флагом [F,L]');

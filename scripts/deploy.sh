@@ -5,11 +5,16 @@
 # человек ставит в своей сессии. Пароли SSH-ключей живут в ssh-agent, боевой config.php создаётся
 # на сервере вручную (§11.3) и в репозиторий не попадает.
 #
-# --delete без четырёх исключений ниже уничтожил бы сайт: он стёр бы с сервера config.php с
-# паролями к базе, public/install.lock (его снимает только установщик, и на открытом установщике
-# сайт доступен любому), обложки из public/uploads и журнал core/storage. Исключённые файлы rsync
-# по умолчанию защищает от удаления, и флаг, снимающий эту защиту, здесь быть не должен — за ним
-# следит страж DeploySafetyTest: цена одной лишней опции — потеря боевых данных на сервере.
+# --delete без исключений ниже уничтожил бы сайт: он стёр бы с сервера config.php с паролями к
+# базе, public/install.lock (его снимает только установщик, и на открытом установщике сайт
+# доступен любому), обложки из public/uploads, журнал core/storage и резервные копии из backup/.
+# Исключённые файлы rsync по умолчанию защищает от удаления, и флаг, снимающий эту защиту, здесь
+# быть не должен — за ним следит страж DeploySafetyTest: цена одной лишней опции — потеря боевых
+# данных на сервере.
+#
+# uploads/ и storage/ исключаются по содержимому (`/*`), а не каталогом целиком: сами каталоги и
+# барьер public/uploads/.htaccess обязаны доехать до чистой выкладки, иначе загрузки и журнал
+# окажутся без защиты, а установщик откажет из-за недоступного каталога журнала.
 set -euo pipefail
 
 : "${CMS_DEPLOY_USER:?не задан CMS_DEPLOY_USER — логин SSH}"
@@ -55,8 +60,18 @@ cd "$REPO"
 rsync "${RSYNC_OPTS[@]}" \
   --exclude='/config.php' \
   --exclude='/public/install.lock' \
-  --exclude='/public/uploads/' \
-  --exclude='/core/storage/' \
+  --include='/public/uploads/.htaccess' \
+  --exclude='/public/uploads/*' \
+  --exclude='/core/storage/*' \
+  --exclude='/backup/' \
+  --exclude='/dump/' \
+  --exclude='/.env*' \
+  --exclude='*.pem' \
+  --exclude='*.key' \
+  --exclude='id_rsa*' \
+  --exclude='/.gate*' \
+  --exclude='/*.log' \
+  --exclude='/.git-commit-msg.txt' \
   --exclude='/tests/' \
   --exclude='/docs/' \
   --exclude='/docker/' \
@@ -111,10 +126,24 @@ for path in / /assets/app.css; do
   fi
 done
 
+# /admin — такой же публичный маршрут, как главная: в режиме root он обязан доходить до
+# front controller, а не упираться в запрет каталога. Гость получает 302 на /login, но 200 тоже
+# годится (форма входа без редиректа). 403 и 404 здесь значат, что корневой .htaccess снова
+# закрыл админку целиком: сотрудник не войдёт, хотя сайт снаружи выглядит целым.
+code="$(status_of /admin)"
+case "$code" in
+  200|301|302|303|307|308) ;;
+  *)
+    echo "Отказ: /admin отвечает ${code}, ждём 200 или редирект на /login." >&2
+    fail=1
+    ;;
+esac
+
 # Ни один служебный файл не должен отдаваться. 403 (закрыт корневым .htaccess, режим root) и
 # 404 (каталог лежит выше документ-корня, режим public) — оба ответа правильные; 200 — это
-# утекшие исходники или, что хуже, исполненный config.sample.php.
-for path in /core/bootstrap.php /config.php /config.sample.php /sql/0001_core_baseline.sql /apps/news/manifest.php /composer.json /docs/deploy-checklist.md; do
+# утекшие исходники или, что хуже, исполненный config.sample.php. admin/layout.php закрыт
+# отдельно: сам маршрут /admin открыт, а его исходник наружу отдаваться не должен.
+for path in /core/bootstrap.php /config.php /config.sample.php /sql/0001_core_baseline.sql /apps/news/manifest.php /admin/layout.php /composer.json /docs/deploy-checklist.md; do
   code="$(status_of "$path")"
   if [[ "$code" == '200' ]]; then
     echo "Отказ: ${path} отдаётся наружу (200). Служебные пути обязаны быть закрыты." >&2

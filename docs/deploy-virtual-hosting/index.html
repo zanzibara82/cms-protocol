@@ -103,7 +103,7 @@
 
 <header class="page">
   <div class="wrap">
-    <span class="datebadge">Ревизия текста по коду проекта: 14 ноября 2026 года</span>
+    <span class="datebadge">Ревизия текста по коду проекта: 23 ноября 2026 года</span>
     <h1>Выкладка нашей PHP-CMS на виртуальный хостинг</h1>
     <p class="lead">Подробная пошаговая инструкция: от создания аккаунта до приёмки готового сайта. Рассчитана на любой
     виртуальный (shared) PHP+MySQL-хостинг, а не на одного оператора: названия пунктов панели у хостеров разные, поэтому
@@ -183,7 +183,7 @@
       <li><a href="#step2">Добавить домен и привязать его к сайту</a></li>
       <li><a href="#step3">Понять раскладку каталогов и выбрать режим</a></li>
       <li><a href="#step4">Создать базу MySQL и пользователя</a></li>
-      <li><a href="#step5">Выбрать версию PHP (не ниже 8.1, цель 8.3)</a></li>
+      <li><a href="#step5">Выбрать версию PHP (8.2.35+, цель 8.3.36+)</a></li>
       <li><a href="#step6">Настроить параметры PHP (лимиты загрузки)</a></li>
       <li><a href="#step7">Включить SSH и подготовиться к передаче файлов</a></li>
       <li><a href="#step8">Загрузить файлы проекта</a></li>
@@ -223,7 +223,7 @@
       наличие SSH.</p>
       <p>Прежде чем оплачивать, пройдитесь по странице тарифа и выпишите оттуда всё, что понадобится инструкции:</p>
       <ul>
-        <li><strong>PHP не ниже 8.1</strong> (меньше — установщик откажет), целевая версия — <strong>8.3</strong>;</li>
+        <li><strong>PHP 8.2.35, 8.3.36, 8.4.27 или 8.5.12 и новее своей ветки</strong> (8.1 и версии ниже исправленной — установщик откажет), целевая версия — <strong>8.3.36</strong>;</li>
         <li><strong>MySQL 5.7 или 8.0</strong> и число баз данных, доступных в тарифе;</li>
         <li><strong>лимит памяти и время исполнения PHP</strong> (<code>memory_limit</code> и
         <code>max_execution_time</code>);</li>
@@ -373,9 +373,11 @@
     </article>
 
     <article class="step" id="step5">
-      <h2><span class="num">5</span>Выбрать версию PHP (не ниже 8.1, цель 8.3)</h2>
-      <p>Проекту нужен PHP <strong>не ниже 8.1</strong> (это минимум, который проверяет установщик), целевая версия —
-      <strong>8.3</strong>. Версия PHP выбирается в панели для сайта.</p>
+      <h2><span class="num">5</span>Выбрать версию PHP (8.2.35+, цель 8.3.36+)</h2>
+      <p>Проекту нужен PHP с закрытыми уязвимостями движка: <strong>8.2.35</strong>, <strong>8.3.36</strong>,
+      <strong>8.4.27</strong> или <strong>8.5.12</strong> — либо новее своей ветки. Ветка <strong>8.1 не подходит</strong>:
+      её поддержка закончилась, исправлений больше не будет, и установщик такую версию не пропустит. Целевая версия —
+      <strong>8.3.36</strong>. Версия PHP выбирается в панели для сайта.</p>
       <ol>
         <li>Перейдите в раздел с сайтами (обычно он называется «Сайты»).</li>
         <li>Найдите строку нужного сайта и откройте его настройки — значком шестерёнки либо ссылкой «Настроить».</li>
@@ -385,19 +387,19 @@
         пересоздания сайта.</li>
       </ol>
       <p>Набор доступных версий зависит не от проекта, а от сервера хостера: у разных операторов и на разных тарифах он
-      свой, и полный список виден в этом же выпадающем списке. На целой части виртуальных хостингов 8.3 уже доступна;
-      если её нет — берите 8.2 или 8.1, младше нам не подходит.</p>
+      свой, и полный список виден в этом же выпадающем списке. На части виртуальных хостингов 8.3 уже доступна;
+      если её нет — берите 8.4.27+ или 8.2.35+, младше исправленных версий нам не подходит.</p>
       <div class="note"><strong>Предупреждение.</strong> Перед сменой версии убедитесь, что её поддерживает ваша CMS.
       Слишком новая или слишком старая версия может дать белый экран или сообщение о несовместимости; для нашего проекта
-      безопасный выбор — 8.3, допустимый минимум — 8.1. Если нужной версии нет в списке — напишите в поддержку: у части
-      хостеров аккаунт переносят на сервер с другим набором версий.</div>
+      безопасный выбор — 8.3.36, а версия ниже исправленной в своей ветке не проходит установку. Если нужной версии нет
+      в списке — напишите в поддержку: у части хостеров аккаунт переносят на сервер с другим набором версий.</div>
 
-      <div class="signal"><strong>Признак, что шаг получился:</strong> в настройках сайта выбрана версия PHP 8.3
-      (или 8.2/8.1, если 8.3 недоступна на вашем сервере) и сохранена.</div>
+      <div class="signal"><strong>Признак, что шаг получился:</strong> в настройках сайта выбрана версия PHP 8.3.36
+      (или 8.2.35+/8.4.27+/8.5.12+, если 8.3 недоступна на вашем сервере) и сохранена.</div>
       <div class="fallback"><strong>Если не получилось:</strong>
         <ul>
-          <li>8.3 нет в списке — набор версий задаёт хостер; проверьте, доступна ли хотя бы 8.1, иначе пишите в поддержку.</li>
-          <li>После смены версии сайт показывает белый экран — верните прежнюю версию и сверьте совместимость: минимальная для нас 8.1.</li>
+          <li>8.3 нет в списке — набор версий задаёт хостер; проверьте, доступна ли исправленная версия другой ветки (8.2.35, 8.4.27, 8.5.12), иначе пишите в поддержку.</li>
+          <li>После смены версии сайт показывает белый экран — верните прежнюю версию и сверьте совместимость: минимум — исправленная версия ветки.</li>
           <li>Версия применяется не сразу к кэшированным страницам — обновите страницу без кэша.</li>
         </ul>
       </div>
@@ -484,9 +486,12 @@ php_value post_max_size 12M</code></pre>
         <code>package.json</code> и <code>package-lock.json</code>, <code>tailwind.config.js</code>,
         <code>postcss.config.js</code>, <code>phpstan.neon</code>, <code>phpunit.xml</code>,
         <code>.php-cs-fixer.dist.php</code> с кэшем), <code>.git/</code>, <code>.gitignore</code> и
-        <code>.superpowers/</code>. Скрипт берёт адрес, логин и путь из переменных окружения и никогда не стирает
-        на сервере <code>config.php</code>, замок установщика, каталог загрузок и журнал: все четыре пути стоят в
-        исключениях <code>rsync</code>, и за их наличие следит <code>tests/guard/DeploySafetyTest.php</code>.
+        <code>.superpowers/</code>, секреты (<code>.env*</code>, <code>*.pem</code>, <code>*.key</code>,
+        <code>id_rsa*</code>) и локальные журналы. Скрипт берёт адрес, логин и путь из переменных окружения и
+        никогда не стирает на сервере <code>config.php</code>, замок установщика, содержимое каталога загрузок и
+        журнала, а также <code>backup/</code> и <code>dump/</code>: эти пути стоят в исключениях <code>rsync</code>,
+        и за их наличие следит <code>tests/guard/DeploySafetyTest.php</code>. Сами <code>public/uploads/</code> и
+        <code>core/storage/</code> при этом выкладываются вместе с <code>public/uploads/.htaccess</code>.
         Относительный <code>CMS_DEPLOY_PATH</code> скрипт отвергает до первой передачи — с ним <code>--delete</code>
         уехал бы чистить соседнее дерево. После заливки тот же скрипт проверяет раскладку, если задан
         <code>CMS_DEPLOY_URL</code>.</li>
@@ -519,10 +524,12 @@ php_value post_max_size 12M</code></pre>
       <p>Это самый важный шаг безопасности для запасной раскладки (режим <code>root</code>). Поскольку вся структура
       лежит в веб-зоне, нужен корневой <code>.htaccess</code>, который:</p>
       <ul>
-        <li>отдаёт <strong>403</strong> на служебное: <code>core</code>, <code>admin</code>, <code>apps</code>,
+        <li>отдаёт <strong>403</strong> на служебное: <code>core</code>, <code>apps</code>,
         <code>sql</code>, <code>theme</code>, <code>scripts</code>, <code>tests</code>, <code>docs</code>,
-        <code>docker</code>, <code>vendor</code>, <code>node_modules</code>, а также на <code>config.php</code>,
-        <code>config.sample.php</code> и файлы вроде <code>composer.json</code>, <code>phpunit.xml</code>;</li>
+        <code>docker</code>, <code>vendor</code>, <code>node_modules</code>, на исходник каркаса
+        <code>admin/layout.php</code>, а также на <code>config.php</code>, <code>config.sample.php</code>
+        и файлы вроде <code>composer.json</code>, <code>phpunit.xml</code>. Каталог <code>admin/</code> целиком
+        не закрывается: <code>/admin</code> — публичный маршрут админки, и его собирает front controller;</li>
         <li>закрывает скрытые каталоги <code>.git</code>, <code>.env</code>, <code>.superpowers</code>;</li>
         <li>и только после блокировки переписывает существующие файлы/каталоги внутрь <code>public/</code>, а остальное —
         в <code>public/index.php</code> (с обязательным тормозом повторного прохода, чтобы стили не подменились разметкой).</li>
@@ -533,14 +540,16 @@ php_value post_max_size 12M</code></pre>
       страж <code>tests/guard/DeploySafetyTest.php</code>. Он же закрепляет правило
       <code>RewriteBase /</code>: без него переписывание в per-directory контексте строится
       от пути каталога, а не от корня.
-      Закрытию подлежат каталоги <code>admin</code>, <code>apps</code>, <code>core</code>, <code>docker</code>,
+      Закрытию подлежат каталоги <code>apps</code>, <code>core</code>, <code>docker</code>,
       <code>scripts</code>, <code>sql</code>, <code>tests</code>, <code>docs</code>, <code>theme</code>,
-      <code>vendor</code>, <code>node_modules</code>, файлы <code>config.php</code> и <code>config.sample.php</code>,
-      файлы сборки (<code>composer.json</code>, <code>composer.lock</code>, <code>package.json</code>,
-      <code>package-lock.json</code>, <code>phpunit.xml</code>, <code>phpstan.neon</code>) и скрытые каталоги
-      <code>.git</code>, <code>.env</code>, <code>.superpowers</code>. Менять эти правила можно только вместе с
-      тестом: без тормоза второго прохода стилевому запросу вместо выдачи достаётся разметка, а без порядка правил —
-      исходники ядра наружу.</div>
+      <code>vendor</code>, <code>node_modules</code>, исходник <code>admin/layout.php</code>, файлы
+      <code>config.php</code> и <code>config.sample.php</code>, файлы сборки (<code>composer.json</code>,
+      <code>composer.lock</code>, <code>package.json</code>, <code>package-lock.json</code>,
+      <code>phpunit.xml</code>, <code>phpstan.neon</code>) и скрытые каталоги <code>.git</code>,
+      <code>.env</code>, <code>.superpowers</code>. Маршрут <code>/admin</code> и его экраны остаются
+      открытыми: их отдаёт <code>public/index.php</code>, а исходник каркаса наружу не уходит. Менять эти
+      правила можно только вместе с тестом: без тормоза второго прохода стилевому запросу вместо выдачи
+      достаётся разметка, а без порядка правил — исходники ядра наружу.</div>
       <p>Существующий <code>public/.htaccess</code> в запасной раскладке работает без изменений: Apache применяет его
       правила к каталогу <code>public/</code> — в нём уже стоят front-controller, <code>Options -Indexes</code>,
       директива <code>DirectoryIndex index.php</code> в обёртке <code>mod_dir.c</code> (без неё запрос «/» отдаёт
@@ -594,7 +603,7 @@ ls -l config.sample.php</code></pre>
       панели или командой <code>nano config.php</code> по SSH):</p>
       <ul>
         <li><code>SMTP_HOST</code>/<code>SMTP_PORT</code>/<code>SMTP_USER</code>/<code>SMTP_PASS</code>/<code>MAIL_FROM</code> —
-        почта (шаг 12; в пилоте письма не отправляются, пустые значения законны);</li>
+        почта (шаг 12; без этих ключей не уходят сброс пароля, ответы на заявки и письма магазина);</li>
         <li><code>TIMEZONE</code> = часовой пояс вывода, например <code>Europe/Moscow</code> (в базе всегда UTC). Ключ входит
         в список обязательных, поэтому стирать его значение нельзя;</li>
         <li><code>EXTRA_APPS_DIR</code>, <code>EXTRA_THEME_DIR</code> — служебные каталоги, их читают только тесты; на сервере
@@ -649,7 +658,7 @@ ls -l config.sample.php</code></pre>
         <ul>
           <li>Домен ещё не указывал на сервер хостинга — центр сертификации не подтвердит владение доменом; вернитесь к шагу 2.</li>
           <li>Сертификат выпускается не мгновенно — подождите и обновите страницу; сроки зависят от хостера.</li>
-          <li>Редирект на https не срабатывает — включите его в панели (раздел домена или сайта) или полагруйтесь на наш <code>.htaccess</code> (302).</li>
+          <li>Редирект на https не срабатывает — включите его в панели (раздел домена или сайта) или положитесь на наш <code>.htaccess</code> (302).</li>
         </ul>
       </div>
     </article>
@@ -682,8 +691,8 @@ ls -l config.sample.php</code></pre>
       465 или 587 — а не «голый» 25.</div>
       <div class="note"><strong>Почему не <code>mail()</code>.</strong> Функцию <code>mail()</code> на shared мы не
       используем принципиально: у неё нет контроля над шифрованием и аутентификацией, а наш клиент проверяет сертификат
-      и требует зашифрованный канал. В пилоте письма вообще не отправляются — SMTP-поля можно оставить пустыми и заполнить
-      позже.</div>
+      и требует зашифрованный канал. Заполнить SMTP-поля нужно до приёмки: через них уходят сброс пароля, ответы на
+      заявки и письма магазина.</div>
       <p>SPF и DKIM для доменной почты обычно настраивает сам хостер. Если сомневаетесь — проверьте записи MX/SPF/DKIM/DMARC
       в DNS-редакторе панели, если он у хостера есть.</p>
       <div class="signal"><strong>Признак, что шаг получился:</strong> ящик создан и доступен, параметры SMTP записаны
@@ -702,8 +711,9 @@ ls -l config.sample.php</code></pre>
     <article class="step" id="step13">
       <h2><span class="num">13</span>Проверить сервер зондом перед установкой</h2>
       <p>Прежде чем запускать установщик, удобно одним запросом проверить, что хостинг соответствует требованиям
-      проекта: версия PHP ≥ 8.1, шесть нужных расширений, лимиты загрузки, живой <code>stream_socket_client</code>,
-      доступный каталог сессий, открытый почтовый порт и указание документ-корня.</p>
+      проекта: исправленная версия PHP (8.2.35+/8.3.36+/8.4.27+/8.5.12+), шесть нужных расширений, лимиты загрузки,
+      живой <code>stream_socket_client</code>, доступный каталог сессий, открытый почтовый порт и указание
+      документ-корня.</p>
       <div class="note"><strong>Зонд <code>scripts/hosting-probe.php</code> лежит в репозитории.</strong> Это
       одноразовый скрипт: копия с секретным ключом кладётся в <code>public/</code> под именем <code>probe.php</code>,
       отвечает на <code>/probe.php?k=…&amp;smtp=хост&amp;port=587</code> и после ответа удаляет себя. В репозитории ключ
@@ -716,7 +726,8 @@ ls -l config.sample.php</code></pre>
       <p>Если зонд неудобен, те же факты проверяются руками: версия PHP в шаге 5, лимиты в шаге 6, расширения —
       на экране установщика (шаг 14), а почтовый порт — разделом «Проверка исходящих портов».</p>
       <p>Требования проекта к расширениям (проверяет и установщик): <code>pdo_mysql</code>, <code>mbstring</code>,
-      <code>openssl</code>, <code>fileinfo</code>, <code>json</code>, <code>gd</code>. Минимальная версия PHP — 8.1.</p>
+      <code>openssl</code>, <code>fileinfo</code>, <code>json</code>, <code>gd</code>. Минимальная безопасная версия —
+      8.2.35 (или 8.3.36 / 8.4.27 / 8.5.12 соответственно ветке).</p>
       <div class="signal"><strong>Признак, что шаг получился:</strong> все обязательные проверки зелёные; отсутствие
       argon2id не стопор (тогда пароли будут bcrypt), а указание на документ-корень подтверждает выбор раскладки.</div>
       <div class="fallback"><strong>Если не получилось:</strong>
@@ -744,7 +755,8 @@ ls -l config.sample.php</code></pre>
         сессии.</li>
         <li><strong>Шаг 2 — «Установка сайта».</strong> Открывается только после успешного шага 1: без отметки сессии адрес
         возвращает на шаг 1 с плашкой «Второй шаг недоступен: сначала пройдите первый шаг с параметрами базы.». Здесь же
-        установщик проверяет окружение и списком печатает проблемы, если они есть: PHP не ниже 8.1, расширения
+        установщик проверяет окружение и списком печатает проблемы, если они есть: исправленная версия PHP
+        (8.2.35+/8.3.36+/8.4.27+/8.5.12+), расширения
         <code>pdo_mysql</code>, <code>mbstring</code>, <code>openssl</code>, <code>fileinfo</code>, <code>json</code>,
         <code>gd</code>, доступность <code>public/</code> для записи (нужен замок) и доступность каталога журнала. Пока есть
         хотя бы одна проблема, кнопка «Установить» неактивна.</li>
@@ -756,9 +768,15 @@ ls -l config.sample.php</code></pre>
       <p>Замок закрывает оба экрана: после установки повторный заход и на <code>setup.php</code>, и на
       <code>setup.php?step=admin</code> обязан отвечать <strong>404</strong>. Это критерий готовности: открытый
       установщик означал бы, что сайт доступен любому.</p>
+      <div class="note"><strong>Не оставляйте установщик открытым.</strong> До постановки замка
+      <code>setup.php</code> доступен любому посетителю: шаг 1 подключается к тому хосту и порту базы, которые
+      ввели в форму, поэтому чужой человек может использовать его для перебора портов. Проходите установку сразу
+      после выкладки; если нужно время, закройте <code>/setup.php</code> паролем в панели хостинга или временно
+      запретите адрес в <code>.htaccess</code>.</div>
       <div class="note"><strong>Повторяемость.</strong> Если установка упала до финала, замок ставится только в самом
-      финале и при срыве снимается, поэтому повторный запуск безопасен: схема применяется через <code>IF NOT EXISTS</code>,
-      а записи — только если их ещё нет.</div>
+      финале и при срыве снимается, поэтому повторный запуск безопасен: установщик ведёт журнал
+      <code>tbl_app_migration</code> и не применяет уже записанный файл второй раз; в <code>0005</code> вдобавок
+      стоит <code>IF NOT EXISTS</code>.</div>
       <div class="signal"><strong>Признак, что шаг получился:</strong> установщик сообщил об успехе, появился вход,
       <code>https://домен/setup.php</code> теперь отдаёт 404, а <code>ls -l config.php</code> показывает
       <code>-rw-------</code>.</div>
@@ -847,15 +865,15 @@ ls -l config.sample.php</code></pre>
     выкладывать нельзя: это лишние файлы в веб-зоне и подсказки посторонним о вашей сборке.</p>
     <h3>Загружаем</h3>
     <ul>
-      <li><code>core/</code> (без содержимого журнала — см. ниже),</li>
+      <li><code>core/</code> вместе с пустым каталогом <code>core/storage/</code> (содержимое журнала — см. ниже),</li>
       <li><code>admin/</code>, <code>theme/</code>,</li>
       <li><code>apps/</code> (рабочие приложения, включая собранный раздел <code>apps/news/</code>),</li>
       <li><code>sql/</code> (его читает <code>setup.php</code>),</li>
       <li><code>public/</code> целиком: <code>index.php</code>, <code>setup.php</code>, <code>.htaccess</code>,
-      <code>assets/app.css</code>, <code>uploads/</code>,</li>
+      <code>assets/app.css</code>, каталог <code>uploads/</code> с барьером <code>uploads/.htaccess</code>,</li>
       <li>корневой <code>.htaccess</code> — он обязателен при запасной раскладке (шаг 9), и его передаёт
       <code>scripts/deploy.sh</code>: в списке исключений этого файла нет (из скрытого там <code>/.git/</code>,
-      <code>/.gitignore</code>, <code>/.superpowers/</code> и три файла инструментов; весь перечень — шаг 8),</li>
+      <code>/.gitignore</code> и <code>/.superpowers/</code>; весь перечень — шаг 8),</li>
       <li>образец <code>config.sample.php</code> (из него установщик берёт значения по умолчанию),</li>
       <li><code>.gitattributes</code> — не обязателен на проде, но безвреден.</li>
     </ul>
@@ -875,13 +893,18 @@ ls -l config.sample.php</code></pre>
       <li><code>.git/</code> и <code>.gitignore</code>;</li>
       <li><code>config.php</code> — <strong>не загружаем из репозитория</strong>: его записывает на сервере первый шаг
       установщика (шаги 10 и 14);</li>
+      <li><code>dump/</code> и <code>backup/</code> — дампы и резервные копии: на сервере они живут отдельно, а
+      <code>scripts/deploy.sh</code> не стирает серверный <code>backup/</code>;</li>
+      <li>секреты и локальные журналы: <code>.env*</code>, <code>*.pem</code>, <code>*.key</code>,
+      <code>id_rsa*</code>, <code>*.log</code> в корне;</li>
       <li>журнал <code>core/storage/errors.log</code> и содержимое <code>public/uploads/</code> с боевого сервера — не
       переносим поверх (их защищает выкладка).</li>
     </ul>
     <p>Если выкладываете руками через архив — просто не включайте эти пути в архив. Если через
     <code>scripts/deploy.sh</code> — там список исключений уже задан, а <code>--delete</code> защищён от стирания
-    <code>config.php</code>, замка, загрузок и журнала: все четыре пути стоят в исключениях <code>rsync</code>, и за
-    их наличие отвечает <code>tests/guard/DeploySafetyTest.php</code>.</p>
+    <code>config.php</code>, замка, содержимого загрузок и журнала, а также <code>backup/</code> и <code>dump/</code>.
+    Сами <code>public/uploads/</code> и <code>core/storage/</code> с барьером <code>public/uploads/.htaccess</code>
+    доедут до чистой выкладки. За список отвечает <code>tests/guard/DeploySafetyTest.php</code>.</p>
   </section>
 
   <section id="perms" class="step" aria-labelledby="perms-h">
@@ -911,7 +934,8 @@ ls -l config.sample.php</code></pre>
       записанный <code>config.php</code> с правами <code>600</code> и отметка сессии, которая открывает второй экран;
       любой отказ печатается на экран и не пишет ни файла, ни отметки. Таблиц на этом шаге ещё нет.</li>
       <li><strong>Второй экран проверяет окружение.</strong> Без отметки первого экрана адрес возвращает на него
-      с объяснением. Проверки: PHP не ниже 8.1, шесть расширений (<code>pdo_mysql</code>, <code>mbstring</code>,
+      с объяснением. Проверки: PHP с закрытыми уязвимостями (8.2.35+/8.3.36+/8.4.27+/8.5.12+; 8.1 и версии
+      ниже исправленной отклоняются), шесть расширений (<code>pdo_mysql</code>, <code>mbstring</code>,
       <code>openssl</code>, <code>fileinfo</code>, <code>json</code>, <code>gd</code>), записываемость
       <code>public/</code> (для замка) и доступность каталога журнала (иначе штатные
       <code>logWarn()</code>/<code>logError()</code> терялись бы). Есть проблема — кнопка неактивна и список проблем
@@ -963,7 +987,8 @@ ls -l config.sample.php</code></pre>
     <p>Проверка без записи — по SSH, в директории проекта:</p>
     <pre><code>php bin/cron.php --dry-run</code></pre>
     <p>Ответ — JSON с <code>"ok": true</code> и код возврата 0. Вторая строка cron — резервная копия базы
-    (<code>scripts/backup.sh</code>), её порядок — в разделе «Мониторинг и бэкапы» ниже.</p>
+    (<code>scripts/backup.sh</code>), её порядок — в разделе «Мониторинг и бэкапы» ниже:</p>
+    <pre><code>0 3 * * * CMS_BACKUP_MYSQLDUMP=/usr/bin/mysqldump /bin/bash /home/логин/путь-к-проекту/scripts/backup.sh</code></pre>
     <div class="note"><strong>Резервные копии тоже ставятся в cron.</strong> <code>scripts/backup.sh</code> снимает
     дамп <code>mysqldump --single-transaction</code> (без блокировки таблиц), проверяет строку-итог и число таблиц,
     пишет файл правами <code>600</code> и держит последние семь копий. Каталог копий обязан лежать <em>вне</em>
@@ -1049,6 +1074,12 @@ nc -vz &lt;хост&gt; 465</code></pre>
     (<code>logWarn()</code>/<code>logError()</code>): он не заменяет Apache <code>error_log</code>, не пишет пароли
     и не содержит дампа всех настроек. Если PHP «умирает» до bootstrap (синтаксис, несовместимая версия), в журнал
     ничего не попадёт — тогда смотрите Apache <code>error_log</code> в разделе «Логи» панели.</div>
+    <p><strong>Журнал растёт.</strong> Файл <code>core/storage/errors.log</code> не ротируется сам: на боевом
+    сайте он может занять сотни мегабайт и упереться в дисковый лимит тарифа. Раз в месяц смотрите его размер
+    (<code>ls -lh core/storage/errors.log</code>) и, если он велик, сохраните копию и обнулите файл
+    (<code>cp core/storage/errors.log /вне/сайта/errors.log &amp;&amp; : &gt; core/storage/errors.log</code>).
+    Каталог <code>core/storage/</code> лежит вне <code>public/</code>, поэтому копию можно хранить рядом, но не в
+    документ-корне.</p>
   </section>
 
   <section id="after" class="step" aria-labelledby="after-h">
@@ -1060,11 +1091,12 @@ nc -vz &lt;хост&gt; 465</code></pre>
       адреса раздела.</li>
       <li><strong>Войти в админку.</strong> Проверить вход (<code>/login</code> → <code>/admin</code>) и выход; убедиться,
       что кука сессии идёт по https с флагом Secure.</li>
-      <li><strong>Открыть раздел «Приложения»</strong> (<code>/admin/apps</code>) и убедиться, что состояние «Новостей»
-      корректно.</li>
-      <li><strong>Включить «Новости»</strong> кнопкой «Установить» на экране «Приложения» — см. шаг 15.</li>
+      <li><strong>Открыть раздел «Приложения»</strong> (<code>/admin/apps</code>) и убедиться, что все пять
+      разделов установлены и их версии в базе совпадают со сборкой.</li>
+      <li><strong>Проверить каждый раздел</strong>, поставленный кнопкой «Установить» на экране «Приложения» — см. шаг 15.</li>
       <li><strong>Проверить закрытие служебных путей</strong> (режим <code>root</code>): <code>/config.php</code>,
-      <code>/core/bootstrap.php</code>, любой файл из <code>/sql/</code> не должны отдавать 200.</li>
+      <code>/core/bootstrap.php</code>, любой файл из <code>/sql/</code> и <code>/admin/layout.php</code> не должны
+      отдавать 200, а <code>/admin</code> обязан открываться (200 или редирект на <code>/login</code>).</li>
       <li><strong>Проверить адаптивность</strong> 360…1440 на боевом адресе (локально — командой
       <code>npm run responsive -- --base=https://домен-школы.рф</code>, которая запускает
       <code>scripts/responsive-check.mjs</code>; для входа в админку он читает <code>RESP_EMAIL</code> и
@@ -1083,7 +1115,8 @@ nc -vz &lt;хост&gt; 465</code></pre>
       <pre><code>git worktree add ../old &lt;коммит-прошлой-версии&gt;
 CMS_DEPLOY_PATH=… bash ../old/scripts/deploy.sh</code></pre>
       Скрипт использует <code>rsync --delete</code>, но защищён от стирания <code>config.php</code>, замка
-      <code>public/install.lock</code>, каталога <code>public/uploads/</code> и журнала <code>core/storage/</code>.
+      <code>public/install.lock</code>, содержимого <code>public/uploads/</code> и <code>core/storage/</code>,
+      а также каталогов <code>backup/</code> и <code>dump/</code>.
       Без <code>CMS_DEPLOY_URL</code> проверка раскладки пропустится; при откате сайт уже установлен, поэтому адрес
       задают и проверку делают — иначе залитая назад прошлая версия остаётся непроверенной.</li>
       <li><strong>Вручную через файловый менеджер/FTP.</strong> Замените PHP-файлы и <code>public/assets/app.css</code>
@@ -1101,10 +1134,10 @@ CMS_DEPLOY_PATH=… bash ../old/scripts/deploy.sh</code></pre>
       <thead><tr><th>Готово</th><th>Что проверяем</th><th>Как</th></tr></thead>
       <tbody>
         <tr><td>☐</td><td>Домен привязан к директории сайта, DNS указывает на сервер хостинга</td><td>раздел сайтов панели, браузер</td></tr>
-        <tr><td>☐</td><td>PHP ≥ 8.1 (цель 8.3) выбран для сайта</td><td>настройки сайта (шаг 5)</td></tr>
+        <tr><td>☐</td><td>PHP 8.2.35+/8.3.36+/8.4.27+/8.5.12+ выбран для сайта (цель 8.3.36)</td><td>настройки сайта (шаг 5)</td></tr>
         <tr><td>☐</td><td>Лимиты загрузки: <code>upload_max_filesize</code> ≥ 8M, <code>post_max_size</code> не меньше</td><td>параметры PHP (шаг 6)</td></tr>
         <tr><td>☐</td><td>База создана, <code>config.php</code> записан установщиком, права 600</td><td>браузер (шаг 14), SSH <code>ls -l</code> (шаги 4, 10)</td></tr>
-        <tr><td>☐</td><td>Раскладка закрыта: служебные пути (<code>/config.php</code>, <code>/core/…</code>, <code>/sql/…</code>) не отдают 200</td><td>браузер/`curl` (шаг 9)</td></tr>
+        <tr><td>☐</td><td>Раскладка закрыта: служебные пути (<code>/config.php</code>, <code>/core/…</code>, <code>/sql/…</code>, <code>/admin/layout.php</code>) не отдают 200, а <code>/admin</code> отвечает 200 или редиректом на <code>/login</code></td><td>браузер/`curl` (шаг 9)</td></tr>
         <tr><td>☐</td><td>SSL-сертификат, который даёт хостинг (обычно бесплатный вроде Let's Encrypt, либо загруженный вручную), выпущен; https работает, редирект с http есть</td><td>браузер (шаг 11)</td></tr>
         <tr><td>☐</td><td>Установщик прошёл, <code>/setup.php</code> отдаёт 404</td><td>браузер (шаг 14)</td></tr>
         <tr><td>☐</td><td>Ядро и администратор созданы, вход работает, сессия по https с Secure</td><td><code>/login</code> → <code>/admin</code></td></tr>
@@ -1115,7 +1148,7 @@ CMS_DEPLOY_PATH=… bash ../old/scripts/deploy.sh</code></pre>
         <tr><td>☐</td><td>Почтовый ящик создан, SMTP заполнен, порт 465/587 открыт</td><td>SSH <code>nc</code> / зонд (шаги 12–13)</td></tr>
         <tr><td>☐</td><td>Тестовая заявка с формы дошла до <code>/admin/leads</code>, письмо-уведомление пришло</td><td>браузер (раздел «Заявки»)</td></tr>
         <tr><td>☐</td><td>Cron для <code>bin/cron.php</code> поставлен, <code>--dry-run</code> отдаёт <code>"ok": true</code></td><td>панель + SSH (раздел «Cron»)</td></tr>
-        <tr><td>☐</td><td>Cron для <code>scripts/backup.sh</code> поставлен, копия появилась и лежит вне <code>public/</code></td><td>SSH (раздел «Cron»)</td></tr>
+        <tr><td>☐</td><td>Cron для <code>scripts/backup.sh</code> поставлен, копия появилась вне <code>public/</code> и выгружена с сервера</td><td>SSH (раздел «Cron»)</td></tr>
         <tr><td>☐</td><td>Флажок «Техобслуживание» включается и снимается: гость видит 503, администратор — сайт</td><td><code>/admin/settings</code> (раздел «Режим техобслуживания»)</td></tr>
         <tr><td>☐</td><td>HSTS приходит по HTTPS, заголовки <code>nosniff</code>, CSP, <code>Referrer-Policy</code> на месте</td><td><code>curl -I https://домен</code></td></tr>
         <tr><td>☐</td><td>Журнал <code>core/storage/errors.log</code> пишется и не отдаётся наружу</td><td>SSH (раздел «Логи»)</td></tr>

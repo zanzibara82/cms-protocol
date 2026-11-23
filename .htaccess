@@ -9,11 +9,19 @@
 # на [F]; если первым поставить переписывание, запрос /core/bootstrap.php совпадёт с
 # существующим файлом, условие !-f его пропустит, и наружу уйдёт исходник ядра — а при mod_php
 # ещё и исполнится.
+#
+# Каталог admin/ не закрывается общим правилом: /admin — публичный маршрут админки, и в этой
+# раскладке его собирает front controller из public/index.php. Закрыт только исходник каркаса,
+# admin/layout.php: его подключает bootstrap, наружу он отдаваться не должен. Запросы вида
+# /admin/apps файлов на диске не имеют и уходят в public/index.php правилом ниже.
+Options -Indexes
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
 
-    RewriteRule ^(admin|apps|core|docker|scripts|sql|tests|docs|theme|vendor|node_modules)(/|$) - [F,L]
+    RewriteRule ^(apps|core|docker|scripts|sql|tests|docs|theme|vendor|node_modules)(/|$) - [F,L]
+    RewriteRule ^admin/layout\.php$ - [F,L]
     RewriteRule ^config(\.sample)?\.php$ - [F,L]
     RewriteRule ^(composer\.(json|lock)|package(-lock)?\.json|phpunit\.xml|phpstan\.neon)$ - [F,L]
     RewriteRule (^|/)\.(git|env|superpowers) - [F,L]

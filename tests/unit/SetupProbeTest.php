@@ -96,6 +96,26 @@ final class SetupProbeTest extends TestCase
     }
 
     /**
+     * Ветка PHP без исправлений не проходит установку: на 8.1 поддержка закончилась, на 8.3.35
+     * открыта CVE-2026-109618. Отказ обязан называть и версию, и что делать. Ветку вне списка
+     * известных (9.0) не блокируем: объявлять её уязвимой без данных нельзя.
+     */
+    public function testНебезопаснаяВерсияPhpНеПроходитУстановку(): void
+    {
+        $old = setupPhpSecurityProblems('8.3.35');
+        self::assertCount(1, $old, 'Версия старше исправленной обязана дать отказ');
+        self::assertStringContainsString('8.3.36', $old[0], 'Отказ не назвал исправленную версию');
+        self::assertStringContainsString('CVE-2026-109618', $old[0], 'Отказ не назвал уязвимость');
+
+        $none = setupPhpSecurityProblems('8.1.29');
+        self::assertCount(1, $none, 'Ветка без поддержки обязана дать отказ');
+        self::assertStringContainsString('поддержка ветки закончилась', $none[0], 'Отказ 8.1 не объяснён');
+
+        self::assertSame([], setupPhpSecurityProblems('8.3.36'), 'Исправленная версия отклонена');
+        self::assertSame([], setupPhpSecurityProblems('9.0.0'), 'О незнакомой ветке нет данных для отказа');
+    }
+
+    /**
      * Убирает замок любого вида перед и после проверки: настоящий файл и мусорный каталог
      * на его месте стираются. Путь берётся из setupLockPath(): переопределение setUp уводит
      * замок во временный каталог, и боевой public/install.lock набором не трогается (М6) —

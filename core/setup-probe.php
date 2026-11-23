@@ -9,7 +9,29 @@ declare(strict_types=1);
 
 // Ключ отметки сессии объявлен здесь, а не в документ-корне: setupMarkSession() живёт в этом
 // файле, и самостоятельное подключение core/setup-probe.php вне setup.php не должно давать фатал.
+// Проверка безопасности PHP берёт таблицу исправленных версий и подсказки из version.php: без
+// этого require самостоятельный вызов setupPhpSecurityProblems() падал бы на незнакомой функции.
+require_once __DIR__ . '/version.php';
+
 const SETUP_SESSION_DB = 'setup_db';
+
+/**
+ * Версия PHP без исправлений безопасности не проходит установку. Минимум SETUP_MIN_PHP (8.1)
+ * отвечает за синтаксис, а здесь — за закрытые уязвимости движка: на 8.1 исправлений уже не
+ * будет, на 8.3.35 и младше дыра CVE-2026-109618 остаётся открытой. Ветку вне списка известных
+ * (8.6 и новее) не блокируем: объявлять её уязвимой без данных нельзя, а администратор увидит
+ * предупреждение в сводке.
+ *
+ * @return list<string>
+ */
+function setupPhpSecurityProblems(string $version = PHP_VERSION): array
+{
+    if (!in_array(corePhpSecurityState($version), ['old', 'none'], true)) {
+        return [];
+    }
+
+    return ['PHP ' . $version . ' небезопасен: ' . corePhpSecurityHint($version) . '.'];
+}
 
 /**
  * Зонд достигаемости хоста и порта: три секунды на установку соединения — тот же приём, что в

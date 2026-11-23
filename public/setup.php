@@ -9,6 +9,8 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/core/bootstrap.php';
 
 const SETUP_REQUIRED_EXTENSIONS = ['pdo_mysql', 'mbstring', 'openssl', 'fileinfo', 'json', 'gd'];
+// Нижняя граница синтаксиса. Безопасность движка проверяется отдельно: setupPhpSecurityProblems()
+// не пропускает ветку без исправлений (8.1) и версию старше исправленной в своей ветке.
 const SETUP_MIN_PHP = '8.1.0';
 const SETUP_PASSWORD_MIN = 10;
 const SETUP_STEP_DB = 'db';
@@ -62,6 +64,10 @@ function setupProblems(): array
 
     if (version_compare(PHP_VERSION, SETUP_MIN_PHP, '<')) {
         $problems[] = 'Нужен PHP не ниже ' . SETUP_MIN_PHP . ', сейчас ' . PHP_VERSION . '.';
+    }
+
+    foreach (setupPhpSecurityProblems() as $problem) {
+        $problems[] = $problem;
     }
 
     foreach (SETUP_REQUIRED_EXTENSIONS as $extension) {
