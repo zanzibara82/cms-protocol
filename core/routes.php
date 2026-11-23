@@ -38,6 +38,10 @@ function registerCoreRoutes(): void
     // сайта, поэтому право то же, что у установки темы, — администратора.
     addRoute('GET', '/admin/design', 'coreAdminDesign', ['private' => true, 'permission' => 'manage']);
     addRoute('POST', '/admin/design', 'coreAdminDesignAction', ['private' => true, 'permission' => 'manage']);
+    // Дизайн → Библиотека шаблонов: готовые наборы блоков для страниц. Право то же, что у
+    // конструктора: шаблон ставит содержимое, а не меняет оформление всего сайта.
+    addRoute('GET', '/admin/templates', 'coreAdminTemplates', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/templates', 'coreAdminTemplatesAction', ['private' => true, 'permission' => 'login']);
     // Заявки с публичных форм: приём — публичный POST, список и действия — только администратор
     // (контакты — личные данные; портал зовёт requireAdmin, здесь право manage, как /admin/apps).
     addRoute('POST', '/lead', 'coreLeadSubmit');
@@ -1353,6 +1357,122 @@ function coreAdminDesignAction(array $params = []): void
     auditLog('design.update', 'design', '', ['colors' => implode(',', array_keys($values['colors']))], 'Сохранено оформление темы');
 
     finishAppAction(['ok' => true, 'error' => ''], '/admin/design', 'design_saved');
+}
+
+// ---------------------------------------------------------------------------
+// Дизайн → Библиотека шаблонов: готовые наборы блоков для страниц
+// ---------------------------------------------------------------------------
+
+/**
+ * Экран библиотеки: каталог готовых шаблонов и форма применения.
+ *
+ * Фильтр категории приходит из адреса: неизвестная категория даёт пустой список, а не весь
+ * каталог — экран с фильтром не должен показывать «всё», когда фильтр ничего не нашёл.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminTemplates(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $category = (string) (queryString('category', '') ?? '');
+
+    render('admin/templates', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'templates' => templateLibraryFiltered($category),
+        'categories' => TEMPLATE_LIBRARY_CATEGORIES,
+        'category' => $category,
+        'pages' => templateLibraryPageOptions(),
+    ], ['title' => 'Библиотека шаблонов — админка', 'noindex' => true]);
+}
+
+/**
+ * Список страниц для формы применения: главная плюс адресные страницы.
+ *
+ * Число блоков считается отдельным запросом и складывается в карту: у страницы без блоков
+ * человек должен видеть «блоков 0» — тогда замена содержимого заведомо ничего не потеряет, и
+ * флажок ставить не нужно.
+ *
+ * @return list<array{id: string, title: string, slug: string, sections: int}>
+ */
+function templateLibraryPageOptions(): array
+{
+    $counts = [];
+    foreach (all('SELECT page_id, COUNT(*) AS sections FROM ' . t('page_section') . ' GROUP BY page_id') as $row) {
+        $counts[(string) $row['page_id']] = (int) $row['sections'];
+    }
+
+    $rows = [[
+        'id' => PAGES_HOME_ID,
+        'title' => 'Главная страница',
+        'slug' => '',
+        'sections' => $counts[PAGES_HOME_ID] ?? 0,
+    ]];
+
+    foreach (all('SELECT id, title, slug FROM ' . t('page') . ' ORDER BY title ASC, id ASC LIMIT 500') as $row) {
+        $rows[] = [
+            'id' => (string) $row['id'],
+            'title' => (string) $row['title'],
+            'slug' => (string) $row['slug'],
+            'sections' => $counts[(string) $row['id']] ?? 0,
+        ];
+    }
+
+    return $rows;
+}
+
+/**
+ * Применение шаблона. Один POST-обработчик (op) — точка проверки CSRF одна, как у конструктора.
+ *
+ * Страница приходит идентификатором из формы, а не из адреса: экран общий, и применять шаблон
+ * можно к любой странице, включая главную (у неё идентификатор — пустая строка).
+ *
+ * Успех ведёт в редактор страницы: человек видит, что получилось, и правит текст там же, где
+ * всегда. Замена без подтверждения не выполняется — флажок приходит из формы.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminTemplatesAction(array $params = []): void
+{
+    csrfCheck();
+
+    $op = postString('op');
+
+    if ($op !== 'apply') {
+        finishAppAction(['ok' => false, 'error' => 'Неизвестное действие.'], '/admin/templates', '');
+
+        return;
+    }
+
+    $pageId = postString('page');
+    $key = postString('template');
+    $replace = postString('replace') === '1';
+
+    $result = templateLibraryApply($pageId, $key, $replace, nowUtc());
+    $to = $pageId === PAGES_HOME_ID ? '/admin/pages/home' : '/admin/pages/' . $pageId;
+    $applied = ($result['ok'] ?? false) === true;
+
+    if ($applied) {
+        auditLog(
+            'template.apply',
+            'page',
+            $pageId,
+            ['template' => $key, 'created' => (string) $result['created'], 'replace' => $replace ? '1' : '0'],
+            'Применён шаблон «' . $key . '»'
+        );
+    }
+
+    // Ключ уведомления передаётся литералом, а не из карты результата: страж NoticeKeyTest читает
+    // аргументы вызова, и вычисленное значение он принять не может. Отказ ведёт обратно в
+    // библиотеку — редактор пустой страницы не должен открываться «успехом».
+    if ($applied) {
+        finishAppAction($result, $to, 'template_applied');
+
+        return;
+    }
+
+    finishAppAction($result, '/admin/templates', '');
 }
 
 // ---------------------------------------------------------------------------
