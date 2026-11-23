@@ -44,6 +44,9 @@ function contentTypePublicDispatch(string $slug): bool
     ], [
         'title' => (string) $type['name'],
         'description' => (string) $type['description'],
+        // Архив типа: макет назначен у самого типа (спецификация §14, ступень «тип контента»).
+        // Пустое значение означает стандартную обвязку — существующие типы не меняют вид.
+        'layout' => pageLayoutResolve('', pageLayoutFromSettings(contentTypeSettings($type)), ''),
     ]);
 
     return true;
@@ -154,6 +157,10 @@ function coreContentEntryPage(array $params = []): void
         'title' => $seoTitle !== '' ? $seoTitle : (string) $entry['title'],
         'description' => $seoDescription,
         'noindex' => !$published,
+        // Приоритет §14: макет самой записи → макет типа → умолчание сайта. У записи своего поля
+        // нет, поэтому первая ступень пустая: записи наследуют макет типа, и это ожидаемо —
+        // отдельный макет для одной карточки каталога пока не заводится.
+        'layout' => pageLayoutResolve('', pageLayoutFromSettings(contentTypeSettings($type)), ''),
     ]);
 }
 

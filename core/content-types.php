@@ -282,10 +282,52 @@ function contentTypeById(string $id): ?array
     }
 
     return one(
-        'SELECT id, slug, name, description, sort, archived_at, created_at, updated_at FROM ' . t('content_type')
+        'SELECT id, slug, name, description, sort, archived_at, settings, created_at, updated_at FROM ' . t('content_type')
         . ' WHERE id = ? LIMIT 1',
         [$id]
     );
+}
+
+/**
+ * Настройки типа контента: разобранный JSON-объект. Повреждённые настройки означают «настроек
+ * нет», а не отказ страницы: тип с битым JSON обязан открываться, иначе одна правка в базе
+ * закрывала бы весь архив.
+ *
+ * @param array<string, mixed> $type
+ * @return array<string, mixed>
+ */
+function contentTypeSettings(array $type): array
+{
+    $raw = $type['settings'] ?? '';
+
+    if (is_array($raw)) {
+        return $raw;
+    }
+
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+
+    return is_array($decoded) ? $decoded : [];
+}
+
+/**
+ * Запись настроек с назначенным макетом. Пустой макет УБИРАЕТ ключ, а не пишет пустую строку:
+ * иначе тип перебивал бы умолчание сайта пустым значением, и лендинг сайта стал бы невозможен.
+ *
+ * @param array<string, mixed> $settings
+ */
+function contentTypeSettingsEncode(array $settings, string $layout): string
+{
+    if ($layout === '') {
+        unset($settings['layout']);
+    } else {
+        $settings['layout'] = $layout;
+    }
+
+    return (string) json_encode($settings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
 /** @return array<string, mixed>|null */
@@ -296,7 +338,7 @@ function contentTypeBySlug(string $slug, bool $includeArchived = false): ?array
     }
 
     return one(
-        'SELECT id, slug, name, description, sort, archived_at, created_at, updated_at FROM ' . t('content_type')
+        'SELECT id, slug, name, description, sort, archived_at, settings, created_at, updated_at FROM ' . t('content_type')
         . ' WHERE slug = ?' . ($includeArchived ? '' : ' AND archived_at IS NULL') . ' LIMIT 1',
         [$slug]
     );
@@ -310,7 +352,7 @@ function contentTypesAll(bool $includeArchived = false): array
     }
 
     return all(
-        'SELECT id, slug, name, description, sort, archived_at, created_at, updated_at FROM ' . t('content_type')
+        'SELECT id, slug, name, description, sort, archived_at, settings, created_at, updated_at FROM ' . t('content_type')
         . ($includeArchived ? '' : ' WHERE archived_at IS NULL')
         . ' ORDER BY sort, name, id LIMIT ' . CONTENT_LIST_LIMIT
     );
@@ -600,8 +642,14 @@ function contentTypeSave(?string $id, array $values, array $rawRows, ?DateTimeIm
     $moment = utcStamp($now ?? nowUtc());
     $typeId = $id ?? newId();
 
+    // Макет типа: назначение из §14 для архивных страниц. Пустое значение — «не назначено»,
+    // решение принимает ступень ниже (умолчание сайта). Неизвестная строка тоже читается как
+    // «не назначено»: чужая форма не должна давать архив без шапки.
+    $layout = pageLayoutAssigned($values['layout'] ?? null);
+    $settings = contentTypeSettingsEncode($existing !== null ? contentTypeSettings($existing) : [], $layout);
+
     try {
-        tx(static function () use ($typeId, $existing, $name, $slug, $description, $sort, $fieldPlan, $moment): void {
+        tx(static function () use ($typeId, $existing, $name, $slug, $description, $sort, $fieldPlan, $moment, $settings): void {
             if ($existing === null) {
                 insert('content_type', [
                     'id' => $typeId,
@@ -610,6 +658,7 @@ function contentTypeSave(?string $id, array $values, array $rawRows, ?DateTimeIm
                     'description' => $description,
                     'sort' => $sort,
                     'archived_at' => null,
+                    'settings' => $settings,
                     'created_at' => $moment,
                     'updated_at' => $moment,
                 ]);
@@ -617,8 +666,8 @@ function contentTypeSave(?string $id, array $values, array $rawRows, ?DateTimeIm
                 $oldSlug = (string) $existing['slug'];
 
                 run(
-                    'UPDATE ' . t('content_type') . ' SET slug = ?, name = ?, description = ?, sort = ?, updated_at = ? WHERE id = ?',
-                    [$slug, $name, $description, $sort, $moment, $typeId]
+                    'UPDATE ' . t('content_type') . ' SET slug = ?, name = ?, description = ?, sort = ?, settings = ?, updated_at = ? WHERE id = ?',
+                    [$slug, $name, $description, $sort, $settings, $moment, $typeId]
                 );
 
                 if ($oldSlug !== $slug) {

@@ -16,6 +16,17 @@ $primary = 'inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 
 $isNew = $type === null;
 $target = $isNew ? '/admin/content/types/new' : '/admin/content/types/' . rawurlencode((string) $type['id']);
 
+// Макет раздела: пустое значение первым — «как на сайте». Иначе тип по умолчанию перебивал бы
+// умолчание сайта, и лендинг на всём сайте стал бы невозможен.
+$layoutOptions = '';
+$layoutValue = (string) ($values['layout'] ?? '');
+
+foreach (PAGE_LAYOUTS as $layoutKey) {
+    $layoutOptions .= '<option value="' . e($layoutKey) . '"'
+        . ($layoutKey === $layoutValue ? ' selected' : '') . '>'
+        . e(PAGE_LAYOUT_NAMES[$layoutKey]) . '</option>';
+}
+
 $fieldRows = '';
 foreach ($rows as $index => $row) {
     $kind = (string) ($row['kind'] ?? CONTENT_FIELD_TEXT);
@@ -96,7 +107,14 @@ $form = '<form class="space-y-4" method="post" action="' . e($target) . '">' . c
     . '<input class="min-h-[44px] ' . e($input) . '" type="number" name="sort" value="' . e((string) $values['sort']) . '"></label>'
     . '<label class="block min-w-0 text-sm"><span class="block font-medium">Комментарий к версии</span>'
     . '<input class="min-h-[44px] ' . e($input) . '" type="text" name="comment" value=""></label>'
-    . '</div></section>'
+    . '</div>'
+    . '<label class="mt-3 block text-sm"><span class="block font-medium">Макет страниц раздела</span>'
+    . '<select class="min-h-[44px] ' . e($input) . '" name="layout">'
+    . '<option value="">Как на сайте (по умолчанию)</option>'
+    . $layoutOptions
+    . '</select>'
+    . '<span class="mt-1.5 block text-ink/60">Каркас архивной страницы и карточек записей. Пустое значение — обвязка сайта.</span></label>'
+    . '</section>'
     . $fieldsCard
     . '<div><button class="inline-flex min-h-[44px] items-center rounded-lg bg-ink px-3 py-1.5 text-sm text-cream hover:opacity-90" type="submit">' . ($isNew ? 'Создать тип' : 'Сохранить тип') . '</button></div>'
     . '</form>';

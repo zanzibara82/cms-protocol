@@ -79,6 +79,34 @@ final class Release23ContentTest extends TestCase
         self::assertSame($typeId, $restoredType !== null ? (string) $restoredType['id'] : '');
     }
 
+    public function testМакетТипаХранитсяВНастройкахИСнимаетсяПустымЗначением(): void
+    {
+        // Макет раздела живёт в настройках типа, а не отдельной колонкой: настроек со временем
+        // станет больше, и каждая новая потребовала бы ALTER.
+        $created = contentTypeSave(null, ['name' => 'Проекты', 'slug' => 'proekty', 'layout' => 'landing'], [], $this->now);
+        self::assertTrue($created['ok'], (string) $created['error']);
+
+        $typeId = (string) $created['id'];
+        $type = contentTypeById($typeId);
+        self::assertNotNull($type);
+        self::assertSame('landing', pageLayoutFromSettings(contentTypeSettings($type)));
+
+        // Пустое значение СНИМАЕТ назначение, а не пишет пустую строку: иначе тип перебивал бы
+        // умолчание сайта пустым значением, и лендинг на всём сайте стал бы невозможен.
+        $cleared = contentTypeSave($typeId, ['name' => 'Проекты', 'slug' => 'proekty', 'layout' => ''], [], $this->now);
+        self::assertTrue($cleared['ok'], (string) $cleared['error']);
+        $again = contentTypeById($typeId);
+        self::assertNotNull($again);
+        self::assertSame('', pageLayoutFromSettings(contentTypeSettings($again)));
+
+        // Чужое значение не назначается: форма приходит из браузера.
+        $junk = contentTypeSave($typeId, ['name' => 'Проекты', 'slug' => 'proekty', 'layout' => 'hacker'], [], $this->now);
+        self::assertTrue($junk['ok'], (string) $junk['error']);
+        $after = contentTypeById($typeId);
+        self::assertNotNull($after);
+        self::assertSame('', pageLayoutFromSettings(contentTypeSettings($after)));
+    }
+
     public function testЗаписьСПолямиСвязямиИРевизиейМеняетСтатусБезПотери(): void
     {
         $authorType = contentTypeSave(null, ['name' => 'Авторы', 'slug' => 'avtory'], $this->fieldRows([

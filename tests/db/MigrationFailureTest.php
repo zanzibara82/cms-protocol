@@ -30,7 +30,11 @@ final class MigrationFailureTest extends TestCase
         self::assertFileExists($this->brokenFilePath);
 
         TestDb::clearTable('app_installation');
-        TestDb::clearTable('app_migration');
+        // Журнал чистится ТОЛЬКО по приложению: `app_migration` хранит ещё и журнал ядра, а его
+        // потеря заставляет applyApp() применять файлы ядра вторично — первый ALTER в схеме
+        // (`0006`, колонка layout) падает с 1060 «Duplicate column name». Фикстура проверяет
+        // журнал своего приложения, поэтому чужие строки ей не нужны.
+        run('DELETE FROM ' . t('app_migration') . ' WHERE app = ?', [self::APP]);
         $this->dropBrokenTables();
     }
 

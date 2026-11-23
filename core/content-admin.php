@@ -21,6 +21,8 @@ function contentAdminTypeValues(array $source): array
         'slug' => (string) ($source['slug'] ?? ''),
         'description' => (string) ($source['description'] ?? ''),
         'sort' => (string) ($source['sort'] ?? '0'),
+        // Макет раздела читается из настроек типа: пустое значение означает «как на сайте».
+        'layout' => pageLayoutFromSettings(contentTypeSettings($source)),
     ];
 }
 
@@ -32,6 +34,7 @@ function contentAdminTypeValuesFromPost(): array
         'slug' => postString('slug'),
         'description' => postString('description'),
         'sort' => postString('sort'),
+        'layout' => postString('layout'),
     ];
 }
 
