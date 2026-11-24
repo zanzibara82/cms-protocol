@@ -474,8 +474,9 @@ php_value post_max_size 12M</code></pre>
 
     <article class="step" id="step8">
       <h2><span class="num">8</span>Загрузить файлы проекта</h2>
-      <p>На сервер должен попасть только рабочий код: ядро <code>core/</code>, админка <code>admin/</code>, тема
-      <code>theme/</code>, приложения <code>apps/</code>, схемы <code>sql/</code> и документ-корень <code>public/</code>.
+      <p>На сервер должен попасть только рабочий код: ядро <code>core/</code>, админка <code>admin/</code>, встроенная
+      тема <code>theme/</code>, каталог устанавливаемых тем <code>themes/</code>, приложения <code>apps/</code>, схемы
+      <code>sql/</code> и документ-корень <code>public/</code>.
       Подробный список «что можно и что нельзя» — в разделе <a href="#load-skip">«Что загрузить и что не загрузить»</a>.</p>
       <p>Два способа выкладки:</p>
       <ol>
@@ -505,7 +506,7 @@ php_value post_max_size 12M</code></pre>
       собраны локально и лежат в <code>public/assets/app.css</code>.</div>
 
       <div class="signal"><strong>Признак, что шаг получился:</strong> в директории сайта видны <code>public/</code>,
-      <code>core/</code>, <code>admin/</code>, <code>theme/</code>, <code>apps/</code>, <code>sql/</code> и
+      <code>core/</code>, <code>admin/</code>, <code>theme/</code>, <code>themes/</code>, <code>apps/</code>, <code>sql/</code> и
       <code>config.sample.php</code>, и внутри <code>public/</code> есть <code>index.php</code>, <code>setup.php</code>,
       <code>.htaccess</code>, <code>assets/app.css</code>, <code>uploads/</code>.</div>
       <div class="fallback"><strong>Если не получилось:</strong>
@@ -525,8 +526,9 @@ php_value post_max_size 12M</code></pre>
       лежит в веб-зоне, нужен корневой <code>.htaccess</code>, который:</p>
       <ul>
         <li>отдаёт <strong>403</strong> на служебное: <code>core</code>, <code>apps</code>,
-        <code>sql</code>, <code>theme</code>, <code>scripts</code>, <code>tests</code>, <code>docs</code>,
-        <code>docker</code>, <code>vendor</code>, <code>node_modules</code>, на исходник каркаса
+        <code>sql</code>, <code>theme</code>, <code>themes</code>, <code>scripts</code>, <code>tests</code>,
+        <code>docs</code>, <code>docker</code>, <code>vendor</code>, <code>node_modules</code>,
+        <code>bin</code>, <code>backup</code>, <code>dump</code>, на исходник каркаса
         <code>admin/layout.php</code>, а также на <code>config.php</code>, <code>config.sample.php</code>
         и файлы вроде <code>composer.json</code>, <code>phpunit.xml</code>. Каталог <code>admin/</code> целиком
         не закрывается: <code>/admin</code> — публичный маршрут админки, и его собирает front controller;</li>
@@ -540,9 +542,10 @@ php_value post_max_size 12M</code></pre>
       страж <code>tests/guard/DeploySafetyTest.php</code>. Он же закрепляет правило
       <code>RewriteBase /</code>: без него переписывание в per-directory контексте строится
       от пути каталога, а не от корня.
-      Закрытию подлежат каталоги <code>apps</code>, <code>core</code>, <code>docker</code>,
-      <code>scripts</code>, <code>sql</code>, <code>tests</code>, <code>docs</code>, <code>theme</code>,
-      <code>vendor</code>, <code>node_modules</code>, исходник <code>admin/layout.php</code>, файлы
+      Закрытию подлежат каталоги <code>apps</code>, <code>backup</code>, <code>bin</code>, <code>core</code>,
+      <code>docker</code>, <code>docs</code>, <code>dump</code>, <code>scripts</code>, <code>sql</code>,
+      <code>tests</code>, <code>theme</code>, <code>themes</code>, <code>vendor</code>, <code>node_modules</code>,
+      исходник <code>admin/layout.php</code>, файлы
       <code>config.php</code> и <code>config.sample.php</code>, файлы сборки (<code>composer.json</code>,
       <code>composer.lock</code>, <code>package.json</code>, <code>package-lock.json</code>,
       <code>phpunit.xml</code>, <code>phpstan.neon</code>) и скрытые каталоги <code>.git</code>,
@@ -814,6 +817,12 @@ ls -l config.sample.php</code></pre>
       <p>Схему применяет именно экран «Установить»/«Обновить», а не phpMyAdmin. Проверка в базе: в
       <code>tbl_app_installation</code> появится запись с версией раздела, а в <code>tbl_app_migration</code> — строки
       применённых релизов. Она же видна на самом экране: у каждого раздела печатается «версия в базе / в сборке».</p>
+      <p><strong>Оформление сайта.</strong> Устанавливаемые темы лежат в <code>themes/&lt;slug&gt;</code>
+      (<code>theme.json</code> и <code>layout.php</code>). После выкладки откройте <code>/admin/themes</code>
+      («Дизайн → Темы»), проверьте карточку темы «Школа» и активируйте её. Встроенная тема <code>theme/</code>
+      остаётся запасной и работает, если активная не выбрана или её манифест испорчен. В режиме <code>root</code>
+      каталог <code>themes/</code> закрыт от прямого доступа тем же правилом <code>.htaccess</code>, что и
+      <code>theme/</code>: каркасы на PHP наружу не отдаются.</p>
       <div class="note"><strong>Важно про начальные данные «Курсов».</strong> Если сайт переносится с портала
       (PostgreSQL), «Курсы» ставят <strong>без</strong> начальных данных: иначе уровень «Pre-A1» займёт сид, а перенос
       получит конфликт уникального ключа. Порядок для этого случая — в <code>docs/deploy-checklist.md</code>, раздел
@@ -866,7 +875,7 @@ ls -l config.sample.php</code></pre>
     <h3>Загружаем</h3>
     <ul>
       <li><code>core/</code> вместе с пустым каталогом <code>core/storage/</code> (содержимое журнала — см. ниже),</li>
-      <li><code>admin/</code>, <code>theme/</code>,</li>
+      <li><code>admin/</code>, <code>theme/</code> и <code>themes/</code> (устанавливаемые темы с манифестами и каркасами),</li>
       <li><code>apps/</code> (рабочие приложения, включая собранный раздел <code>apps/news/</code>),</li>
       <li><code>sql/</code> (его читает <code>setup.php</code>),</li>
       <li><code>public/</code> целиком: <code>index.php</code>, <code>setup.php</code>, <code>.htaccess</code>,
@@ -893,8 +902,9 @@ ls -l config.sample.php</code></pre>
       <li><code>.git/</code> и <code>.gitignore</code>;</li>
       <li><code>config.php</code> — <strong>не загружаем из репозитория</strong>: его записывает на сервере первый шаг
       установщика (шаги 10 и 14);</li>
-      <li><code>dump/</code> и <code>backup/</code> — дампы и резервные копии: на сервере они живут отдельно, а
-      <code>scripts/deploy.sh</code> не стирает серверный <code>backup/</code>;</li>
+      <li><code>dump/</code> и <code>backup/</code> — дампы и резервные копии: они лежат вне <code>public/</code>
+      и закрыты корневым <code>.htaccess</code>, а <code>scripts/deploy.sh</code> не стирает серверный
+      <code>backup/</code>;</li>
       <li>секреты и локальные журналы: <code>.env*</code>, <code>*.pem</code>, <code>*.key</code>,
       <code>id_rsa*</code>, <code>*.log</code> в корне;</li>
       <li>журнал <code>core/storage/errors.log</code> и содержимое <code>public/uploads/</code> с боевого сервера — не
@@ -1137,11 +1147,12 @@ CMS_DEPLOY_PATH=… bash ../old/scripts/deploy.sh</code></pre>
         <tr><td>☐</td><td>PHP 8.2.35+/8.3.36+/8.4.27+/8.5.12+ выбран для сайта (цель 8.3.36)</td><td>настройки сайта (шаг 5)</td></tr>
         <tr><td>☐</td><td>Лимиты загрузки: <code>upload_max_filesize</code> ≥ 8M, <code>post_max_size</code> не меньше</td><td>параметры PHP (шаг 6)</td></tr>
         <tr><td>☐</td><td>База создана, <code>config.php</code> записан установщиком, права 600</td><td>браузер (шаг 14), SSH <code>ls -l</code> (шаги 4, 10)</td></tr>
-        <tr><td>☐</td><td>Раскладка закрыта: служебные пути (<code>/config.php</code>, <code>/core/…</code>, <code>/sql/…</code>, <code>/admin/layout.php</code>) не отдают 200, а <code>/admin</code> отвечает 200 или редиректом на <code>/login</code></td><td>браузер/`curl` (шаг 9)</td></tr>
+        <tr><td>☐</td><td>Раскладка закрыта: служебные пути (<code>/config.php</code>, <code>/core/…</code>, <code>/sql/…</code>, <code>/themes/…</code>, <code>/backup/</code>, <code>/dump/</code>, <code>/bin/cron.php</code>, <code>/admin/layout.php</code>) не отдают 200, а <code>/admin</code> отвечает 200 или редиректом на <code>/login</code></td><td>браузер/`curl` (шаг 9)</td></tr>
         <tr><td>☐</td><td>SSL-сертификат, который даёт хостинг (обычно бесплатный вроде Let's Encrypt, либо загруженный вручную), выпущен; https работает, редирект с http есть</td><td>браузер (шаг 11)</td></tr>
         <tr><td>☐</td><td>Установщик прошёл, <code>/setup.php</code> отдаёт 404</td><td>браузер (шаг 14)</td></tr>
         <tr><td>☐</td><td>Ядро и администратор созданы, вход работает, сессия по https с Secure</td><td><code>/login</code> → <code>/admin</code></td></tr>
         <tr><td>☐</td><td>Пять разделов установлены через экран «Приложения»: Новости 1.1.0, Доска 1.5.0, Магазин 1.0.0, Курсы 1.0.0, SEO 1.5.0</td><td><code>/admin/apps</code> (шаг 15)</td></tr>
+        <tr><td>☐</td><td>Темы из <code>themes/</code> видны в <code>/admin/themes</code>, тема «Школа» активируется и меняет оформление сайта</td><td><code>/admin/themes</code> (шаг 15)</td></tr>
         <tr><td>☐</td><td>Конструктор страниц открывается, секции сохраняются, публичная страница печатает блоки</td><td><code>/admin/pages</code> (шаг 15)</td></tr>
         <tr><td>☐</td><td><code>/robots.txt</code> отдаёт карту и <code>Disallow</code> для приватного</td><td>браузер/curl</td></tr>
         <tr><td>☐</td><td><code>/sitemap.xml</code> отвечает 200 и содержит нужные адреса; <code>/feed.xml</code>, <code>/feed.atom</code>, <code>/sitemap-index.xml</code> тоже 200</td><td>браузер/curl</td></tr>

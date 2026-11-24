@@ -142,8 +142,12 @@ esac
 # Ни один служебный файл не должен отдаваться. 403 (закрыт корневым .htaccess, режим root) и
 # 404 (каталог лежит выше документ-корня, режим public) — оба ответа правильные; 200 — это
 # утекшие исходники или, что хуже, исполненный config.sample.php. admin/layout.php закрыт
-# отдельно: сам маршрут /admin открыт, а его исходник наружу отдаваться не должен.
-for path in /core/bootstrap.php /config.php /config.sample.php /sql/0001_core_baseline.sql /apps/news/manifest.php /admin/layout.php /composer.json /docs/deploy-checklist.md; do
+# отдельно: сам маршрут /admin открыт, а его исходник наружу отдаваться не должен. Темы, копии
+# базы и планировщик проверяются теми же правилами: themes/ содержит PHP каркасов, backup/ и
+# dump/ — дампы с персональными данными, bin/cron.php — служебный запуск.
+for path in /core/bootstrap.php /config.php /config.sample.php /sql/0001_core_baseline.sql \
+  /apps/news/manifest.php /admin/layout.php /themes/school/theme.json /themes/school/layout.php \
+  /bin/cron.php /backup/ /dump/ /composer.json /docs/deploy-checklist.md; do
   code="$(status_of "$path")"
   if [[ "$code" == '200' ]]; then
     echo "Отказ: ${path} отдаётся наружу (200). Служебные пути обязаны быть закрыты." >&2

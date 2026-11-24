@@ -14,13 +14,17 @@
 # раскладке его собирает front controller из public/index.php. Закрыт только исходник каркаса,
 # admin/layout.php: его подключает bootstrap, наружу он отдаваться не должен. Запросы вида
 # /admin/apps файлов на диске не имеют и уходят в public/index.php правилом ниже.
+#
+# themes/ — каркасы тем на PHP, backup/ и dump/ — копии базы и выгрузки, bin/ — планировщик:
+# этим путям в веб-зоне делать нечего. Даже когда mod_rewrite отдаёт только public/, запрет
+# остаётся вторым барьером и не даёт каталогу уйти наружу при правке правил переписывания.
 Options -Indexes
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /
 
-    RewriteRule ^(apps|core|docker|scripts|sql|tests|docs|theme|vendor|node_modules)(/|$) - [F,L]
+    RewriteRule ^(apps|backup|bin|core|docker|docs|dump|node_modules|scripts|sql|tests|theme|themes|vendor)(/|$) - [F,L]
     RewriteRule ^admin/layout\.php$ - [F,L]
     RewriteRule ^config(\.sample)?\.php$ - [F,L]
     RewriteRule ^(composer\.(json|lock)|package(-lock)?\.json|phpunit\.xml|phpstan\.neon)$ - [F,L]
