@@ -44,9 +44,25 @@ $textField = static function (string $key, string $label, string $hint, bool $mu
         . '<span class="mt-1.5 block text-ink/60">' . e($hint) . '</span></label>';
 };
 
+$selectField = static function (string $key, string $label, string $hint, array $options) use ($input, $values): string {
+    $value = (string) ($values[$key] ?? '');
+    $control = '<select class="min-h-[44px] ' . e($input) . '" name="' . e($key) . '">';
+
+    foreach ($options as $slug => $title) {
+        $control .= '<option value="' . e((string) $slug) . '"' . ((string) $slug === $value ? ' selected' : '') . '>' . e((string) $title) . '</option>';
+    }
+
+    $control .= '</select>';
+
+    return '<label class="block text-sm"><span class="font-medium">' . e($label) . '</span>'
+        . $control
+        . '<span class="mt-1.5 block text-ink/60">' . e($hint) . '</span></label>';
+};
+
 $header = '<section class="space-y-4 rounded-lg border border-ink/10 bg-white p-4">'
     . '<h2 class="font-semibold">Шапка сайта</h2>'
     . '<p class="text-sm text-ink/70">Логотип и название печатаются в верхней полосе каждой страницы.</p>'
+    . $selectField('header_variant', 'Вид шапки', 'Минималистичная оставляет знак сайта и вход: пункты меню остаются в подвале.', headerVariantOptions())
     . $logoField('header_logo', 'header_logo_file', 'Логотип шапки')
     . $textField('header_text', 'Текст шапки', 'Печатается рядом с логотипом. Пусто — только знак сайта.')
     . '</section>';
@@ -54,6 +70,7 @@ $header = '<section class="space-y-4 rounded-lg border border-ink/10 bg-white p-
 $footer = '<section class="space-y-4 rounded-lg border border-ink/10 bg-white p-4">'
     . '<h2 class="font-semibold">Подвал сайта</h2>'
     . '<p class="text-sm text-ink/70">Логотип и подпись печатаются в нижней полосе каждой страницы.</p>'
+    . $selectField('footer_variant', 'Вид подвала', 'Число колонок меню. Пустые колонки не печатаются.', footerVariantOptions())
     . $logoField('footer_logo', 'footer_logo_file', 'Логотип подвала')
     . $textField('footer_text', 'Текст подвала', 'Подпись сайта под колонками меню.', true)
     . $textField('footer_copyright', 'Копирайт подвала', 'Строка в самом низу подвала. Пусто — строки нет.')

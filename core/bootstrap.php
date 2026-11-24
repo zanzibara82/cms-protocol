@@ -88,6 +88,9 @@ require_once __DIR__ . '/theme-transfer.php';
 require_once __DIR__ . '/template-library.php';
 // Поля шапки и подвала — надстройка над опциями: тема читает их на каждой странице.
 require_once __DIR__ . '/settings.php';
+// Варианты шапки и подвала: наборы флагов к настройкам выше. Шаблоны темы читают план, поэтому
+// подключается сразу после settings.php и до каркасов.
+require_once __DIR__ . '/header-variants.php';
 // Режим техобслуживания читает настройки, поэтому подключается после них: гейт стоит в dispatch()
 // и обязан видеть siteSettingValue().
 require_once __DIR__ . '/maintenance.php';

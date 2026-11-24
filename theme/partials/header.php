@@ -6,28 +6,44 @@ $user = function_exists('currentUser') ? currentUser() : null;
 // Текст и логотип шапки правятся на /admin/settings; пустая опция — знак сайта без подписи.
 $headerLogo = function_exists('siteSettingValue') ? siteSettingValue('header_logo') : '';
 $headerText = function_exists('siteSettingValue') ? siteSettingValue('header_text') : (string) configValue('SITE_NAME', 'Школа');
+
+// Вариант шапки — набор флагов, а не отдельный шаблон: полоса одна, меняется раскладка и состав.
+// Значение пришло из опции, поэтому проверяется правилом headerPlan(), а не доверяется как есть.
+$headerVariant = function_exists('siteSettingValue') ? siteSettingValue('header_variant') : HEADER_VARIANT_DEFAULT;
+$plan = function_exists('headerPlan')
+    ? headerPlan($headerVariant)
+    : ['variant' => 'standard', 'menu' => true, 'centered' => false, 'top' => false];
+
+$menu = $plan['menu'];
+$centered = $plan['centered'];
+$top = $plan['top'];
+// Верхняя полоса: подпись сайта мелким кеглем над шапкой. Пустой текст полосу не рисует —
+// иначе шапка обрастала бы пустой рамкой на свежем сайте.
+$topline = function_exists('siteSettingValue') ? siteSettingValue('footer_copyright') : '';
+
+// Строка шапки: состав и раскладка зависят от варианта, но собирается всё через партиалы.
+// Прямые переменные с разметкой здесь не печатаются — страж экранирования разрешает под
+// пометкой только агрегаторы и вызовы partial().
+$rowClass = 'mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6' . ($centered ? ' justify-center' : '');
 ?>
 <header class="border-b border-ink/10 bg-cream">
-    <div class="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
-        <a class="flex min-h-[44px] items-center gap-2 text-lg font-bold" href="/" aria-label="На главную">
-            <?php if ($headerLogo !== ''): ?>
-                <img class="h-8 w-auto" src="<?= e($headerLogo) ?>" alt="">
-            <?php else: ?>
-                <?= partial('partials/cat', ['mood' => 'happy', 'size' => 32]) /* @safe html */ ?>
+    <?php if ($top && $topline !== ''): ?>
+        <div class="border-b border-ink/10 bg-ink/5">
+            <div class="mx-auto w-full max-w-5xl px-4 py-1 text-xs text-ink/70 sm:px-6"><?= e($topline) ?></div>
+        </div>
+    <?php endif; ?>
+    <div class="<?= e($rowClass) ?>">
+        <?= partial('partials/header-brand', ['logo' => $headerLogo, 'text' => $headerText]) /* @safe html */ ?>
+        <?php if ($centered): ?>
+            <?= partial('partials/header-account', ['centered' => true]) /* @safe html */ ?>
+            <?php if ($menu): ?>
+                <div class="w-full"><?= partial('partials/header-menu', ['centered' => true]) /* @safe html */ ?></div>
             <?php endif; ?>
-            <?php if ($headerText !== ''): ?>
-                <span><?= e($headerText) ?></span>
+        <?php else: ?>
+            <?php if ($menu): ?>
+                <?= partial('partials/header-menu', ['centered' => false]) /* @safe html */ ?>
             <?php endif; ?>
-        </a>
-        <nav class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <?php foreach (menuHeaderLinks() as $link): ?>
-                <a class="inline-flex min-h-[44px] items-center hover:underline" href="<?= e((string) $link['href']) ?>"<?php if ((bool) $link['blank']): ?> target="_blank" rel="noopener noreferrer"<?php endif; ?>><?= e((string) $link['label']) ?></a>
-            <?php endforeach; ?>
-            <?php if ($user !== null): ?>
-                <a class="inline-flex min-h-[44px] items-center hover:underline" href="/admin">Админка</a>
-            <?php else: ?>
-                <a class="inline-flex min-h-[44px] items-center hover:underline" href="/login">Вход</a>
-            <?php endif; ?>
-        </nav>
+            <?= partial('partials/header-account', ['centered' => false]) /* @safe html */ ?>
+        <?php endif; ?>
     </div>
 </header>

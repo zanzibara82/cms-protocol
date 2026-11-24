@@ -13,12 +13,18 @@ $footerText = function_exists('siteSettingValue')
 $footerCopyright = function_exists('siteSettingValue')
     ? siteSettingValue('footer_copyright')
     : 'Сделано с котом и заботой о языке.';
+
+// Вариант подвала задаёт число колонок меню. Колонки печатаются только для существующих
+// разделов: вариант «без колонок» не рисует пустую сетку, а «компактный» не оставляет дыр.
+$footerVariant = function_exists('siteSettingValue') ? siteSettingValue('footer_variant') : FOOTER_VARIANT_DEFAULT;
+$plan = function_exists('footerPlan') ? footerPlan($footerVariant) : ['variant' => 'standard', 'columns' => 4, 'brand' => true];
+$columns = $plan['columns'] > 0 ? array_slice($footerSections, 0, $plan['columns']) : [];
 ?>
 <footer class="mt-12 border-t border-ink/10 bg-cream">
     <div class="mx-auto w-full max-w-5xl px-4 py-8 text-sm sm:px-6">
-        <?php if ($footerSections !== []): ?>
+        <?php if ($columns !== []): ?>
             <div class="flex flex-wrap gap-x-4 gap-y-2">
-                <?php foreach ($footerSections as $section): ?>
+                <?php foreach ($columns as $section): ?>
                     <div class="space-y-2">
                         <h3 class="font-semibold"><?= e((string) $section['title']) ?></h3>
                         <nav class="flex flex-col">
@@ -33,10 +39,10 @@ $footerCopyright = function_exists('siteSettingValue')
         <?php else: ?>
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
         <?php endif; ?>
-            <?php if ($footerLogo !== ''): ?>
+            <?php if ($plan['brand'] && $footerLogo !== ''): ?>
                 <img class="h-8 w-auto" src="<?= e($footerLogo) ?>" alt="">
             <?php endif; ?>
-            <?php if ($footerText !== ''): ?>
+            <?php if ($plan['brand'] && $footerText !== ''): ?>
                 <p><?= e($footerText) ?></p>
             <?php endif; ?>
         </div>

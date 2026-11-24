@@ -17,6 +17,10 @@ const SITE_SETTINGS_FIELDS = [
     // так отметка снимается тем же сохранением, без отдельного действия «сбросить».
     'maintenance_mode' => ['max' => 1],
     'maintenance_text' => ['max' => 300],
+    // Варианты полос шапки и подвала: список выбора, а не свободная строка. Значение проверяется
+    // правилами headerVariantOf()/footerVariantOf(), поэтому чужая строка даёт стандартный вид.
+    'header_variant' => ['max' => 20],
+    'footer_variant' => ['max' => 20],
 ];
 
 // Значение по умолчанию — то, что человек видит на свежем сайте до первой правки. Пустая строка
@@ -29,6 +33,8 @@ function siteSettingDefault(string $key): string
         'header_text' => $siteName,
         'footer_text' => $siteName . ' — новости, курсы и объявления школы.',
         'footer_copyright' => 'Сделано с котом и заботой о языке.',
+        'header_variant' => HEADER_VARIANT_DEFAULT,
+        'footer_variant' => FOOTER_VARIANT_DEFAULT,
         default => '',
     };
 }
