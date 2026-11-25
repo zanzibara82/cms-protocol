@@ -42,6 +42,10 @@ function registerCoreRoutes(): void
     // конструктора: шаблон ставит содержимое, а не меняет оформление всего сайта.
     addRoute('GET', '/admin/templates', 'coreAdminTemplates', ['private' => true, 'permission' => 'login']);
     addRoute('POST', '/admin/templates', 'coreAdminTemplatesAction', ['private' => true, 'permission' => 'login']);
+    // Дизайн → Библиотека паттернов: короткие наборы блоков для вставки в существующую страницу.
+    // Право конструктора: паттерн добавляет содержимое, а не меняет оформление сайта.
+    addRoute('GET', '/admin/patterns', 'coreAdminPatterns', ['private' => true, 'permission' => 'login']);
+    addRoute('POST', '/admin/patterns', 'coreAdminPatternsAction', ['private' => true, 'permission' => 'login']);
     // Заявки с публичных форм: приём — публичный POST, список и действия — только администратор
     // (контакты — личные данные; портал зовёт requireAdmin, здесь право manage, как /admin/apps).
     addRoute('POST', '/lead', 'coreLeadSubmit');
@@ -1473,6 +1477,73 @@ function coreAdminTemplatesAction(array $params = []): void
     }
 
     finishAppAction($result, '/admin/templates', '');
+}
+
+// ---------------------------------------------------------------------------
+// Дизайн → Библиотека паттернов: короткие наборы блоков для вставки в страницу
+// ---------------------------------------------------------------------------
+
+/**
+ * Экран каталога паттернов. Фильтр категории живёт в адресе, как у библиотеки шаблонов:
+ * неизвестная категория даёт пустой список, а не весь каталог.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminPatterns(array $params = []): void
+{
+    $alertReason = takeAdminFlashReason();
+    $category = (string) (queryString('category', '') ?? '');
+
+    render('admin/patterns', [
+        'notice' => noticeForAdminScreen(CORE_NOTICE_TEXT),
+        'alertTitle' => adminFailureTitle($alertReason),
+        'alertReason' => $alertReason,
+        'patterns' => patternLibraryFiltered($category),
+        'categories' => PATTERN_LIBRARY_CATEGORIES,
+        'category' => $category,
+        'pages' => templateLibraryPageOptions(),
+    ], ['title' => 'Библиотека паттернов — админка', 'noindex' => true]);
+}
+
+/**
+ * Вставка паттерна. CSRF проверяется один раз на входе; страница приходит идентификатором,
+ * поэтому паттерн можно вставить и на главную, у которой идентификатор — пустая строка.
+ *
+ * @param array<string, string> $params
+ */
+function coreAdminPatternsAction(array $params = []): void
+{
+    csrfCheck();
+
+    if (postString('op') !== 'insert') {
+        finishAppAction(['ok' => false, 'error' => 'Неизвестное действие.'], '/admin/patterns', '');
+
+        return;
+    }
+
+    $pageId = postString('page');
+    $key = postString('pattern');
+    $result = patternLibraryApply($pageId, $key, nowUtc());
+    $inserted = ($result['ok'] ?? false) === true;
+
+    if ($inserted) {
+        auditLog(
+            'pattern.insert',
+            'page',
+            $pageId,
+            ['pattern' => $key, 'created' => (string) $result['created']],
+            'Добавлен паттерн «' . $key . '»'
+        );
+    }
+
+    if ($inserted) {
+        $to = $pageId === PAGES_HOME_ID ? '/admin/pages/home' : '/admin/pages/' . $pageId;
+        finishAppAction($result, $to, 'pattern_applied');
+
+        return;
+    }
+
+    finishAppAction($result, '/admin/patterns', '');
 }
 
 // ---------------------------------------------------------------------------
